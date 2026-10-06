@@ -1477,8 +1477,8 @@ fn issuer_endpoint(base: &str, path: &str) -> Result<String, String> {
 #[cfg(test)]
 mod audio_command_tests {
     use super::{
-        audio, database, parse_tts_android_base64_payload, parse_tts_ipc_metadata, raw_tts_ipc_body,
-        stem_files_for_profile, stem_files_from_rows,
+        audio, database, parse_tts_android_base64_payload, parse_tts_ipc_metadata,
+        raw_tts_ipc_body, stem_files_for_profile, stem_files_from_rows,
     };
     use base64::Engine as _;
     use std::path::PathBuf;
