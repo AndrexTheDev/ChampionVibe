@@ -92,7 +92,7 @@ jobs:
           exit "$result"
 
       - name: Temporarily publish Rust check diagnostics
-        if: steps.rust_check.outcome == 'failure'
+        if: failure() && steps.rust_check.outcome == 'failure'
         shell: bash
         run: |
           mkdir -p .ci-diagnostics
@@ -188,7 +188,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Temporarily publish Windows build diagnostics
-        if: steps.windows_build.outcome == 'failure'
+        if: failure() && steps.windows_build.outcome == 'failure'
         shell: bash
         run: |
           mkdir -p .ci-diagnostics
@@ -219,7 +219,7 @@ jobs:
           exit "$result"
 
       - name: Temporarily publish Android build diagnostics
-        if: steps.android_build.outcome == 'failure'
+        if: failure() && steps.android_build.outcome == 'failure'
         shell: bash
         run: |
           mkdir -p .ci-diagnostics
