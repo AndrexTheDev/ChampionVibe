@@ -64,19 +64,34 @@ impl MdxSeparator {
             "MDX-Net requires a ChampionVibe .cvmodel.json model manifest"
         );
         let manifest = read_manifest(path)?;
-        let directory = path.parent().context("model manifest has no parent directory")?;
+        let directory = path
+            .parent()
+            .context("model manifest has no parent directory")?;
         let resolved = validate_manifest_models(&manifest, directory, true)?;
         let targets = resolved
             .into_iter()
             .map(|(entry, model_path)| MdxTargetConfig { entry, model_path })
             .collect::<Vec<_>>();
-        anyhow::ensure!(!targets.is_empty(), "MDX-Net manifest contains no inference targets");
+        anyhow::ensure!(
+            !targets.is_empty(),
+            "MDX-Net manifest contains no inference targets"
+        );
         let threads = threads.clamp(1, 8);
         // Keep one ONNX session at a time. A four-target profile should remain usable on
         // memory-constrained Android devices without retaining all four weight graphs.
         let active_model = Some(load_target(&targets[0], threads, use_directml)?);
-        let backend = active_model.as_ref().map(|model| model.backend).unwrap_or("CPU");
-        Ok(Self { mode: manifest.mode, targets, active_model, threads, use_directml, backend })
+        let backend = active_model
+            .as_ref()
+            .map(|model| model.backend)
+            .unwrap_or("CPU");
+        Ok(Self {
+            mode: manifest.mode,
+            targets,
+            active_model,
+            threads,
+            use_directml,
+            backend,
+        })
     }
 
     pub(crate) fn backend(&self) -> &'static str {
@@ -84,7 +99,11 @@ impl MdxSeparator {
     }
 
     pub(crate) fn stem_count(&self) -> usize {
-        if self.mode == "two-stem" { 2 } else { 4 }
+        if self.mode == "two-stem" {
+            2
+        } else {
+            4
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -97,10 +116,14 @@ impl MdxSeparator {
         mut progress: impl FnMut(f64),
     ) -> Result<Vec<PathBuf>> {
         anyhow::ensure!(total_frames > 0, "audio source contains no frames");
-        let total_frames = usize::try_from(total_frames)
-            .context("audio source is too long for this platform")?;
-        fs::create_dir_all(output_dir)
-            .with_context(|| format!("cannot create MDX-Net output folder {}", output_dir.display()))?;
+        let total_frames =
+            usize::try_from(total_frames).context("audio source is too long for this platform")?;
+        fs::create_dir_all(output_dir).with_context(|| {
+            format!(
+                "cannot create MDX-Net output folder {}",
+                output_dir.display()
+            )
+        })?;
 
         let raw_paths = OUTPUT_STEMS
             .iter()
@@ -112,7 +135,9 @@ impl MdxSeparator {
             .take(raw_count)
             .map(|path| {
                 File::create(path)
-                    .with_context(|| format!("cannot create temporary MDX-Net output {}", path.display()))
+                    .with_context(|| {
+                        format!("cannot create temporary MDX-Net output {}", path.display())
+                    })
                     .map(BufWriter::new)
             })
             .collect::<Result<Vec<_>>>()?;
@@ -132,10 +157,17 @@ impl MdxSeparator {
                 None => load_target(&self.targets[target_index], self.threads, self.use_directml)?,
             };
             if self.mode == "two-stem" {
-                anyhow::ensure!(target_stem == "vocals", "two-stem MDX profile must contain only a vocals target");
+                anyhow::ensure!(
+                    target_stem == "vocals",
+                    "two-stem MDX profile must contain only a vocals target"
+                );
                 let (vocals, instrumental) = raw_outputs.split_at_mut(1);
-                let vocal_writer = vocals.first_mut().context("vocal output writer is missing")?;
-                let instrumental_writer = instrumental.first_mut().context("instrumental output writer is missing")?;
+                let vocal_writer = vocals
+                    .first_mut()
+                    .context("vocal output writer is missing")?;
+                let instrumental_writer = instrumental
+                    .first_mut()
+                    .context("instrumental output writer is missing")?;
                 infer_target(
                     &mut model,
                     input_path,
@@ -153,7 +185,9 @@ impl MdxSeparator {
                     "drums" => 3,
                     _ => anyhow::bail!("unsupported MDX-Net target {target_stem}"),
                 };
-                let output = raw_outputs.get_mut(output_index).context("MDX-Net output writer is missing")?;
+                let output = raw_outputs
+                    .get_mut(output_index)
+                    .context("MDX-Net output writer is missing")?;
                 infer_target(
                     &mut model,
                     input_path,
@@ -167,7 +201,6 @@ impl MdxSeparator {
                 )?;
             }
             // `model` drops here, releasing its ONNX weights before the next target loads.
-
         }
         for output in &mut raw_outputs {
             output.flush()?;
@@ -218,10 +251,20 @@ impl MdxSeparator {
 }
 
 fn load_target(config: &MdxTargetConfig, threads: usize, use_directml: bool) -> Result<MdxTarget> {
-    let (session, backend) = create_mdx_session(&config.model_path, threads.clamp(1, 8), use_directml)?;
-    let input = session.inputs().first().context("MDX-Net ONNX model has no input")?;
-    let output = session.outputs().first().context("MDX-Net ONNX model has no output")?;
-    anyhow::ensure!(input.name() == "input", "MDX-Net input tensor must be named 'input'");
+    let (session, backend) =
+        create_mdx_session(&config.model_path, threads.clamp(1, 8), use_directml)?;
+    let input = session
+        .inputs()
+        .first()
+        .context("MDX-Net ONNX model has no input")?;
+    let output = session
+        .outputs()
+        .first()
+        .context("MDX-Net ONNX model has no output")?;
+    anyhow::ensure!(
+        input.name() == "input",
+        "MDX-Net input tensor must be named 'input'"
+    );
     let input_name = input.name().to_owned();
     let output_name = output.name().to_owned();
     let dsp = MdxDsp::new(&config.entry)?;
@@ -252,8 +295,12 @@ fn infer_target(
         .context("MDX-Net FFT size exceeds the audio chunk")?;
     anyhow::ensure!(generated_per_chunk > 0, "MDX-Net generated chunk is empty");
     let chunks = total_frames.div_ceil(generated_per_chunk);
-    let mut reader = WavReader::open(input_path)
-        .with_context(|| format!("cannot open normalized MDX-Net input {}", input_path.display()))?;
+    let mut reader = WavReader::open(input_path).with_context(|| {
+        format!(
+            "cannot open normalized MDX-Net input {}",
+            input_path.display()
+        )
+    })?;
     let spec = reader.spec();
     anyhow::ensure!(
         spec.channels == 2
@@ -262,11 +309,20 @@ fn infer_target(
             && spec.bits_per_sample == 16,
         "MDX-Net input must be normalized 44.1 kHz, stereo, 16-bit PCM"
     );
-    anyhow::ensure!(u64::from(reader.duration()) >= total_frames as u64, "normalized WAV is shorter than the decoded frame count");
+    anyhow::ensure!(
+        u64::from(reader.duration()) >= total_frames as u64,
+        "normalized WAV is shorter than the decoded frame count"
+    );
     let mut samples = reader.samples::<i16>();
     let mut frames_read = 0_usize;
     let mut chunk = vec![[0.0_f32; 2]; chunk_size];
-    fill_initial_chunk(&mut chunk, trim, &mut samples, &mut frames_read, total_frames)?;
+    fill_initial_chunk(
+        &mut chunk,
+        trim,
+        &mut samples,
+        &mut frames_read,
+        total_frames,
+    )?;
 
     for chunk_index in 0..chunks {
         if cancel.load(std::sync::atomic::Ordering::Acquire) {
@@ -300,7 +356,10 @@ fn infer_target(
             )?;
         }
     }
-    anyhow::ensure!(frames_read == total_frames, "MDX-Net did not consume the normalized input timeline");
+    anyhow::ensure!(
+        frames_read == total_frames,
+        "MDX-Net did not consume the normalized input timeline"
+    );
     Ok(())
 }
 
@@ -322,11 +381,20 @@ impl MdxTarget {
             .try_extract_tensor::<f32>()
             .context("MDX-Net output is not float32")?;
         anyhow::ensure!(
-            **shape == [1_i64, MDX_CHANNELS as i64, DIM_F as i64, self.entry.frames as i64],
+            **shape
+                == [
+                    1_i64,
+                    MDX_CHANNELS as i64,
+                    DIM_F as i64,
+                    self.entry.frames as i64
+                ],
             "MDX-Net output tensor must be [1, 4, 2048, {}]",
             self.entry.frames
         );
-        anyhow::ensure!(values.iter().all(|value| value.is_finite()), "MDX-Net produced a non-finite output value");
+        anyhow::ensure!(
+            values.iter().all(|value| value.is_finite()),
+            "MDX-Net produced a non-finite output value"
+        );
         Ok(self.dsp.istft(values))
     }
 }
@@ -334,9 +402,18 @@ impl MdxTarget {
 impl MdxDsp {
     fn new(entry: &SeparatorModelEntry) -> Result<Self> {
         anyhow::ensure!(entry.dim_f == DIM_F, "MDX-Net dim_f must equal 2048");
-        anyhow::ensure!(entry.frames == MDX_FRAMES, "only 512-frame MDX-Net models are supported by this inference path");
-        anyhow::ensure!(entry.hop_length == HOP_LENGTH, "MDX-Net hop length must equal 1024 samples");
-        anyhow::ensure!(matches!(entry.n_fft, 4_096 | 6_144 | 8_192 | 16_384), "unsupported MDX-Net FFT size");
+        anyhow::ensure!(
+            entry.frames == MDX_FRAMES,
+            "only 512-frame MDX-Net models are supported by this inference path"
+        );
+        anyhow::ensure!(
+            entry.hop_length == HOP_LENGTH,
+            "MDX-Net hop length must equal 1024 samples"
+        );
+        anyhow::ensure!(
+            matches!(entry.n_fft, 4_096 | 6_144 | 8_192 | 16_384),
+            "unsupported MDX-Net FFT size"
+        );
         let mut planner = FftPlanner::<f32>::new();
         let forward = planner.plan_fft_forward(entry.n_fft);
         let inverse = planner.plan_fft_inverse(entry.n_fft);
@@ -404,7 +481,8 @@ impl MdxDsp {
                 let imag_plane = real_plane + plane;
                 for frequency in 0..DIM_F {
                     let index = frequency * self.frames + frame;
-                    let value = Complex::new(values[real_plane + index], values[imag_plane + index]);
+                    let value =
+                        Complex::new(values[real_plane + index], values[imag_plane + index]);
                     spectrum[frequency] = value;
                     if frequency > 0 && frequency < self.n_fft / 2 {
                         spectrum[self.n_fft - frequency] = Complex::new(value.re, -value.im);
@@ -414,7 +492,8 @@ impl MdxDsp {
                 for index in 0..self.n_fft {
                     let output_index = frame_start + index;
                     let window = self.window[index];
-                    output[output_index][channel] += spectrum[index].re * window / self.n_fft as f32;
+                    output[output_index][channel] +=
+                        spectrum[index].re * window / self.n_fft as f32;
                     if channel == 0 {
                         normalization[output_index] += window * window;
                     }
@@ -479,15 +558,22 @@ fn read_source_frame(
     if *frames_read >= total_frames {
         return Ok([0.0; 2]);
     }
-    let left = samples.next().context("normalized WAV ended before its declared duration")??;
-    let right = samples.next().context("normalized WAV has an incomplete stereo frame")??;
+    let left = samples
+        .next()
+        .context("normalized WAV ended before its declared duration")??;
+    let right = samples
+        .next()
+        .context("normalized WAV has an incomplete stereo frame")??;
     *frames_read += 1;
     Ok([f32::from(left) / 32_768.0, f32::from(right) / 32_768.0])
 }
 
 fn write_stereo_frame(writer: &mut impl Write, frame: [f32; 2]) -> Result<()> {
     for sample in frame {
-        anyhow::ensure!(sample.is_finite(), "MDX-Net produced a non-finite audio sample");
+        anyhow::ensure!(
+            sample.is_finite(),
+            "MDX-Net produced a non-finite audio sample"
+        );
         let clamped = sample.clamp(-1.0, 1.0);
         let pcm = if clamped <= -1.0 {
             i16::MIN
@@ -499,11 +585,17 @@ fn write_stereo_frame(writer: &mut impl Write, frame: [f32; 2]) -> Result<()> {
     Ok(())
 }
 
-fn create_mdx_session(path: &Path, threads: usize, use_directml: bool) -> Result<(Session, &'static str)> {
+fn create_mdx_session(
+    path: &Path,
+    threads: usize,
+    use_directml: bool,
+) -> Result<(Session, &'static str)> {
     #[cfg(windows)]
     if use_directml {
         let directml = Session::builder()
-            .and_then(|builder| builder.with_execution_providers([ort::ep::DirectML::default().build()]))
+            .and_then(|builder| {
+                builder.with_execution_providers([ort::ep::DirectML::default().build()])
+            })
             .and_then(|builder| builder.with_intra_threads(threads))
             .and_then(|builder| builder.with_inter_threads(1))
             .and_then(|builder| builder.with_parallel_execution(false))
@@ -553,7 +645,9 @@ mod tests {
         assert_eq!(input.len(), 4 * DIM_F * 512);
         assert!(input.iter().all(|sample| sample.is_finite()));
         assert!(input[..DIM_F * 512].iter().any(|sample| sample.abs() > 0.0));
-        assert!(input[2 * DIM_F * 512..].iter().any(|sample| sample.abs() > 0.0));
+        assert!(input[2 * DIM_F * 512..]
+            .iter()
+            .any(|sample| sample.abs() > 0.0));
     }
 
     #[test]

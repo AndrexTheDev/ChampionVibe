@@ -1,19 +1,19 @@
+#[cfg(target_os = "android")]
+mod android_context;
 mod auto_gain;
 mod decoder;
 pub(crate) mod dj_engine;
 mod dsp;
-pub(crate) mod loudness;
 mod limiter;
+pub(crate) mod loudness;
 mod master_bus;
-pub(crate) mod model_manager;
 pub(crate) mod mir_analysis;
+pub(crate) mod model_manager;
 pub(crate) mod onnx_embedding;
 mod recording;
 mod recording_formats;
-mod wsola;
 mod samples;
-#[cfg(target_os = "android")]
-mod android_context;
+mod wsola;
 
 pub(crate) use recording::{
     CaptureClock, CaptureFlags, CapturedFrame, RecordingFile, RecordingFormat, RecordingHub,
@@ -29,10 +29,9 @@ use arc_swap::ArcSwap;
 use auto_gain::AutoGainRamp;
 use dsp::DspChain;
 use master_bus::{DeckOutput, MasterBus};
-use wsola::SharedSchedule;
 use rtrb::{Consumer, Producer, PushError, RingBuffer};
-use samples::{SampleBank, SampleClip};
 pub use samples::SampleInfo;
+use samples::{SampleBank, SampleClip};
 use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
@@ -44,6 +43,7 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
+use wsola::SharedSchedule;
 
 const STEM_COUNT: usize = 4;
 pub(crate) const MAX_TTS_PCM_BYTES: usize = 64 * 1024 * 1024;
@@ -138,7 +138,11 @@ pub(crate) fn decode_tts_pcm_f32le(
         let right = if channels == 1 {
             left
         } else {
-            f32::from_le_bytes(frame[4..8].try_into().expect("validated stereo frame width"))
+            f32::from_le_bytes(
+                frame[4..8]
+                    .try_into()
+                    .expect("validated stereo frame width"),
+            )
         };
         if !left.is_finite() || !right.is_finite() || left.abs() > 8.0 || right.abs() > 8.0 {
             return Err("TTS PCM contains non-finite or unsafe over-range samples".to_owned());
@@ -356,7 +360,11 @@ impl AudioControls {
         AudioParameters {
             master_gain: load_f32(&self.master_gain),
             stem_gains: std::array::from_fn(|index| {
-                if index < active_stems { load_f32(&self.stem_gains[index]) } else { 0.0 }
+                if index < active_stems {
+                    load_f32(&self.stem_gains[index])
+                } else {
+                    0.0
+                }
             }),
             high_pass_enabled: self.high_pass_enabled.load(Ordering::Relaxed),
             high_pass_hz: load_f32(&self.high_pass_hz),
@@ -454,7 +462,9 @@ fn validate_update(update: &AudioControlUpdate) -> Result<(), String> {
         if value.is_finite() && (low..=high).contains(&value) {
             Ok(())
         } else {
-            Err(format!("{name} must be finite and between {low} and {high}"))
+            Err(format!(
+                "{name} must be finite and between {low} and {high}"
+            ))
         }
     };
     if let Some(value) = update.master_gain {
@@ -715,7 +725,10 @@ impl AudioEngine {
     }
 
     pub fn active_stem_count(&self) -> u8 {
-        self.controls.active_stem_count.load(Ordering::Acquire).clamp(2, 4) as u8
+        self.controls
+            .active_stem_count
+            .load(Ordering::Acquire)
+            .clamp(2, 4) as u8
     }
 
     pub fn set_active_stem_profile(&self, active_stems: u8) -> Result<(), String> {
@@ -728,7 +741,9 @@ impl AudioEngine {
             stem_gains: Some(stem_gains),
             ..AudioControlUpdate::default()
         })?;
-        self.controls.active_stem_count.store(u32::from(active_stems), Ordering::Release);
+        self.controls
+            .active_stem_count
+            .store(u32::from(active_stems), Ordering::Release);
         Ok(())
     }
 
@@ -753,10 +768,16 @@ impl AudioEngine {
         if start_at_ms > 86_400_000 {
             return Err("stem cue must be within the first 24 hours".to_owned());
         }
-        if integrated_lufs.is_some_and(|value| !value.is_finite() || !(-80.0..=10.0).contains(&value)) {
+        if integrated_lufs
+            .is_some_and(|value| !value.is_finite() || !(-80.0..=10.0).contains(&value))
+        {
             return Err("integrated LUFS must be finite and between -80 and 10".to_owned());
         }
-        let active_stems = self.controls.active_stem_count.load(Ordering::Acquire).clamp(2, 4) as usize;
+        let active_stems = self
+            .controls
+            .active_stem_count
+            .load(Ordering::Acquire)
+            .clamp(2, 4) as usize;
         self.request(|reply| EngineCommand::Load {
             stems,
             grid,
@@ -789,7 +810,10 @@ impl AudioEngine {
         } else {
             None
         };
-        self.request(|reply| EngineCommand::Rewind { rewind_sample, reply })
+        self.request(|reply| EngineCommand::Rewind {
+            rewind_sample,
+            reply,
+        })
     }
 
     pub fn trigger_sample(
@@ -823,7 +847,9 @@ impl AudioEngine {
             return Err("no active master deck is loaded".to_owned());
         }
         if self.status.finished.load(Ordering::Acquire) {
-            return Err("the active master deck has finished; restart it before scheduling TTS".to_owned());
+            return Err(
+                "the active master deck has finished; restart it before scheduling TTS".to_owned(),
+            );
         }
         if !self.status.playing.load(Ordering::Acquire) {
             return Err("the active master deck must be playing to quantize TTS audio".to_owned());
@@ -988,8 +1014,8 @@ impl SamplePlaybackClip {
         if output_rate == 0 || self.sample_rate == 0 {
             return 0;
         }
-        ((self.frames.len() as f64 * f64::from(output_rate)) / f64::from(self.sample_rate))
-            .ceil() as usize
+        ((self.frames.len() as f64 * f64::from(output_rate)) / f64::from(self.sample_rate)).ceil()
+            as usize
     }
 }
 
@@ -1104,7 +1130,9 @@ impl QuantizationGrid {
             SampleQuantization::Off => current_frame,
             SampleQuantization::Beat | SampleQuantization::Bar => {
                 let bar_quantized = matches!(quantization, SampleQuantization::Bar);
-                let mut beat_index = self.beat_frames.partition_point(|frame| *frame < current_frame);
+                let mut beat_index = self
+                    .beat_frames
+                    .partition_point(|frame| *frame < current_frame);
                 if bar_quantized {
                     while beat_index % 4 != 0 {
                         beat_index = beat_index.saturating_add(1);
@@ -1155,7 +1183,10 @@ fn next_tts_grid_frame(
     // Allow a short control/IPC lead. If the next grid point is too close to enqueue safely, use
     // the following beat/bar rather than starting a few frames late.
     let scheduling_lead_frames = (u64::from(grid.sample_rate) * 30 / 1_000).max(1);
-    Ok(grid.next_frame(current_frame.saturating_add(scheduling_lead_frames), quantization))
+    Ok(grid.next_frame(
+        current_frame.saturating_add(scheduling_lead_frames),
+        quantization,
+    ))
 }
 
 struct PlaybackSession {
@@ -1254,12 +1285,13 @@ fn audio_control_loop(
             }) => {
                 let result = match session.as_ref() {
                     None => Err("no active master deck is loaded".to_owned()),
-                    Some(_) if status.finished.load(Ordering::Acquire) => {
-                        Err("the active master deck has finished; restart it before scheduling TTS".to_owned())
-                    }
-                    Some(_) if !status.playing.load(Ordering::Acquire) => {
-                        Err("the active master deck must be playing to quantize TTS audio".to_owned())
-                    }
+                    Some(_) if status.finished.load(Ordering::Acquire) => Err(
+                        "the active master deck has finished; restart it before scheduling TTS"
+                            .to_owned(),
+                    ),
+                    Some(_) if !status.playing.load(Ordering::Acquire) => Err(
+                        "the active master deck must be playing to quantize TTS audio".to_owned(),
+                    ),
                     Some(session) => {
                         let current_frame = status.position_frames.load(Ordering::Acquire);
                         let result = next_tts_grid_frame(
@@ -1268,8 +1300,10 @@ fn audio_control_loop(
                             quantization,
                         )
                         .and_then(|target_deck_frame| {
-                            let delay_frames = target_deck_frame.saturating_sub(current_frame).max(1);
-                            let deck_generation = status.timeline_generation.load(Ordering::Acquire);
+                            let delay_frames =
+                                target_deck_frame.saturating_sub(current_frame).max(1);
+                            let deck_generation =
+                                status.timeline_generation.load(Ordering::Acquire);
                             master_bus
                                 .schedule_tts_audio(
                                     frames,
@@ -1317,7 +1351,9 @@ fn audio_control_loop(
                         status.playing.store(true, Ordering::Release);
                         Ok(status.snapshot())
                     }
-                    Some(_) => Err("track has finished; use Wheel and Come Again to restart".to_owned()),
+                    Some(_) => {
+                        Err("track has finished; use Wheel and Come Again to restart".to_owned())
+                    }
                     None => Err("no stem set is loaded".to_owned()),
                 };
                 let _ = reply.send(result);
@@ -1378,7 +1414,8 @@ fn audio_control_loop(
                     status.finished.store(true, Ordering::Release);
                     if let Ok(mut last_error) = status.last_error.lock() {
                         if last_error.is_none() {
-                            *last_error = Some("native audio output reported a device error".to_owned());
+                            *last_error =
+                                Some("native audio output reported a device error".to_owned());
                         }
                     }
                 }
@@ -1524,9 +1561,8 @@ fn create_session(
             })
             .map_err(|_| "could not schedule the built-in rewind effect".to_owned())?;
         if let Some(rewind_sample) = rewind_sample {
-            rewind_frames_remaining = rewind_frames_remaining.max(
-                rewind_sample.duration_frames_at(sample_rate),
-            );
+            rewind_frames_remaining =
+                rewind_frames_remaining.max(rewind_sample.duration_frames_at(sample_rate));
             sample_event_tx
                 .push(SampleTriggerEvent {
                     clip: rewind_sample,
@@ -1545,7 +1581,11 @@ fn create_session(
     let mut workers = Vec::with_capacity(STEM_COUNT);
 
     for (stem_index, path) in paths.into_iter().enumerate() {
-        let capacity = if stem_index < active_stems { RING_CAPACITY_FRAMES } else { 1 };
+        let capacity = if stem_index < active_stems {
+            RING_CAPACITY_FRAMES
+        } else {
+            1
+        };
         let (producer, consumer) = RingBuffer::<PitchFrame>::new(capacity);
         let finished = Arc::new(AtomicBool::new(stem_index >= active_stems));
         if stem_index >= active_stems {
@@ -1577,8 +1617,7 @@ fn create_session(
                     worker_startup,
                     worker_status,
                 )
-            })
-        {
+            }) {
             Ok(worker) => worker,
             Err(error) => {
                 cancel_workers.store(true, Ordering::Release);
@@ -1653,8 +1692,7 @@ fn create_session(
                 .take()
                 .expect("a deck renderer takes its output producer exactly once");
             run_render_worker(graph, producer, thread_cancel)
-        })
-    {
+        }) {
         Ok(renderer) => renderer,
         Err(error) => {
             cancel_workers.store(true, Ordering::Release);
@@ -1696,9 +1734,7 @@ fn run_render_worker(
             continue;
         }
 
-        let mut frame = pending_frame
-            .take()
-            .unwrap_or_else(|| graph.render_frame());
+        let mut frame = pending_frame.take().unwrap_or_else(|| graph.render_frame());
         loop {
             if cancel.load(Ordering::Acquire) {
                 return producer;
@@ -1826,8 +1862,7 @@ impl AudioGraph {
         });
         if !rewinding && !stems_finished {
             for index in 0..self.active_stems {
-                if self.consumers[index].is_empty()
-                    && !self.finished[index].load(Ordering::Acquire)
+                if self.consumers[index].is_empty() && !self.finished[index].load(Ordering::Acquire)
                 {
                     return (
                         PitchFrame::default(),
@@ -1913,7 +1948,8 @@ impl AudioGraph {
             if !force_due && event.start_frame > track_frame {
                 break;
             }
-            let Some(slot_index) = self.active_samples.iter().position(|sample| !sample.active) else {
+            let Some(slot_index) = self.active_samples.iter().position(|sample| !sample.active)
+            else {
                 break;
             };
             let Some(event) = self.pending_sample_events[0].take() else {
@@ -1970,7 +2006,8 @@ impl AudioGraph {
             };
             bus.left += first.left + (second.left - first.left) * fraction;
             bus.right += first.right + (second.right - first.right) * fraction;
-            active.source_frame += f64::from(active.sample_rate) / f64::from(self.sample_rate.max(1));
+            active.source_frame +=
+                f64::from(active.sample_rate) / f64::from(self.sample_rate.max(1));
             if active.source_frame >= frames.len() as f64 {
                 active.active = false;
                 active.frames = None;
@@ -1999,7 +2036,13 @@ mod tests {
         stereo.extend_from_slice(&0.75_f32.to_le_bytes());
         stereo.extend_from_slice(&(-0.125_f32).to_le_bytes());
         let decoded = decode_tts_pcm_f32le(&stereo, 48_000, 2).unwrap();
-        assert_eq!(decoded, vec![StereoFrame { left: 0.75, right: -0.125 }]);
+        assert_eq!(
+            decoded,
+            vec![StereoFrame {
+                left: 0.75,
+                right: -0.125
+            }]
+        );
     }
 
     #[test]
@@ -2021,18 +2064,39 @@ mod tests {
             },
             100,
         );
-        assert_eq!(next_tts_grid_frame(&grid, 25, SampleQuantization::Beat).unwrap(), 50);
-        assert_eq!(next_tts_grid_frame(&grid, 50, SampleQuantization::Beat).unwrap(), 100);
-        assert_eq!(next_tts_grid_frame(&grid, 25, SampleQuantization::Bar).unwrap(), 200);
-        assert_eq!(next_tts_grid_frame(&grid, 50, SampleQuantization::Bar).unwrap(), 200);
+        assert_eq!(
+            next_tts_grid_frame(&grid, 25, SampleQuantization::Beat).unwrap(),
+            50
+        );
+        assert_eq!(
+            next_tts_grid_frame(&grid, 50, SampleQuantization::Beat).unwrap(),
+            100
+        );
+        assert_eq!(
+            next_tts_grid_frame(&grid, 25, SampleQuantization::Bar).unwrap(),
+            200
+        );
+        assert_eq!(
+            next_tts_grid_frame(&grid, 50, SampleQuantization::Bar).unwrap(),
+            200
+        );
         assert!(next_tts_grid_frame(&grid, 25, SampleQuantization::Off).is_err());
-        assert!(next_tts_grid_frame(&QuantizationGrid::default(), 25, SampleQuantization::Beat).is_err());
+        assert!(
+            next_tts_grid_frame(&QuantizationGrid::default(), 25, SampleQuantization::Beat)
+                .is_err()
+        );
 
         let bpm_only = QuantizationGrid::from_grid(
-            &BeatGrid { beat_times_seconds: Vec::new(), bpm: Some(120.0) },
+            &BeatGrid {
+                beat_times_seconds: Vec::new(),
+                bpm: Some(120.0),
+            },
             100,
         );
-        assert_eq!(next_tts_grid_frame(&bpm_only, 25, SampleQuantization::Beat).unwrap(), 50);
+        assert_eq!(
+            next_tts_grid_frame(&bpm_only, 25, SampleQuantization::Beat).unwrap(),
+            50
+        );
     }
 
     #[test]
@@ -2067,11 +2131,13 @@ mod tests {
         assert!(validate_update(&AudioControlUpdate {
             playback_rate: Some(1.21),
             ..AudioControlUpdate::default()
-        }).is_err());
+        })
+        .is_err());
         assert!(validate_update(&AudioControlUpdate {
             auto_gain_target_lufs: Some(-40.0),
             ..AudioControlUpdate::default()
-        }).is_err());
+        })
+        .is_err());
     }
 
     #[test]
@@ -2140,9 +2206,18 @@ mod tests {
         };
         let quantization = QuantizationGrid::from_grid(&grid, 48_000);
         assert_eq!(quantization.next_frame(100, SampleQuantization::Off), 100);
-        assert_eq!(quantization.next_frame(100, SampleQuantization::Beat), 24_000);
-        assert_eq!(quantization.next_frame(24_000, SampleQuantization::Beat), 24_000);
-        assert_eq!(quantization.next_frame(25_000, SampleQuantization::Bar), 96_000);
+        assert_eq!(
+            quantization.next_frame(100, SampleQuantization::Beat),
+            24_000
+        );
+        assert_eq!(
+            quantization.next_frame(24_000, SampleQuantization::Beat),
+            24_000
+        );
+        assert_eq!(
+            quantization.next_frame(25_000, SampleQuantization::Bar),
+            96_000
+        );
     }
 
     #[test]
@@ -2152,16 +2227,18 @@ mod tests {
             bpm: Some(120.0),
         };
         let quantization = QuantizationGrid::from_grid(&grid, 48_000);
-        assert_eq!(quantization.next_frame(24_100, SampleQuantization::Beat), 48_000);
-        assert_eq!(quantization.next_frame(24_100, SampleQuantization::Bar), 96_000);
+        assert_eq!(
+            quantization.next_frame(24_100, SampleQuantization::Beat),
+            48_000
+        );
+        assert_eq!(
+            quantization.next_frame(24_100, SampleQuantization::Bar),
+            96_000
+        );
     }
 }
 
-fn dispose_session(
-    session: PlaybackSession,
-    controls: &AudioControls,
-    deck_output: &DeckOutput,
-) {
+fn dispose_session(session: PlaybackSession, controls: &AudioControls, deck_output: &DeckOutput) {
     controls.playing.store(false, Ordering::Release);
     let PlaybackSession {
         renderer,

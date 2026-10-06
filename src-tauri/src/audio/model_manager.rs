@@ -112,7 +112,10 @@ const VOCALS: Artifact = Artifact {
     sha256: "daba83c2ee1afee9139766ad64c9b6808d6b6f092fff04bed3338be50baac721",
     max_bytes: 128 * 1024 * 1024,
     approximate_size: "29.7 MB",
-    validator: ArtifactKind::Mdx { n_fft: 6_144, stem: "vocals" },
+    validator: ArtifactKind::Mdx {
+        n_fft: 6_144,
+        stem: "vocals",
+    },
 };
 const OTHER: Artifact = Artifact {
     filename: "kuielab_a_other.onnx",
@@ -122,7 +125,10 @@ const OTHER: Artifact = Artifact {
     sha256: "7b67a1dcb5f232153528c59960b4c7bf8dc736b8114de360af0e719633f53358",
     max_bytes: 128 * 1024 * 1024,
     approximate_size: "29.7 MB",
-    validator: ArtifactKind::Mdx { n_fft: 8_192, stem: "other" },
+    validator: ArtifactKind::Mdx {
+        n_fft: 8_192,
+        stem: "other",
+    },
 };
 const BASS: Artifact = Artifact {
     filename: "kuielab_a_bass.onnx",
@@ -132,7 +138,10 @@ const BASS: Artifact = Artifact {
     sha256: "0c3e77b9963185b1ea6bb46a4b8924137d9370fc1ccdefec7b1b416ef550dcaa",
     max_bytes: 128 * 1024 * 1024,
     approximate_size: "29.7 MB",
-    validator: ArtifactKind::Mdx { n_fft: 16_384, stem: "bass" },
+    validator: ArtifactKind::Mdx {
+        n_fft: 16_384,
+        stem: "bass",
+    },
 };
 const DRUMS: Artifact = Artifact {
     filename: "kuielab_a_drums.onnx",
@@ -142,7 +151,10 @@ const DRUMS: Artifact = Artifact {
     sha256: "40f586b7091934dd6f5563f0cba8f14bad57ce88440da1098bf388ea716c2901",
     max_bytes: 128 * 1024 * 1024,
     approximate_size: "29.7 MB",
-    validator: ArtifactKind::Mdx { n_fft: 4_096, stem: "drums" },
+    validator: ArtifactKind::Mdx {
+        n_fft: 4_096,
+        stem: "drums",
+    },
 };
 const WHISPER_TINY: Artifact = Artifact {
     filename: "ggml-tiny.bin",
@@ -192,8 +204,12 @@ pub struct ModelManager {
 
 impl ModelManager {
     pub fn new(root: PathBuf) -> Result<Self> {
-        fs::create_dir_all(&root)
-            .with_context(|| format!("could not create managed model directory {}", root.display()))?;
+        fs::create_dir_all(&root).with_context(|| {
+            format!(
+                "could not create managed model directory {}",
+                root.display()
+            )
+        })?;
         let client = reqwest::Client::builder()
             .user_agent("ChampionVibe/0.1 local-model-manager")
             .timeout(std::time::Duration::from_secs(30 * 60))
@@ -267,11 +283,20 @@ impl ModelManager {
             _ => anyhow::bail!("unknown Kokoro asset; expected model or voice"),
         };
         let path = self.root.join(artifact.filename);
-        anyhow::ensure!(path.is_file(), "download and validate the Kokoro {asset} before loading WASM TTS");
+        anyhow::ensure!(
+            path.is_file(),
+            "download and validate the Kokoro {asset} before loading WASM TTS"
+        );
         let size = fs::metadata(&path)?.len();
-        anyhow::ensure!(size > 0 && size <= artifact.max_bytes, "Kokoro {asset} exceeds its pinned size limit");
+        anyhow::ensure!(
+            size > 0 && size <= artifact.max_bytes,
+            "Kokoro {asset} exceeds its pinned size limit"
+        );
         let actual = sha256_file(&path)?;
-        anyhow::ensure!(actual.eq_ignore_ascii_case(artifact.sha256), "Kokoro {asset} failed its SHA-256 integrity check");
+        anyhow::ensure!(
+            actual.eq_ignore_ascii_case(artifact.sha256),
+            "Kokoro {asset} failed its SHA-256 integrity check"
+        );
         validate_artifact(artifact, &path)?;
         fs::read(&path).with_context(|| format!("could not read local Kokoro {asset}"))
     }
@@ -315,15 +340,16 @@ impl ModelManager {
             "whisper-tiny" => self.download_artifact(&WHISPER_TINY).await,
             "kokoro-model" => self.download_artifact(&KOKORO_MODEL).await,
             "kokoro-voice-af-heart" => self.download_artifact(&KOKORO_VOICE).await,
-            _ => anyhow::bail!("unknown model id; only built-in pinned artifacts can be downloaded"),
+            _ => {
+                anyhow::bail!("unknown model id; only built-in pinned artifacts can be downloaded")
+            }
         }
     }
 
     async fn download_artifact(&self, artifact: &Artifact) -> Result<PathBuf> {
         fs::create_dir_all(&self.root)?;
         let final_path = self.root.join(artifact.filename);
-        if final_path.is_file()
-            && sha256_file(&final_path).ok().as_deref() == Some(artifact.sha256)
+        if final_path.is_file() && sha256_file(&final_path).ok().as_deref() == Some(artifact.sha256)
         {
             validate_artifact(artifact, &final_path)?;
             return Ok(final_path);
@@ -336,26 +362,35 @@ impl ModelManager {
             std::process::id(),
             sequence
         ));
-        let result = self.download_to_file(artifact, &temporary).await.and_then(|()| {
-            let actual_hash = sha256_file(&temporary)?;
-            anyhow::ensure!(
-                actual_hash.eq_ignore_ascii_case(artifact.sha256),
-                "SHA-256 mismatch for {}: expected {}, got {}",
-                artifact.filename,
-                artifact.sha256,
-                actual_hash
-            );
-            validate_artifact(artifact, &temporary)?;
-            if final_path.exists() {
-                fs::remove_file(&final_path).with_context(|| {
-                    format!("could not replace invalid managed model {}", final_path.display())
+        let result = self
+            .download_to_file(artifact, &temporary)
+            .await
+            .and_then(|()| {
+                let actual_hash = sha256_file(&temporary)?;
+                anyhow::ensure!(
+                    actual_hash.eq_ignore_ascii_case(artifact.sha256),
+                    "SHA-256 mismatch for {}: expected {}, got {}",
+                    artifact.filename,
+                    artifact.sha256,
+                    actual_hash
+                );
+                validate_artifact(artifact, &temporary)?;
+                if final_path.exists() {
+                    fs::remove_file(&final_path).with_context(|| {
+                        format!(
+                            "could not replace invalid managed model {}",
+                            final_path.display()
+                        )
+                    })?;
+                }
+                fs::rename(&temporary, &final_path).with_context(|| {
+                    format!(
+                        "could not install verified model at {}",
+                        final_path.display()
+                    )
                 })?;
-            }
-            fs::rename(&temporary, &final_path).with_context(|| {
-                format!("could not install verified model at {}", final_path.display())
-            })?;
-            Ok(())
-        });
+                Ok(())
+            });
         if result.is_err() {
             let _ = fs::remove_file(&temporary);
         }
@@ -375,7 +410,8 @@ impl ModelManager {
             .with_context(|| format!("model source returned an error for {}", artifact.filename))?;
         let final_url = response.url();
         anyhow::ensure!(
-            final_url.scheme() == "https" && trusted_huggingface_host(final_url.host_str().unwrap_or("")),
+            final_url.scheme() == "https"
+                && trusted_huggingface_host(final_url.host_str().unwrap_or("")),
             "model download redirected to an untrusted host"
         );
         if let Some(content_length) = response.content_length() {
@@ -399,12 +435,14 @@ impl ModelManager {
                 "model download exceeded the size limit for {}",
                 artifact.filename
             );
-            file.write_all(&chunk)
-                .with_context(|| format!("could not write downloaded model {}", artifact.filename))?;
+            file.write_all(&chunk).with_context(|| {
+                format!("could not write downloaded model {}", artifact.filename)
+            })?;
         }
         anyhow::ensure!(downloaded > 0, "model source returned an empty file");
-        file.sync_all()
-            .with_context(|| format!("could not finalize downloaded model {}", artifact.filename))?;
+        file.sync_all().with_context(|| {
+            format!("could not finalize downloaded model {}", artifact.filename)
+        })?;
         Ok(())
     }
 
@@ -439,26 +477,39 @@ impl ModelManager {
     }
 
     pub fn validate_user_file(&self, path_text: &str, kind: &str) -> Result<ModelValidation> {
-        anyhow::ensure!(!path_text.trim().is_empty(), "choose a local model file first");
+        anyhow::ensure!(
+            !path_text.trim().is_empty(),
+            "choose a local model file first"
+        );
         anyhow::ensure!(path_text.len() <= 4_096, "model path is too long");
         let supplied = PathBuf::from(path_text.trim());
         let path = fs::canonicalize(&supplied)
             .with_context(|| format!("could not resolve model file {}", supplied.display()))?;
         anyhow::ensure!(path.is_file(), "model path is not a file");
         crate::import::ensure_local_path(&path)?;
-        let extension = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
 
         let (contract, details) = match kind {
             "separator" => {
                 if extension.eq_ignore_ascii_case("json") {
                     let manifest = read_manifest(&path)?;
-                    validate_manifest_models(&manifest, path.parent().unwrap_or(&self.root), false)?;
+                    validate_manifest_models(
+                        &manifest,
+                        path.parent().unwrap_or(&self.root),
+                        false,
+                    )?;
                     (
                         format!("MDX-Net {}", manifest.mode),
                         "ONNX tensor shapes, dtypes, preprocessing parameters, and local files validated".to_owned(),
                     )
                 } else {
-                    anyhow::ensure!(extension.eq_ignore_ascii_case("onnx"), "separator models must be .onnx or a ChampionVibe .cvmodel.json manifest");
+                    anyhow::ensure!(
+                        extension.eq_ignore_ascii_case("onnx"),
+                        "separator models must be .onnx or a ChampionVibe .cvmodel.json manifest"
+                    );
                     let signature = inspect_mdx_signature(&path)?;
                     (
                         "MDX-Net single-target ONNX".to_owned(),
@@ -471,7 +522,10 @@ impl ModelManager {
                 }
             }
             "whisper" => {
-                anyhow::ensure!(extension.eq_ignore_ascii_case("bin"), "Whisper Tiny models must be .bin files");
+                anyhow::ensure!(
+                    extension.eq_ignore_ascii_case("bin"),
+                    "Whisper Tiny models must be .bin files"
+                );
                 let model_type = validate_whisper_model(&path)?;
                 (
                     "whisper.cpp GGML model".to_owned(),
@@ -479,7 +533,10 @@ impl ModelManager {
                 )
             }
             "kokoro-model" => {
-                anyhow::ensure!(extension.eq_ignore_ascii_case("onnx"), "Kokoro model must be an .onnx file");
+                anyhow::ensure!(
+                    extension.eq_ignore_ascii_case("onnx"),
+                    "Kokoro model must be an .onnx file"
+                );
                 validate_kokoro_onnx(&path)?;
                 (
                     "Kokoro v1.0 ONNX".to_owned(),
@@ -487,7 +544,10 @@ impl ModelManager {
                 )
             }
             "kokoro-voice" => {
-                anyhow::ensure!(extension.eq_ignore_ascii_case("bin"), "Kokoro voices must be raw .bin style-vector packs");
+                anyhow::ensure!(
+                    extension.eq_ignore_ascii_case("bin"),
+                    "Kokoro voices must be raw .bin style-vector packs"
+                );
                 let rows = validate_kokoro_voice(&path)?;
                 (
                     "Kokoro voice-vector pack".to_owned(),
@@ -515,26 +575,49 @@ impl ModelManager {
             "four-stem" => 4,
             _ => anyhow::bail!("separator import mode must be two-stem or four-stem"),
         };
-        anyhow::ensure!(paths.len() == expected_count, "{mode} model import requires exactly {expected_count} ONNX file(s)");
+        anyhow::ensure!(
+            paths.len() == expected_count,
+            "{mode} model import requires exactly {expected_count} ONNX file(s)"
+        );
         let mut sources = Vec::with_capacity(paths.len());
         let mut seen = std::collections::HashSet::new();
         for path_text in paths {
-            let source = fs::canonicalize(path_text.trim())
-                .with_context(|| format!("could not resolve custom separator model {}", path_text))?;
+            let source = fs::canonicalize(path_text.trim()).with_context(|| {
+                format!("could not resolve custom separator model {}", path_text)
+            })?;
             crate::import::ensure_local_path(&source)?;
             anyhow::ensure!(source.is_file(), "custom separator model is not a file");
-            anyhow::ensure!(source.extension().and_then(|value| value.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("onnx")), "custom separator files must use .onnx");
-            let stem = if mode == "two-stem" { "vocals".to_owned() } else { infer_stem_name(&source)? };
-            anyhow::ensure!(seen.insert(stem.clone()), "custom model set contains duplicate {stem} models");
+            anyhow::ensure!(
+                source
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("onnx")),
+                "custom separator files must use .onnx"
+            );
+            let stem = if mode == "two-stem" {
+                "vocals".to_owned()
+            } else {
+                infer_stem_name(&source)?
+            };
+            anyhow::ensure!(
+                seen.insert(stem.clone()),
+                "custom model set contains duplicate {stem} models"
+            );
             let signature = inspect_mdx_signature(&source)?;
             sources.push((stem, source, signature));
         }
         if mode == "four-stem" {
             for stem in ["vocals", "other", "bass", "drums"] {
-                anyhow::ensure!(seen.contains(stem), "custom four-stem set is missing a file whose name identifies {stem}");
+                anyhow::ensure!(
+                    seen.contains(stem),
+                    "custom four-stem set is missing a file whose name identifies {stem}"
+                );
             }
         }
-        let frames = sources.first().map(|(_, _, signature)| signature.frames).unwrap_or(MDX_FRAMES);
+        let frames = sources
+            .first()
+            .map(|(_, _, signature)| signature.frames)
+            .unwrap_or(MDX_FRAMES);
         anyhow::ensure!(
             sources.iter().all(|(_, _, signature)| signature.frames == frames && signature.dim_f == MDX_DIM_F),
             "all custom MDX-Net models must share float32 [1, 4, 2048, T] tensor dimensions"
@@ -551,15 +634,21 @@ impl ModelManager {
                 .collect::<Vec<_>>(),
         );
         let bundle_dir = self.root.join("user-separators").join(&bundle_hash[..20]);
-        fs::create_dir_all(&bundle_dir)
-            .with_context(|| format!("could not create custom model folder {}", bundle_dir.display()))?;
+        fs::create_dir_all(&bundle_dir).with_context(|| {
+            format!(
+                "could not create custom model folder {}",
+                bundle_dir.display()
+            )
+        })?;
 
         let mut entries = Vec::with_capacity(sources.len());
         for (stem, source, _) in sources {
             let filename = format!("{stem}.onnx");
             let destination = bundle_dir.join(&filename);
             let source_hash = sha256_file(&source)?;
-            if !destination.is_file() || sha256_file(&destination).ok().as_deref() != Some(source_hash.as_str()) {
+            if !destination.is_file()
+                || sha256_file(&destination).ok().as_deref() != Some(source_hash.as_str())
+            {
                 fs::copy(&source, &destination).with_context(|| {
                     format!("could not copy custom {stem} model into the local model library")
                 })?;
@@ -602,12 +691,22 @@ impl ModelManager {
 }
 
 pub(crate) fn read_manifest(path: &Path) -> Result<SeparatorModelManifest> {
-    let bytes = fs::read(path).with_context(|| format!("could not read model manifest {}", path.display()))?;
-    anyhow::ensure!(bytes.len() <= 64 * 1024, "separator model manifest is too large");
+    let bytes = fs::read(path)
+        .with_context(|| format!("could not read model manifest {}", path.display()))?;
+    anyhow::ensure!(
+        bytes.len() <= 64 * 1024,
+        "separator model manifest is too large"
+    );
     let manifest = serde_json::from_slice::<SeparatorModelManifest>(&bytes)
         .with_context(|| format!("invalid ChampionVibe model manifest {}", path.display()))?;
-    anyhow::ensure!(manifest.format == MANIFEST_FORMAT, "unsupported separator model manifest format");
-    anyhow::ensure!(matches!(manifest.mode.as_str(), "two-stem" | "four-stem"), "unsupported separator model profile");
+    anyhow::ensure!(
+        manifest.format == MANIFEST_FORMAT,
+        "unsupported separator model manifest format"
+    );
+    anyhow::ensure!(
+        matches!(manifest.mode.as_str(), "two-stem" | "four-stem"),
+        "unsupported separator model profile"
+    );
     Ok(manifest)
 }
 
@@ -620,29 +719,75 @@ pub(crate) fn resolve_manifest_models(
     } else {
         &["vocals", "other", "bass", "drums"]
     };
-    anyhow::ensure!(manifest.models.len() == expected_stems.len(), "{} model manifest has the wrong number of ONNX targets", manifest.mode);
+    anyhow::ensure!(
+        manifest.models.len() == expected_stems.len(),
+        "{} model manifest has the wrong number of ONNX targets",
+        manifest.mode
+    );
     let mut seen = std::collections::HashSet::new();
     let mut resolved = Vec::with_capacity(manifest.models.len());
     for entry in &manifest.models {
-        anyhow::ensure!(expected_stems.contains(&entry.stem.as_str()), "unknown separator stem {}", entry.stem);
-        anyhow::ensure!(seen.insert(entry.stem.as_str()), "duplicate separator target {}", entry.stem);
-        anyhow::ensure!(entry.file.len() <= 255 && !entry.file.is_empty(), "invalid relative ONNX filename in model manifest");
+        anyhow::ensure!(
+            expected_stems.contains(&entry.stem.as_str()),
+            "unknown separator stem {}",
+            entry.stem
+        );
+        anyhow::ensure!(
+            seen.insert(entry.stem.as_str()),
+            "duplicate separator target {}",
+            entry.stem
+        );
+        anyhow::ensure!(
+            entry.file.len() <= 255 && !entry.file.is_empty(),
+            "invalid relative ONNX filename in model manifest"
+        );
         let relative = Path::new(&entry.file);
-        anyhow::ensure!(relative.components().count() == 1 && relative.file_name().is_some(), "model manifest files must be simple relative filenames");
-        anyhow::ensure!(relative.extension().and_then(|value| value.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("onnx")), "model manifest target must be an ONNX file");
-        anyhow::ensure!(matches!(entry.n_fft, 4_096 | 6_144 | 8_192 | 16_384), "model manifest FFT size is outside the supported MDX-Net set");
-        anyhow::ensure!(entry.dim_f == MDX_DIM_F, "MDX-Net target must use dim_f=2048");
-        anyhow::ensure!(entry.frames == 512, "MDX-Net inference currently supports only the verified 512-frame model contract");
-        anyhow::ensure!(entry.hop_length == MDX_HOP_LENGTH, "MDX-Net target must use a 1024-sample hop");
-        anyhow::ensure!(entry.compensation.is_finite() && (0.5..=2.0).contains(&entry.compensation), "model compensation must be finite and within 0.5–2.0");
+        anyhow::ensure!(
+            relative.components().count() == 1 && relative.file_name().is_some(),
+            "model manifest files must be simple relative filenames"
+        );
+        anyhow::ensure!(
+            relative
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("onnx")),
+            "model manifest target must be an ONNX file"
+        );
+        anyhow::ensure!(
+            matches!(entry.n_fft, 4_096 | 6_144 | 8_192 | 16_384),
+            "model manifest FFT size is outside the supported MDX-Net set"
+        );
+        anyhow::ensure!(
+            entry.dim_f == MDX_DIM_F,
+            "MDX-Net target must use dim_f=2048"
+        );
+        anyhow::ensure!(
+            entry.frames == 512,
+            "MDX-Net inference currently supports only the verified 512-frame model contract"
+        );
+        anyhow::ensure!(
+            entry.hop_length == MDX_HOP_LENGTH,
+            "MDX-Net target must use a 1024-sample hop"
+        );
+        anyhow::ensure!(
+            entry.compensation.is_finite() && (0.5..=2.0).contains(&entry.compensation),
+            "model compensation must be finite and within 0.5–2.0"
+        );
         let path = fs::canonicalize(manifest_directory.join(relative))
             .with_context(|| format!("could not resolve ONNX model {}", entry.file))?;
         crate::import::ensure_local_path(&path)?;
-        anyhow::ensure!(path.is_file(), "separator model is missing: {}", path.display());
+        anyhow::ensure!(
+            path.is_file(),
+            "separator model is missing: {}",
+            path.display()
+        );
         resolved.push((entry.clone(), path));
     }
     for stem in expected_stems {
-        anyhow::ensure!(seen.contains(stem), "model manifest is missing the {stem} target");
+        anyhow::ensure!(
+            seen.contains(stem),
+            "model manifest is missing the {stem} target"
+        );
     }
     Ok(resolved)
 }
@@ -655,10 +800,20 @@ pub(crate) fn validate_manifest_models(
     let resolved = resolve_manifest_models(manifest, directory)?;
     for (entry, path) in &resolved {
         if enforce_sha {
-            let expected = entry.sha256.as_deref().context("separator model manifest is missing a SHA-256 pin")?;
-            anyhow::ensure!(expected.len() == 64 && expected.bytes().all(|byte| byte.is_ascii_hexdigit()), "separator model manifest contains an invalid SHA-256 pin");
+            let expected = entry
+                .sha256
+                .as_deref()
+                .context("separator model manifest is missing a SHA-256 pin")?;
+            anyhow::ensure!(
+                expected.len() == 64 && expected.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                "separator model manifest contains an invalid SHA-256 pin"
+            );
             let actual = sha256_file(path)?;
-            anyhow::ensure!(actual.eq_ignore_ascii_case(expected), "SHA-256 mismatch for separator target {}", entry.stem);
+            anyhow::ensure!(
+                actual.eq_ignore_ascii_case(expected),
+                "SHA-256 mismatch for separator target {}",
+                entry.stem
+            );
         }
         validate_mdx_model(path, entry.dim_f, entry.frames)?;
     }
@@ -684,18 +839,18 @@ fn write_manifest(path: &Path, manifest: &SeparatorModelManifest) -> Result<()> 
     fs::write(&temporary, serialized)
         .with_context(|| format!("could not write model manifest {}", temporary.display()))?;
     if path.exists() {
-        fs::remove_file(path).with_context(|| format!("could not replace model manifest {}", path.display()))?;
+        fs::remove_file(path)
+            .with_context(|| format!("could not replace model manifest {}", path.display()))?;
     }
-    fs::rename(&temporary, path).with_context(|| format!("could not install model manifest {}", path.display()))?;
+    fs::rename(&temporary, path)
+        .with_context(|| format!("could not install model manifest {}", path.display()))?;
     Ok(())
 }
 
 fn artifact_url(artifact: &Artifact) -> String {
     format!(
         "https://huggingface.co/{}/resolve/{}/{}?download=true",
-        artifact.repository,
-        artifact.revision,
-        artifact.repository_path
+        artifact.repository, artifact.revision, artifact.repository_path
     )
 }
 
@@ -712,7 +867,10 @@ fn validate_artifact(artifact: &Artifact, path: &Path) -> Result<()> {
         ArtifactKind::Mdx { n_fft: _, stem: _ } => validate_mdx_model(path, MDX_DIM_F, MDX_FRAMES),
         ArtifactKind::WhisperTiny => {
             let size = fs::metadata(path)?.len();
-            anyhow::ensure!(size > 16 * 1024 * 1024 && size <= artifact.max_bytes, "Whisper Tiny file size is outside the expected range");
+            anyhow::ensure!(
+                size > 16 * 1024 * 1024 && size <= artifact.max_bytes,
+                "Whisper Tiny file size is outside the expected range"
+            );
             Ok(())
         }
         ArtifactKind::KokoroOnnx => validate_kokoro_onnx(path),
@@ -730,7 +888,10 @@ fn validate_whisper_model(path: &Path) -> Result<String> {
         .model_type_readable_str()
         .context("could not identify the selected Whisper model type")?
         .to_owned();
-    anyhow::ensure!(model_type == "tiny" || model_type == "tiny.en", "select Whisper tiny or tiny.en; this file is {model_type}");
+    anyhow::ensure!(
+        model_type == "tiny" || model_type == "tiny.en",
+        "select Whisper tiny or tiny.en; this file is {model_type}"
+    );
     Ok(model_type)
 }
 
@@ -751,28 +912,73 @@ fn inspect_mdx_signature(path: &Path) -> Result<MdxSignature> {
         .context("could not configure ONNX Runtime")?
         .commit_from_file(path)
         .with_context(|| format!("could not load separator ONNX model {}", path.display()))?;
-    anyhow::ensure!(session.inputs().len() == 1 && session.outputs().len() == 1, "MDX-Net ONNX must have exactly one input and one output tensor");
-    let input = session.inputs().first().context("separator ONNX has no inputs")?;
-    let output = session.outputs().first().context("separator ONNX has no outputs")?;
-    anyhow::ensure!(input.name() == "input", "MDX-Net ONNX input tensor must be named 'input'");
+    anyhow::ensure!(
+        session.inputs().len() == 1 && session.outputs().len() == 1,
+        "MDX-Net ONNX must have exactly one input and one output tensor"
+    );
+    let input = session
+        .inputs()
+        .first()
+        .context("separator ONNX has no inputs")?;
+    let output = session
+        .outputs()
+        .first()
+        .context("separator ONNX has no outputs")?;
+    anyhow::ensure!(
+        input.name() == "input",
+        "MDX-Net ONNX input tensor must be named 'input'"
+    );
     let input_shape = tensor_shape(input.dtype(), TensorElementType::Float32)
         .context("separator ONNX input must be a float32 tensor")?;
     let output_shape = tensor_shape(output.dtype(), TensorElementType::Float32)
         .context("separator ONNX output must be a float32 tensor")?;
-    anyhow::ensure!(input_shape.len() == 4 && output_shape.len() == 4, "MDX-Net tensors must be rank-4 [1,4,dim_f,frames]");
-    anyhow::ensure!(fixed_dim_matches(input_shape[0], 1) && fixed_dim_matches(input_shape[1], 4), "MDX-Net input batch/channel shape must be [1,4,...]");
-    anyhow::ensure!(fixed_dim_matches(input_shape[2], MDX_DIM_F as i64), "MDX-Net input dim_f must be 2048");
-    anyhow::ensure!(fixed_dim_matches(output_shape[0], 1) && fixed_dim_matches(output_shape[1], 4), "MDX-Net output batch/channel shape must be [1,4,...]");
-    anyhow::ensure!(fixed_dim_matches(output_shape[2], MDX_DIM_F as i64), "MDX-Net output dim_f must be 2048");
-    let frames = if input_shape[3] > 0 { input_shape[3] as usize } else if output_shape[3] > 0 { output_shape[3] as usize } else { MDX_FRAMES };
-    anyhow::ensure!(frames == MDX_FRAMES, "MDX-Net tensor frame count must be 512 for the supported preprocessing contract");
-    anyhow::ensure!(fixed_dim_matches(output_shape[3], frames as i64), "MDX-Net input/output frame dimensions do not match");
-    Ok(MdxSignature { dim_f: MDX_DIM_F, frames })
+    anyhow::ensure!(
+        input_shape.len() == 4 && output_shape.len() == 4,
+        "MDX-Net tensors must be rank-4 [1,4,dim_f,frames]"
+    );
+    anyhow::ensure!(
+        fixed_dim_matches(input_shape[0], 1) && fixed_dim_matches(input_shape[1], 4),
+        "MDX-Net input batch/channel shape must be [1,4,...]"
+    );
+    anyhow::ensure!(
+        fixed_dim_matches(input_shape[2], MDX_DIM_F as i64),
+        "MDX-Net input dim_f must be 2048"
+    );
+    anyhow::ensure!(
+        fixed_dim_matches(output_shape[0], 1) && fixed_dim_matches(output_shape[1], 4),
+        "MDX-Net output batch/channel shape must be [1,4,...]"
+    );
+    anyhow::ensure!(
+        fixed_dim_matches(output_shape[2], MDX_DIM_F as i64),
+        "MDX-Net output dim_f must be 2048"
+    );
+    let frames = if input_shape[3] > 0 {
+        input_shape[3] as usize
+    } else if output_shape[3] > 0 {
+        output_shape[3] as usize
+    } else {
+        MDX_FRAMES
+    };
+    anyhow::ensure!(
+        frames == MDX_FRAMES,
+        "MDX-Net tensor frame count must be 512 for the supported preprocessing contract"
+    );
+    anyhow::ensure!(
+        fixed_dim_matches(output_shape[3], frames as i64),
+        "MDX-Net input/output frame dimensions do not match"
+    );
+    Ok(MdxSignature {
+        dim_f: MDX_DIM_F,
+        frames,
+    })
 }
 
 fn validate_mdx_model(path: &Path, dim_f: usize, frames: usize) -> Result<()> {
     let signature = inspect_mdx_signature(path)?;
-    anyhow::ensure!(signature.dim_f == dim_f && signature.frames == frames, "MDX-Net ONNX tensors do not match the declared [1, 4, {dim_f}, {frames}] contract");
+    anyhow::ensure!(
+        signature.dim_f == dim_f && signature.frames == frames,
+        "MDX-Net ONNX tensors do not match the declared [1, 4, {dim_f}, {frames}] contract"
+    );
     Ok(())
 }
 
@@ -798,7 +1004,9 @@ fn validate_kokoro_onnx(path: &Path) -> Result<()> {
             }
             "style" => {
                 let shape = tensor_shape(input.dtype(), TensorElementType::Float32)?;
-                style = shape.len() == 2 && fixed_dim_matches(shape[0], 1) && fixed_dim_matches(shape[1], 256);
+                style = shape.len() == 2
+                    && fixed_dim_matches(shape[0], 1)
+                    && fixed_dim_matches(shape[1], 256);
             }
             "speed" => {
                 let shape = tensor_shape(input.dtype(), TensorElementType::Float32)?;
@@ -807,35 +1015,59 @@ fn validate_kokoro_onnx(path: &Path) -> Result<()> {
             _ => {}
         }
     }
-    anyhow::ensure!(input_ids && style && speed, "Kokoro v1.0 needs input_ids int64 [1,T], style float32 [1,256], and speed float32 [1]");
-    anyhow::ensure!(!session.outputs().is_empty(), "Kokoro ONNX model has no outputs");
-    let output = session.outputs().first().context("Kokoro ONNX model has no output")?;
+    anyhow::ensure!(
+        input_ids && style && speed,
+        "Kokoro v1.0 needs input_ids int64 [1,T], style float32 [1,256], and speed float32 [1]"
+    );
+    anyhow::ensure!(
+        !session.outputs().is_empty(),
+        "Kokoro ONNX model has no outputs"
+    );
+    let output = session
+        .outputs()
+        .first()
+        .context("Kokoro ONNX model has no output")?;
     let _ = tensor_shape(output.dtype(), TensorElementType::Float32)
         .context("Kokoro audio output must be float32")?;
     Ok(())
 }
 
 fn validate_kokoro_voice(path: &Path) -> Result<usize> {
-    let metadata = fs::metadata(path).with_context(|| format!("could not read voice pack {}", path.display()))?;
+    let metadata = fs::metadata(path)
+        .with_context(|| format!("could not read voice pack {}", path.display()))?;
     let bytes = usize::try_from(metadata.len()).context("Kokoro voice pack is too large")?;
     const ROW_BYTES: usize = 256 * std::mem::size_of::<f32>();
-    anyhow::ensure!(bytes >= ROW_BYTES && bytes % ROW_BYTES == 0, "Kokoro voice pack must contain 256-float little-endian vectors");
-    anyhow::ensure!(bytes <= MAX_VOICE_BYTES as usize, "Kokoro voice pack exceeds the size limit");
+    anyhow::ensure!(
+        bytes >= ROW_BYTES && bytes % ROW_BYTES == 0,
+        "Kokoro voice pack must contain 256-float little-endian vectors"
+    );
+    anyhow::ensure!(
+        bytes <= MAX_VOICE_BYTES as usize,
+        "Kokoro voice pack exceeds the size limit"
+    );
     let mut file = File::open(path)?;
     let mut buffer = [0_u8; 64 * 1024];
     let mut pending = Vec::new();
     loop {
         let read = file.read(&mut buffer)?;
-        if read == 0 { break; }
+        if read == 0 {
+            break;
+        }
         pending.extend_from_slice(&buffer[..read]);
         let complete = pending.len() / 4 * 4;
         for chunk in pending[..complete].chunks_exact(4) {
             let value = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-            anyhow::ensure!(value.is_finite(), "Kokoro voice pack contains a non-finite vector value");
+            anyhow::ensure!(
+                value.is_finite(),
+                "Kokoro voice pack contains a non-finite vector value"
+            );
         }
         pending.drain(..complete);
     }
-    anyhow::ensure!(pending.is_empty(), "Kokoro voice pack has a truncated float32 value");
+    anyhow::ensure!(
+        pending.is_empty(),
+        "Kokoro voice pack has a truncated float32 value"
+    );
     Ok(bytes / ROW_BYTES)
 }
 
@@ -854,22 +1086,32 @@ fn fixed_dim_matches(actual: i64, expected: i64) -> bool {
 }
 
 fn infer_stem_name(path: &Path) -> Result<String> {
-    let name = path.file_stem().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
+    let name = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     let matches = ["vocals", "other", "bass", "drums"]
         .into_iter()
         .filter(|stem| name.contains(stem))
         .collect::<Vec<_>>();
-    anyhow::ensure!(matches.len() == 1, "four-stem user model filenames must identify exactly one of vocals, other, bass, or drums");
+    anyhow::ensure!(
+        matches.len() == 1,
+        "four-stem user model filenames must identify exactly one of vocals, other, bass, or drums"
+    );
     Ok(matches[0].to_owned())
 }
 
 fn sha256_file(path: &Path) -> Result<String> {
-    let mut file = File::open(path).with_context(|| format!("could not read {} for SHA-256 verification", path.display()))?;
+    let mut file = File::open(path)
+        .with_context(|| format!("could not read {} for SHA-256 verification", path.display()))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 1024 * 1024];
     loop {
         let read = file.read(&mut buffer)?;
-        if read == 0 { break; }
+        if read == 0 {
+            break;
+        }
         hasher.update(&buffer[..read]);
     }
     Ok(hex::encode(hasher.finalize()))

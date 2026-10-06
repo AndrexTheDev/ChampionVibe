@@ -29,11 +29,14 @@ pub(crate) struct LocalWhisper {
 
 impl LocalWhisper {
     pub(crate) fn load(model_path: &Path, threads: usize) -> Result<Self> {
-        let context = WhisperContext::new_with_params(
-            model_path,
-            WhisperContextParameters::default(),
-        )
-        .with_context(|| format!("could not load local Whisper model {}", model_path.display()))?;
+        let context =
+            WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
+                .with_context(|| {
+                    format!(
+                        "could not load local Whisper model {}",
+                        model_path.display()
+                    )
+                })?;
         let model_type = context
             .model_type_readable_str()
             .context("could not identify the selected Whisper model type")?
@@ -62,7 +65,10 @@ impl LocalWhisper {
             "acapella WAV has an unexpected format"
         );
         let total_frames = reader.duration().max(1) as u64;
-        let mut state = self.context.create_state().context("could not create Whisper state")?;
+        let mut state = self
+            .context
+            .create_state()
+            .context("could not create Whisper state")?;
         let mut audio_chunk = Vec::with_capacity(CHUNK_SAMPLES);
         let mut resampler = MonoResampler::new(44_100, WHISPER_RATE);
         let mut sample_iter = reader.samples::<i16>();
@@ -76,7 +82,9 @@ impl LocalWhisper {
             if input_samples % 131_072 == 0 && cancel.load(Ordering::Acquire) {
                 anyhow::bail!("import cancelled");
             }
-            let Some(left_sample) = sample_iter.next() else { break };
+            let Some(left_sample) = sample_iter.next() else {
+                break;
+            };
             let left = left_sample.context("corrupt acapella PCM data")?;
             let right_sample = sample_iter.next().context("odd number of stereo samples")?;
             let right = right_sample.context("corrupt acapella PCM data")?;
@@ -112,9 +120,7 @@ impl LocalWhisper {
         if cancel.load(Ordering::Acquire) {
             anyhow::bail!("import cancelled");
         }
-        if fresh_samples_in_chunk > 0
-            && (chunk_start_samples == 0 || fresh_samples_in_chunk > 1)
-        {
+        if fresh_samples_in_chunk > 0 && (chunk_start_samples == 0 || fresh_samples_in_chunk > 1) {
             transcribe_chunk(
                 &mut state,
                 &audio_chunk,
@@ -163,7 +169,9 @@ fn transcribe_chunk(
     params.set_print_timestamps(false);
     params.set_print_special(false);
     params.set_no_speech_thold(0.65);
-    state.full(params, audio).context("local Whisper transcription failed")?;
+    state
+        .full(params, audio)
+        .context("local Whisper transcription failed")?;
 
     let offset_ms = (offset_samples as i64 * 1_000) / i64::from(WHISPER_RATE);
     let ignore_before_ms = if offset_samples == 0 {
@@ -173,11 +181,13 @@ fn transcribe_chunk(
     };
     let segment_count = state.full_n_segments();
     if detected_language.is_none() && segment_count > 0 {
-        *detected_language = whisper_rs::get_lang_str(state.full_lang_id_from_state())
-            .map(str::to_owned);
+        *detected_language =
+            whisper_rs::get_lang_str(state.full_lang_id_from_state()).map(str::to_owned);
     }
     for segment_index in 0..segment_count {
-        let Some(segment) = state.get_segment(segment_index) else { continue };
+        let Some(segment) = state.get_segment(segment_index) else {
+            continue;
+        };
         if segment.no_speech_probability() > 0.75 {
             continue;
         }
@@ -186,7 +196,9 @@ fn transcribe_chunk(
         let mut groups = Vec::<PendingWord>::new();
         let mut pending = PendingWord::default();
         for token_index in 0..segment.n_tokens() {
-            let Some(token) = segment.get_token(token_index) else { continue };
+            let Some(token) = segment.get_token(token_index) else {
+                continue;
+            };
             let token_text = token.to_str().unwrap_or("");
             if token_text.is_empty() || token_text.starts_with("<|") {
                 continue;
@@ -204,8 +216,16 @@ fn transcribe_chunk(
             let token_start = offset_ms + timing.t0.saturating_mul(10);
             let token_end = offset_ms + timing.t1.saturating_mul(10);
             if timing.t1 > timing.t0 && token_start >= 0 {
-                pending.start_ms = Some(pending.start_ms.map_or(token_start, |value| value.min(token_start)));
-                pending.end_ms = Some(pending.end_ms.map_or(token_end, |value| value.max(token_end)));
+                pending.start_ms = Some(
+                    pending
+                        .start_ms
+                        .map_or(token_start, |value| value.min(token_start)),
+                );
+                pending.end_ms = Some(
+                    pending
+                        .end_ms
+                        .map_or(token_end, |value| value.max(token_end)),
+                );
             }
             pending.confidence_sum += f64::from(token.token_probability().clamp(0.0, 1.0));
             pending.token_count += 1;
@@ -215,12 +235,23 @@ fn transcribe_chunk(
         }
         let text_weight = groups
             .iter()
-            .map(|word| word.text.chars().filter(|ch| ch.is_alphanumeric()).count().max(1))
+            .map(|word| {
+                word.text
+                    .chars()
+                    .filter(|ch| ch.is_alphanumeric())
+                    .count()
+                    .max(1)
+            })
             .sum::<usize>()
             .max(1);
         let mut consumed_weight = 0usize;
         for word in groups {
-            let width = word.text.chars().filter(|ch| ch.is_alphanumeric()).count().max(1);
+            let width = word
+                .text
+                .chars()
+                .filter(|ch| ch.is_alphanumeric())
+                .count()
+                .max(1);
             let segment_duration = segment_end.saturating_sub(segment_start).max(0);
             let fallback_start =
                 segment_start + segment_duration * consumed_weight as i64 / text_weight as i64;
@@ -325,11 +356,50 @@ impl MonoResampler {
 
 fn lyric_sentiment(text: &str) -> (f64, String, f64) {
     const POSITIVE: &[&str] = &[
-        "love", "loved", "loving", "good", "great", "joy", "happy", "hope", "free", "freedom",
-        "light", "peace", "dream", "rise", "alive", "smile", "strong", "strength", "better",
-        "beautiful", "victory", "respect", "grateful", "brave", "feliz", "felicidad", "amor",
-        "amore", "alegria", "alegría", "esperanza", "libre", "libertad", "paz", "vida", "sonrie",
-        "sonríe", "fuerza", "mejor", "hermoso", "hermosa", "respeto", "gracias", "valiente",
+        "love",
+        "loved",
+        "loving",
+        "good",
+        "great",
+        "joy",
+        "happy",
+        "hope",
+        "free",
+        "freedom",
+        "light",
+        "peace",
+        "dream",
+        "rise",
+        "alive",
+        "smile",
+        "strong",
+        "strength",
+        "better",
+        "beautiful",
+        "victory",
+        "respect",
+        "grateful",
+        "brave",
+        "feliz",
+        "felicidad",
+        "amor",
+        "amore",
+        "alegria",
+        "alegría",
+        "esperanza",
+        "libre",
+        "libertad",
+        "paz",
+        "vida",
+        "sonrie",
+        "sonríe",
+        "fuerza",
+        "mejor",
+        "hermoso",
+        "hermosa",
+        "respeto",
+        "gracias",
+        "valiente",
     ];
     const NEGATIVE: &[&str] = &[
         "hate", "hated", "pain", "hurt", "die", "death", "kill", "war", "fear", "afraid", "sad",
@@ -338,7 +408,9 @@ fn lyric_sentiment(text: &str) -> (f64, String, f64) {
         "oscuro", "sangre", "rabia", "solo", "llora", "roto", "sufrir", "odio", "perdido",
         "desamor", "infierno",
     ];
-    const NEGATORS: &[&str] = &["not", "no", "never", "dont", "don't", "nunca", "jamás", "jamas", "sin"];
+    const NEGATORS: &[&str] = &[
+        "not", "no", "never", "dont", "don't", "nunca", "jamás", "jamas", "sin",
+    ];
     const INTENSIFIERS: &[&str] = &["very", "so", "really", "too", "much", "muy", "tan", "tanto"];
 
     let tokens: Vec<String> = text
@@ -387,7 +459,9 @@ fn lyric_sentiment(text: &str) -> (f64, String, f64) {
     let confidence = if tokens.is_empty() {
         0.0
     } else {
-        (scored_words as f64 / tokens.len() as f64).sqrt().clamp(0.0, 1.0)
+        (scored_words as f64 / tokens.len() as f64)
+            .sqrt()
+            .clamp(0.0, 1.0)
     };
     (score, label, confidence)
 }

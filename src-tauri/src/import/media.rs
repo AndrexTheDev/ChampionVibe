@@ -65,7 +65,9 @@ pub(crate) fn decode_to_wav(
     let (track_id, codec_params) = {
         let track = format
             .first_track_known_codec(TrackType::Audio)
-            .ok_or_else(|| anyhow::anyhow!("no decodable audio track in {}", source_path.display()))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("no decodable audio track in {}", source_path.display())
+            })?;
         let params = track
             .codec_params
             .as_ref()
@@ -137,8 +139,8 @@ pub(crate) fn decode_to_wav(
         let decoded_samples = decoded.samples_interleaved();
         let mut interleaved = vec![0.0f32; decoded_samples];
         decoded.copy_to_slice_interleaved(&mut interleaved);
-        let resampler = resampler
-            .get_or_insert_with(|| LinearResampler::new(sample_rate, MODEL_SAMPLE_RATE));
+        let resampler =
+            resampler.get_or_insert_with(|| LinearResampler::new(sample_rate, MODEL_SAMPLE_RATE));
         let loudness = loudness.get_or_insert_with(|| LoudnessAnalyzer::new(sample_rate));
         for channel_frame in interleaved.chunks_exact(channels) {
             // For multichannel sources the first two channels are kept. Mono is duplicated.
@@ -183,9 +185,12 @@ pub(crate) fn decode_to_wav(
     let loudness = loudness
         .ok_or_else(|| anyhow::anyhow!("source contains no decodable audio frames"))?
         .finish();
-    writer
-        .finalize()
-        .with_context(|| format!("could not finalize temporary PCM file {}", destination.display()))?;
+    writer.finalize().with_context(|| {
+        format!(
+            "could not finalize temporary PCM file {}",
+            destination.display()
+        )
+    })?;
 
     if output_frames == 0 {
         bail!("source contains no decodable audio frames")
@@ -247,7 +252,8 @@ pub(crate) fn decode_to_wav(
             metadata.pop();
         }
     }
-    let tags_json = serde_json::to_string(&tags).context("could not serialize source audio tags")?;
+    let tags_json =
+        serde_json::to_string(&tags).context("could not serialize source audio tags")?;
     let duration_ms = (output_frames.saturating_mul(1_000) / u64::from(MODEL_SAMPLE_RATE)) as i64;
     let source_bitrate_bps = if duration_ms > 0 {
         let bitrate = u128::from(encoded_bytes)
@@ -267,20 +273,30 @@ pub(crate) fn decode_to_wav(
         duration_ms,
         frames: output_frames,
         loudness,
-        title: title.filter(|value| !value.trim().is_empty()).unwrap_or(fallback_title),
+        title: title
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(fallback_title),
         artist: artist.unwrap_or_default(),
         tagged_bpm: tagged_bpm.filter(|bpm| (30.0..=300.0).contains(bpm)),
     })
 }
 
 fn write_pcm16(writer: &mut WavWriter<std::io::BufWriter<File>>, frame: StereoFrame) -> Result<()> {
-    writer.write_sample((finite_sample(frame.left).clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16)?;
-    writer.write_sample((finite_sample(frame.right).clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16)?;
+    writer.write_sample(
+        (finite_sample(frame.left).clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16,
+    )?;
+    writer.write_sample(
+        (finite_sample(frame.right).clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16,
+    )?;
     Ok(())
 }
 
 fn finite_sample(value: f32) -> f32 {
-    if value.is_finite() { value } else { 0.0 }
+    if value.is_finite() {
+        value
+    } else {
+        0.0
+    }
 }
 
 struct LinearResampler {
@@ -335,7 +351,10 @@ mod tests {
     fn linear_resampler_preserves_equal_rate_and_interpolates_up() {
         let mut resampler = LinearResampler::new(24_000, 48_000);
         for value in [0.0, 1.0, 2.0] {
-            resampler.push(StereoFrame { left: value, right: value });
+            resampler.push(StereoFrame {
+                left: value,
+                right: value,
+            });
         }
         let output: Vec<f32> = std::iter::from_fn(|| resampler.next_frame(true))
             .map(|frame| frame.left)

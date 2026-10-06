@@ -35,22 +35,46 @@ pub struct LocalizationCatalog {
 pub fn import_status(status: &str) -> LocalizedMessage {
     match status {
         "queued" => LocalizedMessage::new(
-            "import.queued", "In Warteschlange", "Queued", "En cola", "En attente",
+            "import.queued",
+            "In Warteschlange",
+            "Queued",
+            "En cola",
+            "En attente",
         ),
         "running" => LocalizedMessage::new(
-            "import.running", "Wird verarbeitet", "Processing", "Procesando", "En cours",
+            "import.running",
+            "Wird verarbeitet",
+            "Processing",
+            "Procesando",
+            "En cours",
         ),
         "completed" => LocalizedMessage::new(
-            "import.completed", "Abgeschlossen", "Completed", "Completado", "Terminé",
+            "import.completed",
+            "Abgeschlossen",
+            "Completed",
+            "Completado",
+            "Terminé",
         ),
         "failed" => LocalizedMessage::new(
-            "import.failed", "Fehlgeschlagen", "Failed", "Fallido", "Échec",
+            "import.failed",
+            "Fehlgeschlagen",
+            "Failed",
+            "Fallido",
+            "Échec",
         ),
         "cancelled" => LocalizedMessage::new(
-            "import.cancelled", "Abgebrochen", "Cancelled", "Cancelado", "Annulé",
+            "import.cancelled",
+            "Abgebrochen",
+            "Cancelled",
+            "Cancelado",
+            "Annulé",
         ),
         _ => LocalizedMessage::new(
-            "import.unknown", "Unbekannter Status", "Unknown status", "Estado desconocido", "État inconnu",
+            "import.unknown",
+            "Unbekannter Status",
+            "Unknown status",
+            "Estado desconocido",
+            "État inconnu",
         ),
     }
 }
@@ -78,28 +102,60 @@ pub fn import_stage(stage: &str) -> LocalizedMessage {
 
     match stage {
         "starting" => LocalizedMessage::new(
-            "import.starting", "Warteschlange wird vorbereitet", "Preparing queue", "Preparando la cola", "Préparation de la file",
+            "import.starting",
+            "Warteschlange wird vorbereitet",
+            "Preparing queue",
+            "Preparando la cola",
+            "Préparation de la file",
         ),
         "loading-local-models" => LocalizedMessage::new(
-            "import.loading_local_models", "Lokale Modelle laden", "Loading local models", "Cargando modelos locales", "Chargement des modèles locaux",
+            "import.loading_local_models",
+            "Lokale Modelle laden",
+            "Loading local models",
+            "Cargando modelos locales",
+            "Chargement des modèles locaux",
         ),
         "decoding-source" => LocalizedMessage::new(
-            "import.decoding_source", "Audio lokal dekodieren", "Decoding local audio", "Decodificando audio local", "Décodage audio local",
+            "import.decoding_source",
+            "Audio lokal dekodieren",
+            "Decoding local audio",
+            "Decodificando audio local",
+            "Décodage audio local",
         ),
         "analyzing-bpm-key-energy" => LocalizedMessage::new(
-            "import.analyzing_audio", "BPM, Tonart, Lautheit, Stimmung und Rhythmus analysieren", "Analyzing BPM, key, loudness, mood, and rhythm", "Analizando BPM, tonalidad, sonoridad, ánimo y ritmo", "Analyse du BPM, de la tonalité, du volume, de l'ambiance et du rythme",
+            "import.analyzing_audio",
+            "BPM, Tonart, Lautheit, Stimmung und Rhythmus analysieren",
+            "Analyzing BPM, key, loudness, mood, and rhythm",
+            "Analizando BPM, tonalidad, sonoridad, ánimo y ritmo",
+            "Analyse du BPM, de la tonalité, du volume, de l'ambiance et du rythme",
         ),
         "preparing-acapella-for-whisper" => LocalizedMessage::new(
-            "import.preparing_acapella", "Acapella für Whisper vorbereiten", "Preparing acapella for Whisper", "Preparando la acapella para Whisper", "Préparation de l'acapella pour Whisper",
+            "import.preparing_acapella",
+            "Acapella für Whisper vorbereiten",
+            "Preparing acapella for Whisper",
+            "Preparando la acapella para Whisper",
+            "Préparation de l'acapella pour Whisper",
         ),
         "transcribing-lyrics-locally" => LocalizedMessage::new(
-            "import.transcribing_lyrics", "Lyrics lokal transkribieren", "Transcribing lyrics locally", "Transcribiendo letras localmente", "Transcription locale des paroles",
+            "import.transcribing_lyrics",
+            "Lyrics lokal transkribieren",
+            "Transcribing lyrics locally",
+            "Transcribiendo letras localmente",
+            "Transcription locale des paroles",
         ),
         "committing-track-metadata" | "committing" => LocalizedMessage::new(
-            "import.committing_metadata", "Metadaten lokal speichern", "Saving metadata locally", "Guardando metadatos localmente", "Enregistrement local des métadonnées",
+            "import.committing_metadata",
+            "Metadaten lokal speichern",
+            "Saving metadata locally",
+            "Guardando metadatos localmente",
+            "Enregistrement local des métadonnées",
         ),
         _ => LocalizedMessage::new(
-            "import.unknown_stage", "Lokale Verarbeitung", "Local processing", "Procesamiento local", "Traitement local",
+            "import.unknown_stage",
+            "Lokale Verarbeitung",
+            "Local processing",
+            "Procesamiento local",
+            "Traitement local",
         ),
     }
 }
@@ -107,25 +163,53 @@ pub fn import_stage(stage: &str) -> LocalizedMessage {
 pub fn recording_status(code: &str) -> LocalizedMessage {
     match code {
         "recording.ready" => LocalizedMessage::new(
-            "recording.ready", "Aufnahme bereit", "Recording ready", "Grabación lista", "Enregistrement prêt",
+            "recording.ready",
+            "Aufnahme bereit",
+            "Recording ready",
+            "Grabación lista",
+            "Enregistrement prêt",
         ),
         "recording.started" => LocalizedMessage::new(
-            "recording.started", "Aufnahme läuft", "Recording", "Grabando", "Enregistrement en cours",
+            "recording.started",
+            "Aufnahme läuft",
+            "Recording",
+            "Grabando",
+            "Enregistrement en cours",
         ),
         "recording.saved" => LocalizedMessage::new(
-            "recording.saved", "Aufnahme gespeichert", "Recording saved", "Grabación guardada", "Enregistrement sauvegardé",
+            "recording.saved",
+            "Aufnahme gespeichert",
+            "Recording saved",
+            "Grabación guardada",
+            "Enregistrement sauvegardé",
         ),
         "recording.license_expired" => LocalizedMessage::new(
-            "recording.license_expired", "Pro-Lizenz abgelaufen; unvollständige Aufnahme gelöscht.", "Pro license expired; incomplete recording deleted.", "La licencia Pro ha caducado; se eliminó la grabación incompleta.", "La licence Pro a expiré ; l'enregistrement incomplet a été supprimé.",
+            "recording.license_expired",
+            "Pro-Lizenz abgelaufen; unvollständige Aufnahme gelöscht.",
+            "Pro license expired; incomplete recording deleted.",
+            "La licencia Pro ha caducado; se eliminó la grabación incompleta.",
+            "La licence Pro a expiré ; l'enregistrement incomplet a été supprimé.",
         ),
         "recording.capture_overflow" => LocalizedMessage::new(
-            "recording.capture_overflow", "Aufnahmepuffer übergelaufen; unvollständige Aufnahme gelöscht.", "Capture buffer overflowed; incomplete recording deleted.", "El búfer de captura se desbordó; se eliminó la grabación incompleta.", "Le tampon de capture a débordé ; l'enregistrement incomplet a été supprimé.",
+            "recording.capture_overflow",
+            "Aufnahmepuffer übergelaufen; unvollständige Aufnahme gelöscht.",
+            "Capture buffer overflowed; incomplete recording deleted.",
+            "El búfer de captura se desbordó; se eliminó la grabación incompleta.",
+            "Le tampon de capture a débordé ; l'enregistrement incomplet a été supprimé.",
         ),
         "recording.failed" => LocalizedMessage::new(
-            "recording.failed", "Aufnahme fehlgeschlagen", "Recording failed", "Error en la grabación", "Échec de l'enregistrement",
+            "recording.failed",
+            "Aufnahme fehlgeschlagen",
+            "Recording failed",
+            "Error en la grabación",
+            "Échec de l'enregistrement",
         ),
         _ => LocalizedMessage::new(
-            "recording.unknown", "Unbekannter Aufnahmestatus", "Unknown recording status", "Estado de grabación desconocido", "État d'enregistrement inconnu",
+            "recording.unknown",
+            "Unbekannter Aufnahmestatus",
+            "Unknown recording status",
+            "Estado de grabación desconocido",
+            "État d'enregistrement inconnu",
         ),
     }
 }
@@ -164,12 +248,30 @@ pub fn catalog() -> LocalizationCatalog {
     .collect();
     let metadata_labels = [
         ("metadata.title", "Titel", "Title", "Título", "Titre"),
-        ("metadata.artist", "Interpret", "Artist", "Artista", "Artiste"),
-        ("metadata.duration", "Dauer", "Duration", "Duración", "Durée"),
+        (
+            "metadata.artist",
+            "Interpret",
+            "Artist",
+            "Artista",
+            "Artiste",
+        ),
+        (
+            "metadata.duration",
+            "Dauer",
+            "Duration",
+            "Duración",
+            "Durée",
+        ),
         ("metadata.codec", "Format", "Format", "Formato", "Format"),
         ("metadata.bpm", "BPM", "BPM", "BPM", "BPM"),
         ("metadata.key", "Tonart", "Key", "Tonalidad", "Tonalité"),
-        ("metadata.lufs", "Integrierte Lautheit", "Integrated loudness", "Sonoridad integrada", "Loudness intégré"),
+        (
+            "metadata.lufs",
+            "Integrierte Lautheit",
+            "Integrated loudness",
+            "Sonoridad integrada",
+            "Loudness intégré",
+        ),
         ("metadata.mood", "Stimmung", "Mood", "Ánimo", "Ambiance"),
         ("metadata.rhythm", "Rhythmus", "Rhythm", "Ritmo", "Rythme"),
     ]

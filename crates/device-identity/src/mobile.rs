@@ -25,10 +25,8 @@ pub fn init<R: Runtime, C: serde::de::DeserializeOwned>(
     _app: &AppHandle<R>,
     api: PluginApi<R, C>,
 ) -> Result<DeviceIdentity<R>, Box<dyn std::error::Error>> {
-    let handle = api.register_android_plugin(
-        "com.championvibe.deviceidentity",
-        "DeviceIdentityPlugin",
-    )?;
+    let handle =
+        api.register_android_plugin("com.championvibe.deviceidentity", "DeviceIdentityPlugin")?;
     Ok(DeviceIdentity(handle))
 }
 

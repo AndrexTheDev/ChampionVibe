@@ -200,7 +200,10 @@ pub struct ImportJobConfig {
 }
 
 pub fn open(path: &Path) -> Result<Connection> {
-    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("could not create app data directory {}", parent.display()))?;
     }
@@ -603,14 +606,38 @@ fn ensure_import_job_columns(connection: &Connection) -> Result<bool> {
     for (name, declaration) in [
         ("separation_model_path", "TEXT NOT NULL DEFAULT ''"),
         ("whisper_model_path", "TEXT NOT NULL DEFAULT ''"),
-        ("use_directml", "INTEGER NOT NULL DEFAULT 0 CHECK(use_directml IN (0, 1))"),
-        ("cpu_threads", "INTEGER NOT NULL DEFAULT 4 CHECK(cpu_threads BETWEEN 1 AND 8)"),
-        ("current_progress", "REAL NOT NULL DEFAULT 0.0 CHECK(current_progress >= 0.0 AND current_progress <= 1.0)"),
-        ("queued_items", "INTEGER NOT NULL DEFAULT 0 CHECK(queued_items >= 0)"),
-        ("running_items", "INTEGER NOT NULL DEFAULT 0 CHECK(running_items >= 0)"),
-        ("successful_items", "INTEGER NOT NULL DEFAULT 0 CHECK(successful_items >= 0)"),
-        ("failed_items", "INTEGER NOT NULL DEFAULT 0 CHECK(failed_items >= 0)"),
-        ("cancelled_items", "INTEGER NOT NULL DEFAULT 0 CHECK(cancelled_items >= 0)"),
+        (
+            "use_directml",
+            "INTEGER NOT NULL DEFAULT 0 CHECK(use_directml IN (0, 1))",
+        ),
+        (
+            "cpu_threads",
+            "INTEGER NOT NULL DEFAULT 4 CHECK(cpu_threads BETWEEN 1 AND 8)",
+        ),
+        (
+            "current_progress",
+            "REAL NOT NULL DEFAULT 0.0 CHECK(current_progress >= 0.0 AND current_progress <= 1.0)",
+        ),
+        (
+            "queued_items",
+            "INTEGER NOT NULL DEFAULT 0 CHECK(queued_items >= 0)",
+        ),
+        (
+            "running_items",
+            "INTEGER NOT NULL DEFAULT 0 CHECK(running_items >= 0)",
+        ),
+        (
+            "successful_items",
+            "INTEGER NOT NULL DEFAULT 0 CHECK(successful_items >= 0)",
+        ),
+        (
+            "failed_items",
+            "INTEGER NOT NULL DEFAULT 0 CHECK(failed_items >= 0)",
+        ),
+        (
+            "cancelled_items",
+            "INTEGER NOT NULL DEFAULT 0 CHECK(cancelled_items >= 0)",
+        ),
     ] {
         if !columns.iter().any(|column| column == name) {
             connection.execute_batch(&format!(
@@ -678,7 +705,10 @@ pub fn upsert_track(connection: &mut Connection, track: &TrackInput) -> Result<i
         [&track.file_path],
         |row| row.get(0),
     )?;
-    transaction.execute("DELETE FROM waveform_peak_cache WHERE track_id = ?1", [track_id])?;
+    transaction.execute(
+        "DELETE FROM waveform_peak_cache WHERE track_id = ?1",
+        [track_id],
+    )?;
     if let Some(tags_json) = &track.tags_json {
         replace_audio_tags(&transaction, track_id, tags_json)?;
     }
@@ -700,7 +730,10 @@ pub fn upsert_track(connection: &mut Connection, track: &TrackInput) -> Result<i
             params![track_id, score],
         )?;
     } else {
-        transaction.execute("DELETE FROM sentiment_values WHERE track_id = ?1", [track_id])?;
+        transaction.execute(
+            "DELETE FROM sentiment_values WHERE track_id = ?1",
+            [track_id],
+        )?;
     }
 
     transaction.execute("DELETE FROM stems WHERE track_id = ?1", [track_id])?;
@@ -715,9 +748,8 @@ pub fn upsert_track(connection: &mut Connection, track: &TrackInput) -> Result<i
 }
 
 pub fn load_stems(connection: &Connection, track_id: i64) -> Result<Vec<StemPath>> {
-    let mut statement = connection.prepare(
-        "SELECT kind, file_path FROM stems WHERE track_id = ?1 ORDER BY kind",
-    )?;
+    let mut statement = connection
+        .prepare("SELECT kind, file_path FROM stems WHERE track_id = ?1 ORDER BY kind")?;
     let rows = statement.query_map([track_id], |row| {
         Ok(StemPath {
             kind: row.get(0)?,
@@ -980,7 +1012,11 @@ pub fn mix_candidate_ids(
     Ok(ids)
 }
 
-pub fn search_tracks(connection: &Connection, query: &str, limit: u32) -> Result<Vec<TrackSummary>> {
+pub fn search_tracks(
+    connection: &Connection,
+    query: &str,
+    limit: u32,
+) -> Result<Vec<TrackSummary>> {
     search_tracks_page(connection, query, limit, 0).map(|(tracks, _)| tracks)
 }
 
@@ -1136,9 +1172,18 @@ pub fn create_import_job(
     use_directml: bool,
     cpu_threads: usize,
 ) -> Result<i64> {
-    anyhow::ensure!(!paths.is_empty(), "an import job must contain at least one path");
-    anyhow::ensure!(paths.len() <= 50_000, "an import batch is limited to 50,000 paths");
-    anyhow::ensure!((1..=8).contains(&cpu_threads), "CPU threads must be between 1 and 8");
+    anyhow::ensure!(
+        !paths.is_empty(),
+        "an import job must contain at least one path"
+    );
+    anyhow::ensure!(
+        paths.len() <= 50_000,
+        "an import batch is limited to 50,000 paths"
+    );
+    anyhow::ensure!(
+        (1..=8).contains(&cpu_threads),
+        "CPU threads must be between 1 and 8"
+    );
 
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let now = unix_time();
@@ -1240,7 +1285,10 @@ pub fn import_job_config(connection: &Connection, job_id: i64) -> Result<ImportJ
         .context("could not load import model settings")
 }
 
-pub fn claim_next_import_item(connection: &mut Connection, job_id: i64) -> Result<Option<ImportItem>> {
+pub fn claim_next_import_item(
+    connection: &mut Connection,
+    job_id: i64,
+) -> Result<Option<ImportItem>> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let item = transaction
         .query_row(
@@ -1308,9 +1356,11 @@ pub fn import_cancel_requested(connection: &Connection, job_id: i64) -> Result<b
 pub fn request_import_cancel(connection: &mut Connection, job_id: i64) -> Result<()> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let status = transaction
-        .query_row("SELECT status FROM import_jobs WHERE id = ?1", [job_id], |row| {
-            row.get::<_, String>(0)
-        })
+        .query_row(
+            "SELECT status FROM import_jobs WHERE id = ?1",
+            [job_id],
+            |row| row.get::<_, String>(0),
+        )
         .optional()?
         .context("import job does not exist")?;
     anyhow::ensure!(
@@ -1340,11 +1390,7 @@ pub fn request_import_cancel(connection: &mut Connection, job_id: i64) -> Result
     Ok(())
 }
 
-pub fn finish_import_item_failed(
-    connection: &Connection,
-    item_id: i64,
-    error: &str,
-) -> Result<()> {
+pub fn finish_import_item_failed(connection: &Connection, item_id: i64, error: &str) -> Result<()> {
     connection.execute(
         "UPDATE import_items SET status = 'failed', error = ?1, finished_at = ?2 WHERE id = ?3",
         params![error, unix_time(), item_id],
@@ -1456,7 +1502,10 @@ pub fn commit_import_result(
     item_id: i64,
     result: &ImportResult,
 ) -> Result<Vec<String>> {
-    anyhow::ensure!(result.vector_blob.len() == 64, "MIR descriptor BLOB must contain 64 int8 values");
+    anyhow::ensure!(
+        result.vector_blob.len() == 64,
+        "MIR descriptor BLOB must contain 64 int8 values"
+    );
     anyhow::ensure!(
         result.mood_valence.is_finite()
             && (-1.0..=1.0).contains(&result.mood_valence)
@@ -1467,10 +1516,14 @@ pub fn commit_import_result(
         "MIR mood and rhythm metrics are outside their supported ranges"
     );
     anyhow::ensure!(
-        [result.lufs_integrated, result.true_peak_dbtp, result.gain_offset_db]
-            .into_iter()
-            .flatten()
-            .all(|value| value.is_finite()),
+        [
+            result.lufs_integrated,
+            result.true_peak_dbtp,
+            result.gain_offset_db
+        ]
+        .into_iter()
+        .flatten()
+        .all(|value| value.is_finite()),
         "loudness analysis contains a non-finite value"
     );
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -1485,7 +1538,10 @@ pub fn commit_import_result(
         params![job_id, item_id],
         |row| row.get(0),
     )?;
-    anyhow::ensure!(item_is_active, "import was cancelled or item is no longer active");
+    anyhow::ensure!(
+        item_is_active,
+        "import was cancelled or item is no longer active"
+    );
     let now = unix_time();
     transaction.execute(
         "INSERT INTO tracks (
@@ -1520,7 +1576,8 @@ pub fn commit_import_result(
     replace_audio_tags(&transaction, track_id, &result.tags_json)?;
 
     let old_paths = {
-        let mut statement = transaction.prepare("SELECT file_path FROM stems WHERE track_id = ?1")?;
+        let mut statement =
+            transaction.prepare("SELECT file_path FROM stems WHERE track_id = ?1")?;
         let rows = statement.query_map([track_id], |row| row.get::<_, String>(0))?;
         rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
@@ -1646,7 +1703,11 @@ pub fn commit_import_result(
     transaction.execute(
         "INSERT INTO sentiment_values (track_id, score, label) VALUES (?1, ?2, ?3)
          ON CONFLICT(track_id) DO UPDATE SET score = excluded.score, label = excluded.label",
-        params![track_id, result.lyric_sentiment, result.lyric_sentiment_label],
+        params![
+            track_id,
+            result.lyric_sentiment,
+            result.lyric_sentiment_label
+        ],
     )?;
     transaction.execute("DELETE FROM stems WHERE track_id = ?1", [track_id])?;
     for stem in &result.stems {
@@ -1712,7 +1773,9 @@ pub fn store_license(connection: &Connection, signed_json: &str) -> Result<()> {
 
 pub fn load_license(connection: &Connection) -> Result<Option<String>> {
     connection
-        .query_row("SELECT signed_json FROM licenses WHERE id = 1", [], |row| row.get(0))
+        .query_row("SELECT signed_json FROM licenses WHERE id = 1", [], |row| {
+            row.get(0)
+        })
         .optional()
         .context("could not load persisted license")
 }
@@ -1729,10 +1792,11 @@ mod tests {
     use super::{
         cancel_queued_import_items, claim_next_import_item, claim_next_import_job,
         commit_import_result, create_import_job, ensure_recording_columns,
-        finish_import_item_failed, finish_import_job, import_jobs, open, load_mix_track,
-        load_waveform_peak_blob, mix_candidate_ids, save_recording_metadata,
-        save_waveform_peak_blob, search_tracks, search_tracks_page, search_tracks_page_with_filters,
-        upsert_track, ImportResult, RecordingMetadata, TrackInput, TrackSearchFilters,
+        finish_import_item_failed, finish_import_job, import_jobs, load_mix_track,
+        load_waveform_peak_blob, mix_candidate_ids, open, save_recording_metadata,
+        save_waveform_peak_blob, search_tracks, search_tracks_page,
+        search_tracks_page_with_filters, upsert_track, ImportResult, RecordingMetadata, TrackInput,
+        TrackSearchFilters,
     };
     use std::path::Path;
 
@@ -1766,14 +1830,23 @@ mod tests {
         assert_eq!(found[0].sample_rate, Some(44_100));
         assert_eq!(found[0].channel_count, Some(2));
         assert!(found[0].tags_json.contains("Dancehall"));
-        assert_eq!(search_tracks(&connection, "Dancehall", 20).unwrap().len(), 1);
+        assert_eq!(
+            search_tracks(&connection, "Dancehall", 20).unwrap().len(),
+            1
+        );
 
         let peak_blob = vec![0x5a; 128 * 2];
         save_waveform_peak_blob(&connection, track_id, 128, &peak_blob).unwrap();
-        assert_eq!(load_waveform_peak_blob(&connection, track_id, 128).unwrap(), Some(peak_blob));
+        assert_eq!(
+            load_waveform_peak_blob(&connection, track_id, 128).unwrap(),
+            Some(peak_blob)
+        );
         assert!(save_waveform_peak_blob(&connection, track_id, 128, &[1, 2]).is_err());
         upsert_track(&mut connection, &track).unwrap();
-        assert_eq!(load_waveform_peak_blob(&connection, track_id, 128).unwrap(), None);
+        assert_eq!(
+            load_waveform_peak_blob(&connection, track_id, 128).unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -1789,7 +1862,10 @@ mod tests {
             2,
         )
         .unwrap();
-        assert_eq!(claim_next_import_job(&mut connection).unwrap(), Some(job_id));
+        assert_eq!(
+            claim_next_import_job(&mut connection).unwrap(),
+            Some(job_id)
+        );
         let item = claim_next_import_item(&mut connection, job_id)
             .unwrap()
             .unwrap();
@@ -1843,7 +1919,10 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].mood_label.as_deref(), Some("Euphoric"));
         assert_eq!(found[0].rhythm_pattern.as_deref(), Some("One Drop"));
-        assert_eq!(found[0].style_genre.as_deref(), Some("Roots / Reggae (heuristic)"));
+        assert_eq!(
+            found[0].style_genre.as_deref(),
+            Some("Roots / Reggae (heuristic)")
+        );
         assert_eq!(found[0].lufs_integrated, Some(-14.5));
         assert_eq!(found[0].true_peak_dbtp, Some(-0.4));
         assert_eq!(found[0].gain_offset_db, Some(0.5));
@@ -1895,7 +1974,10 @@ mod tests {
                 |row| row.get(3),
             )
             .unwrap();
-        assert!(mood_query_plan.contains("idx_track_analysis_mood"), "{mood_query_plan}");
+        assert!(
+            mood_query_plan.contains("idx_track_analysis_mood"),
+            "{mood_query_plan}"
+        );
     }
 
     #[test]
@@ -2022,7 +2104,13 @@ mod tests {
             .chain(&last_page)
             .map(|track| track.id)
             .collect::<Vec<_>>();
-        assert_eq!(ids.iter().copied().collect::<std::collections::HashSet<_>>().len(), 5);
+        assert_eq!(
+            ids.iter()
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            5
+        );
     }
 
     #[test]
@@ -2051,8 +2139,11 @@ mod tests {
         };
         let source_id = upsert_track(&mut connection, &make_track("source.wav", "Source")).unwrap();
         let candidate_id = upsert_track(&mut connection, &make_track("next.wav", "Next")).unwrap();
-        let manual_riddim_id =
-            upsert_track(&mut connection, &make_track("manual.wav", "Manual riddim match")).unwrap();
+        let manual_riddim_id = upsert_track(
+            &mut connection,
+            &make_track("manual.wav", "Manual riddim match"),
+        )
+        .unwrap();
         connection
             .execute(
                 "INSERT INTO lyric_words (track_id, word_index, word, start_ms, end_ms, confidence)
@@ -2105,7 +2196,10 @@ mod tests {
         assert_eq!(queued.queued_items, 2);
         assert_eq!(queued.running_items, 0);
 
-        assert_eq!(claim_next_import_job(&mut connection).unwrap(), Some(job_id));
+        assert_eq!(
+            claim_next_import_job(&mut connection).unwrap(),
+            Some(job_id)
+        );
         let item = claim_next_import_item(&mut connection, job_id)
             .unwrap()
             .expect("first import item should be queued");

@@ -41,7 +41,8 @@ impl ApiEndpoints {
         endpoints.solana_rpc = env_value("CHAMPIONVIBE_SOLANA_RPC", endpoints.solana_rpc);
         endpoints.bitcoin_api = env_value("CHAMPIONVIBE_BITCOIN_API", endpoints.bitcoin_api);
         endpoints.ethereum_rpc = env_value("CHAMPIONVIBE_ETHEREUM_RPC", endpoints.ethereum_rpc);
-        endpoints.price_oracle_rpc = env_value("CHAMPIONVIBE_PRICE_ORACLE_RPC", endpoints.price_oracle_rpc);
+        endpoints.price_oracle_rpc =
+            env_value("CHAMPIONVIBE_PRICE_ORACLE_RPC", endpoints.price_oracle_rpc);
         endpoints
     }
 }
@@ -90,7 +91,10 @@ impl Treasury {
         }
         if self.bitcoin.len() != 42
             || !self.bitcoin.starts_with("bc1q")
-            || !self.bitcoin.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+            || !self
+                .bitcoin
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
         {
             bail!("configured Bitcoin receiver is not a supported mainnet bech32 address");
         }
@@ -151,7 +155,11 @@ impl PaymentVerifier {
             bail!("payment was not made during the quote validity window");
         }
         let now = Utc::now().timestamp();
-        if now > quote.expires_at.saturating_add(QUOTE_SETTLEMENT_WINDOW_SECONDS) {
+        if now
+            > quote
+                .expires_at
+                .saturating_add(QUOTE_SETTLEMENT_WINDOW_SECONDS)
+        {
             bail!("quote is too old to settle");
         }
 
@@ -195,7 +203,9 @@ impl PaymentVerifier {
             .get("result")
             .filter(|value| !value.is_null())
             .context("Solana transaction is not finalized or does not exist")?;
-        let meta = result.get("meta").context("Solana transaction has no metadata")?;
+        let meta = result
+            .get("meta")
+            .context("Solana transaction has no metadata")?;
         if !meta.get("err").unwrap_or(&Value::Null).is_null() {
             bail!("Solana transaction failed on chain");
         }
@@ -233,7 +243,10 @@ impl PaymentVerifier {
             {
                 continue;
             }
-            let source = info.get("source").and_then(Value::as_str).unwrap_or_default();
+            let source = info
+                .get("source")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if source.is_empty() || source == self.treasury.solana {
                 continue;
             }
@@ -290,7 +303,10 @@ impl PaymentVerifier {
             .text()
             .await
             .context("could not read Bitcoin chain tip body")?;
-        let tip = tip_text.trim().parse::<u64>().context("invalid Bitcoin tip height")?;
+        let tip = tip_text
+            .trim()
+            .parse::<u64>()
+            .context("invalid Bitcoin tip height")?;
         let confirmations = tip.saturating_sub(height).saturating_add(1);
         if confirmations < BTC_CONFIRMATIONS_REQUIRED {
             bail!("Bitcoin transaction needs at least six confirmations");
@@ -301,9 +317,7 @@ impl PaymentVerifier {
             .context("Bitcoin transaction has no outputs")?;
         let mut received = 0_u128;
         for output in outputs {
-            if output
-                .get("scriptpubkey_address")
-                .and_then(Value::as_str)
+            if output.get("scriptpubkey_address").and_then(Value::as_str)
                 != Some(self.treasury.bitcoin.as_str())
             {
                 continue;
@@ -358,8 +372,11 @@ impl PaymentVerifier {
         if receipt.is_null() {
             bail!("Ethereum transaction does not have a receipt");
         }
-        if parse_hex_quantity(receipt.get("status").context("Ethereum receipt has no status")?)?
-            != 1
+        if parse_hex_quantity(
+            receipt
+                .get("status")
+                .context("Ethereum receipt has no status")?,
+        )? != 1
         {
             bail!("Ethereum transaction failed on chain");
         }
@@ -448,13 +465,17 @@ fn validate_transaction_hash(chain: Chain, transaction_hash: &str) -> Result<()>
         }
         Chain::Bitcoin => {
             if transaction_hash.len() != 64
-                || !transaction_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+                || !transaction_hash
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit())
             {
                 bail!("Bitcoin transaction id must be 64 hexadecimal characters");
             }
         }
         Chain::Ethereum => {
-            let hash = transaction_hash.strip_prefix("0x").unwrap_or(transaction_hash);
+            let hash = transaction_hash
+                .strip_prefix("0x")
+                .unwrap_or(transaction_hash);
             if hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
                 bail!("Ethereum transaction hash must contain 32 bytes of hexadecimal data");
             }
@@ -499,14 +520,19 @@ mod tests {
     fn parses_ethereum_quantities_without_floating_point() {
         assert_eq!(parse_hex_quantity(&json!("0x0")).unwrap(), 0);
         assert_eq!(parse_hex_quantity(&json!("0x2a")).unwrap(), 42);
-        assert_eq!(parse_hex_quantity(&json!("0x16345785d8a0000")).unwrap(), 100_000_000_000_000_000);
+        assert_eq!(
+            parse_hex_quantity(&json!("0x16345785d8a0000")).unwrap(),
+            100_000_000_000_000_000
+        );
     }
 
     #[test]
     fn rejects_malformed_hashes_before_network_access() {
         assert!(validate_transaction_hash(Chain::Bitcoin, &"a".repeat(64)).is_ok());
         assert!(validate_transaction_hash(Chain::Bitcoin, "xyz").is_err());
-        assert!(validate_transaction_hash(Chain::Ethereum, &format!("0x{}", "a".repeat(64))).is_ok());
+        assert!(
+            validate_transaction_hash(Chain::Ethereum, &format!("0x{}", "a".repeat(64))).is_ok()
+        );
         assert!(validate_transaction_hash(Chain::Solana, "abc").is_err());
     }
 }

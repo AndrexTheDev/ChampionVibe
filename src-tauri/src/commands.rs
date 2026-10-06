@@ -94,11 +94,8 @@ impl AppState {
             .flatten()
             .and_then(|json| serde_json::from_str::<SignedLicense>(&json).ok());
         let database = Arc::new(Mutex::new(database));
-        let mix_engine = mix_engine::MixEngine::new(
-            Arc::clone(&database),
-            audio.clone(),
-            mix_spare_deck,
-        );
+        let mix_engine =
+            mix_engine::MixEngine::new(Arc::clone(&database), audio.clone(), mix_spare_deck);
         let model_manager = audio::model_manager::ModelManager::new(app_data_dir.join("models"))?;
         Ok(Self {
             database,
@@ -182,9 +179,8 @@ fn current_device_binding(state: &AppState, app: &AppHandle) -> Result<String, S
     };
 
     #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "android")))]
-    let binding: String = return Err(
-        "ChampionVibe device binding is implemented for Windows and Android".to_owned(),
-    );
+    let binding: String =
+        return Err("ChampionVibe device binding is implemented for Windows and Android".to_owned());
 
     #[allow(unreachable_code)]
     {
@@ -200,7 +196,11 @@ fn active_stem_profile(state: &AppState, app: &AppHandle) -> Result<u8, String> 
     #[cfg(target_os = "android")]
     {
         let binding = current_device_binding(state, app)?;
-        return Ok(if state.current_status(&binding).active { 4 } else { 2 });
+        return Ok(if state.current_status(&binding).active {
+            4
+        } else {
+            2
+        });
     }
     #[cfg(not(target_os = "android"))]
     {
@@ -221,10 +221,7 @@ fn demo_status(message: &str) -> LicenseStatus {
 }
 
 #[tauri::command]
-pub fn get_device_binding(
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<String, String> {
+pub fn get_device_binding(state: State<'_, AppState>, app: AppHandle) -> Result<String, String> {
     current_device_binding(&state, &app)
 }
 
@@ -299,10 +296,7 @@ pub fn get_recording_formats() -> Vec<audio::RecordingFormatInfo> {
 }
 
 #[tauri::command]
-pub fn authorize_recording(
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<(), String> {
+pub fn authorize_recording(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     // Frontend state is never an authorization boundary; the native start command
     // rechecks both features and arms the callback deadline from the signed expiry.
     let binding = current_device_binding(&state, &app)?;
@@ -413,11 +407,19 @@ fn exact_license_remaining_ns(expires_at: i64) -> Result<u64, String> {
 static RECORDING_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[allow(unused_variables)]
-fn recording_output_path(app: &AppHandle, format: audio::RecordingFormat) -> Result<PathBuf, String> {
+fn recording_output_path(
+    app: &AppHandle,
+    format: audio::RecordingFormat,
+) -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
     let directory = std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
-        .map(|profile| profile.join("Music").join("ChampionVibe").join("Recordings"))
+        .map(|profile| {
+            profile
+                .join("Music")
+                .join("ChampionVibe")
+                .join("Recordings")
+        })
         .ok_or_else(|| "Windows user profile directory is unavailable.".to_string())?;
 
     #[cfg(target_os = "android")]
@@ -474,10 +476,16 @@ pub fn save_recording_metadata(
     {
         return Err("recording sample rate must be between 8,000 and 192,000 Hz".to_owned());
     }
-    if input.channel_count.is_some_and(|channels| !(1..=8).contains(&channels)) {
+    if input
+        .channel_count
+        .is_some_and(|channels| !(1..=8).contains(&channels))
+    {
         return Err("recording channel count must be between 1 and 8".to_owned());
     }
-    if input.bit_depth.is_some_and(|depth| !matches!(depth, 16 | 24)) {
+    if input
+        .bit_depth
+        .is_some_and(|depth| !matches!(depth, 16 | 24))
+    {
         return Err("recording bit depth must be 16 or 24".to_owned());
     }
     if input
@@ -486,7 +494,10 @@ pub fn save_recording_metadata(
     {
         return Err("recording bitrate is outside the supported range".to_owned());
     }
-    if input.file_size_bytes.is_some_and(|bytes| bytes > i64::MAX as u64) {
+    if input
+        .file_size_bytes
+        .is_some_and(|bytes| bytes > i64::MAX as u64)
+    {
         return Err("recording file is too large for local metadata".to_owned());
     }
     let binding = current_device_binding(&state, &app)?;
@@ -570,8 +581,14 @@ pub fn search_tracks_page(
             return Err(format!("{name} is outside its valid range"));
         }
     }
-    if filters.bpm_min.zip(filters.bpm_max).is_some_and(|(low, high)| low > high)
-        || filters.lufs_min.zip(filters.lufs_max).is_some_and(|(low, high)| low > high)
+    if filters
+        .bpm_min
+        .zip(filters.bpm_max)
+        .is_some_and(|(low, high)| low > high)
+        || filters
+            .lufs_min
+            .zip(filters.lufs_max)
+            .is_some_and(|(low, high)| low > high)
     {
         return Err("search filter ranges are reversed".to_owned());
     }
@@ -590,16 +607,16 @@ pub fn search_tracks_page(
         .database
         .lock()
         .map_err(|_| "application database lock poisoned".to_owned())?;
-    let (tracks, total) = database::search_tracks_page_with_filters(
-        &database,
-        &query,
-        &filters,
-        limit,
-        offset,
-    )
-    .map_err(|error| error.to_string())?;
+    let (tracks, total) =
+        database::search_tracks_page_with_filters(&database, &query, &filters, limit, offset)
+            .map_err(|error| error.to_string())?;
     let has_more = u64::from(offset).saturating_add(tracks.len() as u64) < total;
-    Ok(TrackSearchPage { tracks, total, offset, has_more })
+    Ok(TrackSearchPage {
+        tracks,
+        total,
+        offset,
+        has_more,
+    })
 }
 
 /// Sends compact little-endian peak and beat-grid data as a binary Tauri response.
@@ -617,12 +634,16 @@ pub async fn get_track_waveform_packet(
             .database
             .lock()
             .map_err(|_| "application database lock poisoned".to_owned())?;
-        let stems = database::load_stems(&connection, track_id)
-            .map_err(|error| error.to_string())?;
+        let stems =
+            database::load_stems(&connection, track_id).map_err(|error| error.to_string())?;
         let source_path = stems
             .iter()
             .find(|stem| stem.kind.eq_ignore_ascii_case("instrumental"))
-            .or_else(|| stems.iter().find(|stem| stem.kind.eq_ignore_ascii_case("acapella")))
+            .or_else(|| {
+                stems
+                    .iter()
+                    .find(|stem| stem.kind.eq_ignore_ascii_case("acapella"))
+            })
             .map(|stem| PathBuf::from(&stem.file_path))
             .ok_or_else(|| "track has no local stem to analyze".to_owned())?;
         import::ensure_local_path(&source_path)
@@ -636,11 +657,17 @@ pub async fn get_track_waveform_packet(
             .optional()
             .map_err(|error| error.to_string())?
             .flatten();
-        let (bpm, beat_times_seconds) = database::load_beat_grid(&connection, track_id)
-            .map_err(|error| error.to_string())?;
+        let (bpm, beat_times_seconds) =
+            database::load_beat_grid(&connection, track_id).map_err(|error| error.to_string())?;
         let cached_peaks = database::load_waveform_peak_blob(&connection, track_id, peak_count_sql)
             .map_err(|error| error.to_string())?;
-        (source_path, duration_ms, bpm, beat_times_seconds, cached_peaks)
+        (
+            source_path,
+            duration_ms,
+            bpm,
+            beat_times_seconds,
+            cached_peaks,
+        )
     };
     if let Some(cached_peaks) = cached_peaks {
         let packet = audio::waveform_packet_from_peak_blob(
@@ -652,7 +679,13 @@ pub async fn get_track_waveform_packet(
         return Ok(tauri::ipc::Response::new(packet));
     }
     let bytes = tauri::async_runtime::spawn_blocking(move || {
-        audio::waveform_packet(&source_path, duration_ms, bpm, &beat_times_seconds, peak_count)
+        audio::waveform_packet(
+            &source_path,
+            duration_ms,
+            bpm,
+            &beat_times_seconds,
+            peak_count,
+        )
     })
     .await
     .map_err(|error| format!("waveform worker failed: {error}"))??;
@@ -762,10 +795,7 @@ pub fn cancel_import_job(
 }
 
 #[tauri::command]
-pub fn pick_android_import_paths(
-    app: AppHandle,
-    directory: bool,
-) -> Result<Vec<String>, String> {
+pub fn pick_android_import_paths(app: AppHandle, directory: bool) -> Result<Vec<String>, String> {
     import::pick_android_import_paths(&app, directory)
 }
 
@@ -786,7 +816,9 @@ pub fn pick_android_model(app: AppHandle, kind: String) -> Result<Option<String>
 }
 
 #[tauri::command]
-pub fn get_model_catalog(state: State<'_, AppState>) -> Vec<audio::model_manager::ManagedModelInfo> {
+pub fn get_model_catalog(
+    state: State<'_, AppState>,
+) -> Vec<audio::model_manager::ManagedModelInfo> {
     state.model_manager.catalog()
 }
 
@@ -823,8 +855,12 @@ pub fn validate_local_model(
 ) -> Result<audio::model_manager::ModelValidation, String> {
     if kind == "htdemucs" {
         let supplied = PathBuf::from(path.trim());
-        let model_path = fs::canonicalize(&supplied)
-            .map_err(|error| format!("could not resolve selected model {}: {error}", supplied.display()))?;
+        let model_path = fs::canonicalize(&supplied).map_err(|error| {
+            format!(
+                "could not resolve selected model {}: {error}",
+                supplied.display()
+            )
+        })?;
         crate::import::ensure_local_path(&model_path)
             .map_err(|error| format!("HT-Demucs models must be local: {error:#}"))?;
         crate::import::separator::validate_htdemucs_model(&model_path)
@@ -837,7 +873,9 @@ pub fn validate_local_model(
             valid: true,
             kind,
             contract: "HT-Demucs float32 [1, 2, 343980] → [1, 4, 2, 343980]".to_owned(),
-            details: "local ONNX graph, tensor dtypes, input/output names, and dimensions validated".to_owned(),
+            details:
+                "local ONNX graph, tensor dtypes, input/output names, and dimensions validated"
+                    .to_owned(),
             path: model_path.to_string_lossy().into_owned(),
         });
     }
@@ -891,14 +929,20 @@ fn parse_tts_ipc_metadata(
         return Err("TTS IPC supports mono or stereo PCM only".to_owned());
     }
     if !encoding.eq_ignore_ascii_case("f32le") {
-        return Err("TTS IPC encoding must be interleaved float32 little-endian (f32le)".to_owned());
+        return Err(
+            "TTS IPC encoding must be interleaved float32 little-endian (f32le)".to_owned(),
+        );
     }
     let quantization = match quantization.to_ascii_lowercase().as_str() {
         "beat" => audio::SampleQuantization::Beat,
         "bar" => audio::SampleQuantization::Bar,
         _ => return Err("TTS IPC quantization must be beat or bar".to_owned()),
     };
-    Ok(TtsIpcMetadata { sample_rate, channels, quantization })
+    Ok(TtsIpcMetadata {
+        sample_rate,
+        channels,
+        quantization,
+    })
 }
 
 fn required_tts_request_header<'a>(
@@ -928,7 +972,8 @@ fn raw_tts_ipc_body(body: &tauri::ipc::InvokeBody) -> Result<&[u8], String> {
     match body {
         tauri::ipc::InvokeBody::Raw(bytes) => Ok(bytes),
         tauri::ipc::InvokeBody::Json(_) => Err(
-            "TTS PCM must use a raw binary Tauri IPC body; JSON number arrays are not accepted".to_owned(),
+            "TTS PCM must use a raw binary Tauri IPC body; JSON number arrays are not accepted"
+                .to_owned(),
         ),
     }
 }
@@ -936,9 +981,9 @@ fn raw_tts_ipc_body(body: &tauri::ipc::InvokeBody) -> Result<&[u8], String> {
 fn parse_tts_android_base64_payload(
     value: &serde_json::Value,
 ) -> Result<(Vec<u8>, TtsIpcMetadata), String> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| "Android TTS fallback expects a JSON object containing base64 PCM".to_owned())?;
+    let object = value.as_object().ok_or_else(|| {
+        "Android TTS fallback expects a JSON object containing base64 PCM".to_owned()
+    })?;
     if object.contains_key("pcm") || object.contains_key("samples") {
         return Err("JSON number arrays are not accepted for TTS PCM".to_owned());
     }
@@ -948,7 +993,9 @@ fn parse_tts_android_base64_payload(
         .ok_or_else(|| "Android TTS fallback is missing its base64 PCM string".to_owned())?;
     let max_encoded_bytes = audio::MAX_TTS_PCM_BYTES.saturating_add(2) / 3 * 4;
     if encoded.is_empty() || encoded.len() > max_encoded_bytes {
-        return Err("Android base64 TTS payload is empty or exceeds the 64 MiB PCM limit".to_owned());
+        return Err(
+            "Android base64 TTS payload is empty or exceeds the 64 MiB PCM limit".to_owned(),
+        );
     }
     let sample_rate = object
         .get("sampleRate")
@@ -988,15 +1035,25 @@ pub fn push_tts_audio_buffer(
         tauri::ipc::InvokeBody::Raw(_) => {
             let pcm = raw_tts_ipc_body(request.body())?;
             let metadata = parse_tts_raw_request_metadata(&request)?;
-            engine.push_tts_audio_buffer(pcm, metadata.sample_rate, metadata.channels, metadata.quantization)
+            engine.push_tts_audio_buffer(
+                pcm,
+                metadata.sample_rate,
+                metadata.channels,
+                metadata.quantization,
+            )
         }
         tauri::ipc::InvokeBody::Json(value) if cfg!(target_os = "android") => {
             let (pcm, metadata) = parse_tts_android_base64_payload(value)?;
-            engine.push_tts_audio_buffer(&pcm, metadata.sample_rate, metadata.channels, metadata.quantization)
+            engine.push_tts_audio_buffer(
+                &pcm,
+                metadata.sample_rate,
+                metadata.channels,
+                metadata.quantization,
+            )
         }
-        tauri::ipc::InvokeBody::Json(_) => Err(
-            "TTS PCM requires a raw binary Tauri IPC request on this platform".to_owned(),
-        ),
+        tauri::ipc::InvokeBody::Json(_) => {
+            Err("TTS PCM requires a raw binary Tauri IPC request on this platform".to_owned())
+        }
     }
 }
 
@@ -1031,10 +1088,10 @@ pub async fn load_track_audio(
             .database
             .lock()
             .map_err(|_| "application database lock poisoned".to_owned())?;
-        let stems = database::load_stems(&connection, track_id)
-            .map_err(|error| error.to_string())?;
-        let (bpm, beat_times_seconds) = database::load_beat_grid(&connection, track_id)
-            .map_err(|error| error.to_string())?;
+        let stems =
+            database::load_stems(&connection, track_id).map_err(|error| error.to_string())?;
+        let (bpm, beat_times_seconds) =
+            database::load_beat_grid(&connection, track_id).map_err(|error| error.to_string())?;
         let integrated_lufs = database::load_integrated_lufs(&connection, track_id)
             .map_err(|error| error.to_string())?;
         (stems, bpm, beat_times_seconds, integrated_lufs)
@@ -1054,9 +1111,11 @@ pub async fn load_track_audio(
     app.device_identity().initialize_audio_context()?;
 
     let engine = state.audio.clone();
-    tauri::async_runtime::spawn_blocking(move || engine.load_with_loudness(stems, grid, integrated_lufs))
-        .await
-        .map_err(|error| format!("audio preparation task failed: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        engine.load_with_loudness(stems, grid, integrated_lufs)
+    })
+    .await
+    .map_err(|error| format!("audio preparation task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -1094,7 +1153,10 @@ pub fn set_audio_controls(
     state: State<'_, AppState>,
     update: audio::AudioControlUpdate,
 ) -> Result<audio::AudioStatus, String> {
-    state.mix_engine.active_audio_engine().update_controls(update)
+    state
+        .mix_engine
+        .active_audio_engine()
+        .update_controls(update)
 }
 
 #[tauri::command]
@@ -1150,11 +1212,11 @@ pub async fn wheel_and_come_again(
 }
 
 #[tauri::command]
-pub fn set_auto_rewind(
-    state: State<'_, AppState>,
-    enabled: bool,
-) -> audio::AudioStatus {
-    state.mix_engine.active_audio_engine().set_auto_rewind(enabled)
+pub fn set_auto_rewind(state: State<'_, AppState>, enabled: bool) -> audio::AudioStatus {
+    state
+        .mix_engine
+        .active_audio_engine()
+        .set_auto_rewind(enabled)
 }
 
 #[tauri::command]
@@ -1173,9 +1235,7 @@ pub fn start_mix_engine(
 }
 
 #[tauri::command]
-pub fn stop_mix_engine(
-    state: State<'_, AppState>,
-) -> Result<mix_engine::MixStatus, String> {
+pub fn stop_mix_engine(state: State<'_, AppState>) -> Result<mix_engine::MixStatus, String> {
     state.mix_engine.stop()
 }
 
@@ -1212,8 +1272,12 @@ pub fn get_sample_directory(app: AppHandle) -> Result<String, String> {
         .app_data_dir()
         .map_err(|error| format!("cannot resolve app data folder: {error}"))?
         .join("samples");
-    std::fs::create_dir_all(&directory)
-        .map_err(|error| format!("cannot create sample folder {}: {error}", directory.display()))?;
+    std::fs::create_dir_all(&directory).map_err(|error| {
+        format!(
+            "cannot create sample folder {}: {error}",
+            directory.display()
+        )
+    })?;
     Ok(directory.to_string_lossy().into_owned())
 }
 
@@ -1235,11 +1299,7 @@ fn profile_for_available_stems(rows: &[database::StemPath], requested: u8) -> Re
     if requested == 4 && has_bass != has_drums {
         return Err("four-stem tracks must contain both bass and drums, or neither".to_owned());
     }
-    if requested == 4
-        && kinds.contains("acapella")
-        && kinds.contains("instrumental")
-        && !has_bass
-    {
+    if requested == 4 && kinds.contains("acapella") && kinds.contains("instrumental") && !has_bass {
         Ok(2)
     } else {
         Ok(requested)
@@ -1256,8 +1316,10 @@ fn stem_files_for_profile(
     let mut paths = HashMap::<String, PathBuf>::with_capacity(4);
     for row in rows {
         let kind = row.kind.trim().to_ascii_lowercase();
-        if !matches!(kind.as_str(), "acapella" | "instrumental" | "bass" | "drums")
-            || (active_stems == 2 && !matches!(kind.as_str(), "acapella" | "instrumental"))
+        if !matches!(
+            kind.as_str(),
+            "acapella" | "instrumental" | "bass" | "drums"
+        ) || (active_stems == 2 && !matches!(kind.as_str(), "acapella" | "instrumental"))
         {
             continue;
         }
@@ -1283,7 +1345,12 @@ fn stem_files_for_profile(
         // local paths keep the shared four-lane engine shape without extra I/O.
         (instrumental.clone(), instrumental.clone())
     };
-    Ok(audio::StemFiles { acapella, instrumental, bass, drums })
+    Ok(audio::StemFiles {
+        acapella,
+        instrumental,
+        bass,
+        drums,
+    })
 }
 
 fn validate_track(input: &database::TrackInput) -> Result<(), String> {
@@ -1296,19 +1363,36 @@ fn validate_track(input: &database::TrackInput) -> Result<(), String> {
     if input.duration_ms.is_some_and(|duration| duration < 0) {
         return Err("track duration cannot be negative".to_owned());
     }
-    if input.codec.as_ref().is_some_and(|codec| codec.trim().is_empty() || codec.len() > 64) {
+    if input
+        .codec
+        .as_ref()
+        .is_some_and(|codec| codec.trim().is_empty() || codec.len() > 64)
+    {
         return Err("audio codec name is invalid".to_owned());
     }
-    if input.bitrate_bps.is_some_and(|bitrate| bitrate == 0 || bitrate > 100_000_000) {
+    if input
+        .bitrate_bps
+        .is_some_and(|bitrate| bitrate == 0 || bitrate > 100_000_000)
+    {
         return Err("audio bitrate must be between 1 and 100,000,000 bits per second".to_owned());
     }
-    if input.sample_rate.is_some_and(|rate| !(8_000..=768_000).contains(&rate)) {
+    if input
+        .sample_rate
+        .is_some_and(|rate| !(8_000..=768_000).contains(&rate))
+    {
         return Err("audio sample rate must be between 8,000 and 768,000 Hz".to_owned());
     }
-    if input.channel_count.is_some_and(|channels| !(1..=64).contains(&channels)) {
+    if input
+        .channel_count
+        .is_some_and(|channels| !(1..=64).contains(&channels))
+    {
         return Err("audio channel count must be between 1 and 64".to_owned());
     }
-    if input.tags_json.as_ref().is_some_and(|json| json.len() > 1_048_576) {
+    if input
+        .tags_json
+        .as_ref()
+        .is_some_and(|json| json.len() > 1_048_576)
+    {
         return Err("audio metadata tags are too large".to_owned());
     }
     if let Some(json) = &input.tags_json {
@@ -1376,7 +1460,8 @@ where
 }
 
 fn issuer_endpoint(base: &str, path: &str) -> Result<String, String> {
-    let mut url = Url::parse(base.trim()).map_err(|error| format!("invalid issuer URL: {error}"))?;
+    let mut url =
+        Url::parse(base.trim()).map_err(|error| format!("invalid issuer URL: {error}"))?;
     let allowed_scheme = url.scheme() == "https"
         || (url.scheme() == "http"
             && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1")));
@@ -1392,8 +1477,8 @@ fn issuer_endpoint(base: &str, path: &str) -> Result<String, String> {
 #[cfg(test)]
 mod audio_command_tests {
     use super::{
-        parse_tts_android_base64_payload, parse_tts_ipc_metadata, raw_tts_ipc_body,
-        stem_files_for_profile, stem_files_from_rows, database,
+        database, parse_tts_android_base64_payload, parse_tts_ipc_metadata, raw_tts_ipc_body,
+        stem_files_for_profile, stem_files_from_rows,
     };
     use base64::Engine as _;
     use std::path::PathBuf;
@@ -1406,7 +1491,10 @@ mod audio_command_tests {
     }
 
     fn local_test_path(name: &str) -> String {
-        std::env::temp_dir().join(name).to_string_lossy().into_owned()
+        std::env::temp_dir()
+            .join(name)
+            .to_string_lossy()
+            .into_owned()
     }
 
     #[test]
@@ -1414,7 +1502,10 @@ mod audio_command_tests {
         let metadata = parse_tts_ipc_metadata("24000", "1", "f32le", "bar").unwrap();
         assert_eq!(metadata.sample_rate, 24_000);
         assert_eq!(metadata.channels, 1);
-        assert!(matches!(metadata.quantization, audio::SampleQuantization::Bar));
+        assert!(matches!(
+            metadata.quantization,
+            audio::SampleQuantization::Bar
+        ));
         assert!(parse_tts_ipc_metadata("24000", "1", "json", "bar").is_err());
         assert!(parse_tts_ipc_metadata("24000", "1", "f32le", "off").is_err());
         assert!(parse_tts_ipc_metadata("24000", "3", "f32le", "beat").is_err());
@@ -1444,8 +1535,12 @@ mod audio_command_tests {
         let (decoded, metadata) = parse_tts_android_base64_payload(&payload).unwrap();
         assert_eq!(decoded, pcm);
         assert_eq!(metadata.sample_rate, 24_000);
-        assert!(matches!(metadata.quantization, audio::SampleQuantization::Beat));
-        let frames = audio::decode_tts_pcm_f32le(&decoded, metadata.sample_rate, metadata.channels).unwrap();
+        assert!(matches!(
+            metadata.quantization,
+            audio::SampleQuantization::Beat
+        ));
+        let frames =
+            audio::decode_tts_pcm_f32le(&decoded, metadata.sample_rate, metadata.channels).unwrap();
         assert_eq!(frames[0].left, 0.25);
         assert_eq!(frames[1].right, -0.5);
 

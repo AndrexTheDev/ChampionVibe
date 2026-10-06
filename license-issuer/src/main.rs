@@ -47,7 +47,8 @@ async fn main() -> Result<()> {
     let treasury = Treasury::from_env();
     let oracle = PriceOracle::new(endpoints.price_oracle_rpc.clone())?;
     let verifier = PaymentVerifier::new(endpoints, treasury.clone())?;
-    let database_path = env::var("CHAMPIONVIBE_ISSUER_DB").unwrap_or_else(|_| DB_DEFAULT.to_owned());
+    let database_path =
+        env::var("CHAMPIONVIBE_ISSUER_DB").unwrap_or_else(|_| DB_DEFAULT.to_owned());
     let database = open_database(PathBuf::from(database_path))?;
     let state = AppState {
         database: Arc::new(Mutex::new(database)),
@@ -71,7 +72,9 @@ async fn main() -> Result<()> {
         .await
         .with_context(|| format!("could not bind license issuer to {address}"))?;
     println!("ChampionVibe issuer listening on http://{address}");
-    axum::serve(listener, app).await.context("issuer HTTP server failed")?;
+    axum::serve(listener, app)
+        .await
+        .context("issuer HTTP server failed")?;
     Ok(())
 }
 
@@ -83,8 +86,12 @@ fn load_signer() -> Result<LicenseSigner> {
 
 fn open_database(path: PathBuf) -> Result<Connection> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("could not create issuer data directory {}", parent.display()))?;
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "could not create issuer data directory {}",
+                parent.display()
+            )
+        })?;
     }
     let connection = Connection::open(&path)
         .with_context(|| format!("could not open issuer database {}", path.display()))?;
@@ -132,10 +139,12 @@ async fn create_quote(
         .map_err(|error| internal_error("could not create a price quote", error))?;
     let payload = serde_json::to_string(&quote)
         .map_err(|error| internal_error("could not serialize price quote", error))?;
-    let database = state
-        .database
-        .lock()
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "issuer database lock poisoned".to_owned()))?;
+    let database = state.database.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "issuer database lock poisoned".to_owned(),
+        )
+    })?;
     database
         .execute(
             "INSERT INTO payment_quotes (id, payload, created_at, expires_at) VALUES (?1, ?2, ?3, ?4)",
@@ -155,10 +164,12 @@ async fn activate(
     }
 
     let quote_json: Option<String> = {
-        let database = state
-            .database
-            .lock()
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "issuer database lock poisoned".to_owned()))?;
+        let database = state.database.lock().map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "issuer database lock poisoned".to_owned(),
+            )
+        })?;
         database
             .query_row(
                 "SELECT payload FROM payment_quotes WHERE id = ?1",
@@ -172,8 +183,12 @@ async fn activate(
         .as_deref()
         .ok_or_else(|| (StatusCode::NOT_FOUND, "payment quote not found".to_owned()))
         .and_then(|json| {
-            serde_json::from_str(json)
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "stored payment quote is invalid".to_owned()))
+            serde_json::from_str(json).map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "stored payment quote is invalid".to_owned(),
+                )
+            })
         })?;
 
     let transaction_hash = normalize_transaction_hash(quote.chain, &request.transaction_hash)?;
@@ -187,27 +202,40 @@ async fn activate(
         {
             return Ok(Json(existing.license));
         }
-        return Err((StatusCode::CONFLICT, "transaction has already been used".to_owned()));
+        return Err((
+            StatusCode::CONFLICT,
+            "transaction has already been used".to_owned(),
+        ));
     }
 
     if let Some(existing) = lookup_quote_activation(&state, &quote.id)? {
         if existing.device_binding == binding && existing.transaction_hash == transaction_hash {
             return Ok(Json(existing.license));
         }
-        return Err((StatusCode::CONFLICT, "quote has already been used".to_owned()));
+        return Err((
+            StatusCode::CONFLICT,
+            "quote has already been used".to_owned(),
+        ));
     }
 
     state
         .verifier
         .verify(&quote, &transaction_hash)
         .await
-        .map_err(|error| (StatusCode::UNPROCESSABLE_ENTITY, format!("payment verification failed: {error:#}")))?;
+        .map_err(|error| {
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                format!("payment verification failed: {error:#}"),
+            )
+        })?;
 
     let issued_at = Utc::now().timestamp();
-    let mut database = state
-        .database
-        .lock()
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "issuer database lock poisoned".to_owned()))?;
+    let mut database = state.database.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "issuer database lock poisoned".to_owned(),
+        )
+    })?;
     let transaction = database
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| internal_error("could not start activation transaction", error))?;
@@ -223,13 +251,19 @@ async fn activate(
         {
             return Ok(Json(existing.license));
         }
-        return Err((StatusCode::CONFLICT, "transaction has already been used".to_owned()));
+        return Err((
+            StatusCode::CONFLICT,
+            "transaction has already been used".to_owned(),
+        ));
     }
     if lookup_quote_activation_in(&transaction, &quote.id)?.is_some() {
         transaction
             .rollback()
             .map_err(|error| internal_error("could not close activation transaction", error))?;
-        return Err((StatusCode::CONFLICT, "quote has already been used".to_owned()));
+        return Err((
+            StatusCode::CONFLICT,
+            "quote has already been used".to_owned(),
+        ));
     }
 
     let now = Utc::now();
@@ -247,7 +281,12 @@ async fn activate(
         .unwrap_or(now);
     let expires_at = start
         .checked_add_months(Months::new(quote.plan.duration_months()))
-        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "could not calculate subscription expiry".to_owned()))?
+        .ok_or_else(|| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "could not calculate subscription expiry".to_owned(),
+            )
+        })?
         .timestamp();
 
     let license = state
@@ -297,19 +336,29 @@ struct StoredActivation {
     license: SignedLicense,
 }
 
-fn lookup_activation(state: &AppState, transaction_key: &str) -> Result<Option<StoredActivation>, ApiError> {
-    let database = state
-        .database
-        .lock()
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "issuer database lock poisoned".to_owned()))?;
+fn lookup_activation(
+    state: &AppState,
+    transaction_key: &str,
+) -> Result<Option<StoredActivation>, ApiError> {
+    let database = state.database.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "issuer database lock poisoned".to_owned(),
+        )
+    })?;
     load_activation_by_tx(&database, transaction_key)
 }
 
-fn lookup_quote_activation(state: &AppState, quote_id: &str) -> Result<Option<StoredActivation>, ApiError> {
-    let database = state
-        .database
-        .lock()
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "issuer database lock poisoned".to_owned()))?;
+fn lookup_quote_activation(
+    state: &AppState,
+    quote_id: &str,
+) -> Result<Option<StoredActivation>, ApiError> {
+    let database = state.database.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "issuer database lock poisoned".to_owned(),
+        )
+    })?;
     load_activation_by_quote(&database, quote_id)
 }
 
@@ -327,7 +376,10 @@ fn lookup_quote_activation_in(
     load_activation_by_quote(database, quote_id)
 }
 
-fn load_activation_by_tx(database: &Connection, transaction_key: &str) -> Result<Option<StoredActivation>, ApiError> {
+fn load_activation_by_tx(
+    database: &Connection,
+    transaction_key: &str,
+) -> Result<Option<StoredActivation>, ApiError> {
     load_activation(
         database,
         "SELECT device_binding, quote_id, transaction_hash, license_json
@@ -336,7 +388,10 @@ fn load_activation_by_tx(database: &Connection, transaction_key: &str) -> Result
     )
 }
 
-fn load_activation_by_quote(database: &Connection, quote_id: &str) -> Result<Option<StoredActivation>, ApiError> {
+fn load_activation_by_quote(
+    database: &Connection,
+    quote_id: &str,
+) -> Result<Option<StoredActivation>, ApiError> {
     load_activation(
         database,
         "SELECT device_binding, quote_id, transaction_hash, license_json
@@ -351,12 +406,18 @@ fn load_activation(
     key: &str,
 ) -> Result<Option<StoredActivation>, ApiError> {
     let row: Option<(String, String, String, String)> = database
-        .query_row(sql, [key], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+        .query_row(sql, [key], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
         .optional()
         .map_err(|error| internal_error("could not check activation replay", error))?;
     row.map(|(device_binding, quote_id, transaction_hash, json)| {
-        let license = serde_json::from_str(&json)
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "stored signed license is invalid".to_owned()))?;
+        let license = serde_json::from_str(&json).map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "stored signed license is invalid".to_owned(),
+            )
+        })?;
         Ok(StoredActivation {
             device_binding,
             quote_id,
@@ -369,23 +430,39 @@ fn load_activation(
 
 fn normalize_device_binding(binding: &str) -> Result<String, ApiError> {
     let binding = binding.trim();
-    let decoded = hex::decode(binding)
-        .map_err(|_| (StatusCode::BAD_REQUEST, "device binding must be SHA-256 hex".to_owned()))?;
+    let decoded = hex::decode(binding).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "device binding must be SHA-256 hex".to_owned(),
+        )
+    })?;
     if decoded.len() != 32 {
-        return Err((StatusCode::BAD_REQUEST, "device binding must be 32 bytes".to_owned()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "device binding must be 32 bytes".to_owned(),
+        ));
     }
     Ok(binding.to_ascii_lowercase())
 }
 
-fn normalize_transaction_hash(chain: championvibe_licensing_core::Chain, hash: &str) -> Result<String, ApiError> {
+fn normalize_transaction_hash(
+    chain: championvibe_licensing_core::Chain,
+    hash: &str,
+) -> Result<String, ApiError> {
     let hash = hash.trim();
     if hash.len() > 100 {
-        return Err((StatusCode::BAD_REQUEST, "transaction hash is too long".to_owned()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "transaction hash is too long".to_owned(),
+        ));
     }
     match chain {
         championvibe_licensing_core::Chain::Bitcoin => Ok(hash.to_ascii_lowercase()),
         championvibe_licensing_core::Chain::Ethereum => {
-            let body = hash.strip_prefix("0x").or_else(|| hash.strip_prefix("0X")).unwrap_or(hash);
+            let body = hash
+                .strip_prefix("0x")
+                .or_else(|| hash.strip_prefix("0X"))
+                .unwrap_or(hash);
             Ok(format!("0x{}", body.to_ascii_lowercase()))
         }
         championvibe_licensing_core::Chain::Solana => Ok(hash.to_owned()),

@@ -118,7 +118,10 @@ pub(crate) fn open_media_source(path: &Path) -> io::Result<Box<dyn MediaSource>>
             // file and its unique path stay alive with the map and are removed after unmapping.
             if let Ok(mapping) = unsafe {
                 MmapOptions::new().map_copy_read_only(
-                    snapshot.file.as_ref().expect("snapshot file stays open while mapped"),
+                    snapshot
+                        .file
+                        .as_ref()
+                        .expect("snapshot file stays open while mapped"),
                 )
             } {
                 return Ok(Box::new(MappedMediaSource {
@@ -271,9 +274,15 @@ mod tests {
             (b"FORM\x00\x00\x00\x00AIFF".as_slice(), AudioContainer::Aiff),
             (b"FORM\x00\x00\x00\x00AIFC".as_slice(), AudioContainer::Aifc),
             (b"\x1a\x45\xdf\xa3\x93".as_slice(), AudioContainer::WebM),
-            (b"\x00\x00\x00\x18ftypM4A ".as_slice(), AudioContainer::IsoMp4),
+            (
+                b"\x00\x00\x00\x18ftypM4A ".as_slice(),
+                AudioContainer::IsoMp4,
+            ),
             (b"ID3\x04\x00\x00".as_slice(), AudioContainer::MpegAudio),
-            (b"\xff\xf1\x50\x80\x00\x1f\xfc".as_slice(), AudioContainer::AacAdts),
+            (
+                b"\xff\xf1\x50\x80\x00\x1f\xfc".as_slice(),
+                AudioContainer::AacAdts,
+            ),
         ] {
             assert_eq!(classify_audio_header(header), Some(expected));
         }
@@ -314,8 +323,8 @@ mod tests {
         let original = b"immutable source snapshot";
         std::fs::write(&source_path, original).unwrap();
         let mut source = std::fs::File::open(&source_path).unwrap();
-        let snapshot = super::TemporarySnapshot::copy_from(&mut source, original.len() as u64)
-            .unwrap();
+        let snapshot =
+            super::TemporarySnapshot::copy_from(&mut source, original.len() as u64).unwrap();
         let snapshot_path = snapshot.path.clone();
 
         std::fs::write(&source_path, b"mutated source snapshot").unwrap();

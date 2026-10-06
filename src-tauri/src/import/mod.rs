@@ -1,6 +1,6 @@
 mod analysis;
-mod media;
 mod mdx;
+mod media;
 pub(crate) mod separator;
 mod whisper;
 
@@ -33,8 +33,8 @@ const MAX_IMPORT_JOBS_TO_EMIT: u32 = 100;
 const IMPORT_JOB_UPDATED_EVENT: &str = "import-job-updated";
 #[cfg(target_os = "android")]
 const AUDIO_EXTENSIONS: &[&str] = &[
-    "aac", "aif", "aiff", "aifc", "caf", "flac", "m4a", "mp3", "mp4", "oga", "ogg",
-    "opus", "wav", "wave", "webm",
+    "aac", "aif", "aiff", "aifc", "caf", "flac", "m4a", "mp3", "mp4", "oga", "ogg", "opus", "wav",
+    "wave", "webm",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -179,7 +179,9 @@ pub fn start_job(
     state
         .import_manager
         .ensure_worker(app.clone())
-        .map_err(|error| format!("import job {job_id} was queued, but the worker did not start: {error:#}"))?;
+        .map_err(|error| {
+            format!("import job {job_id} was queued, but the worker did not start: {error:#}")
+        })?;
     emit_job(app, job_id);
     load_job(state, job_id)
 }
@@ -224,14 +226,24 @@ fn is_mdx_manifest_path(path: &Path) -> bool {
 }
 
 fn canonical_separator_path(path_text: &str) -> Result<String> {
-    anyhow::ensure!(!path_text.trim().is_empty(), "choose a local HT-Demucs .onnx model or MDX-Net .cvmodel.json manifest");
+    anyhow::ensure!(
+        !path_text.trim().is_empty(),
+        "choose a local HT-Demucs .onnx model or MDX-Net .cvmodel.json manifest"
+    );
     anyhow::ensure!(path_text.len() <= 4096, "separator model path is too long");
     let supplied = PathBuf::from(path_text.trim());
     ensure_local_path(&supplied)?;
     let path = fs::canonicalize(&supplied)
         .with_context(|| format!("could not resolve separator model {}", supplied.display()))?;
-    anyhow::ensure!(path.is_file(), "separator model path is not a file: {}", path.display());
-    let extension = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
+    anyhow::ensure!(
+        path.is_file(),
+        "separator model path is not a file: {}",
+        path.display()
+    );
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
     anyhow::ensure!(
         extension.eq_ignore_ascii_case("onnx") || is_mdx_manifest_path(&path),
         "separator model must be a local .onnx file or .cvmodel.json manifest"
@@ -241,14 +253,24 @@ fn canonical_separator_path(path_text: &str) -> Result<String> {
 }
 
 fn canonical_model_path(path_text: &str, extension: &str) -> Result<String> {
-    anyhow::ensure!(!path_text.trim().is_empty(), "a local .{extension} model file is required");
+    anyhow::ensure!(
+        !path_text.trim().is_empty(),
+        "a local .{extension} model file is required"
+    );
     anyhow::ensure!(path_text.len() <= 4096, "model path is too long");
     let supplied = PathBuf::from(path_text.trim());
     ensure_local_path(&supplied)?;
     let path = fs::canonicalize(&supplied)
         .with_context(|| format!("could not resolve model file {}", supplied.display()))?;
-    anyhow::ensure!(path.is_file(), "model path is not a file: {}", path.display());
-    let actual_extension = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
+    anyhow::ensure!(
+        path.is_file(),
+        "model path is not a file: {}",
+        path.display()
+    );
+    let actual_extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
     anyhow::ensure!(
         actual_extension.eq_ignore_ascii_case(extension),
         "expected a local .{extension} model file, got {}",
@@ -259,8 +281,14 @@ fn canonical_model_path(path_text: &str, extension: &str) -> Result<String> {
 }
 
 fn expand_audio_paths(requested: &[String]) -> Result<Vec<String>> {
-    anyhow::ensure!(!requested.is_empty(), "choose at least one audio file or folder");
-    anyhow::ensure!(requested.len() <= MAX_IMPORT_ITEMS, "an import request accepts at most 50,000 selections");
+    anyhow::ensure!(
+        !requested.is_empty(),
+        "choose at least one audio file or folder"
+    );
+    anyhow::ensure!(
+        requested.len() <= MAX_IMPORT_ITEMS,
+        "an import request accepts at most 50,000 selections"
+    );
 
     let mut directories = Vec::<PathBuf>::new();
     let mut found_paths = Vec::<String>::new();
@@ -312,15 +340,25 @@ fn expand_audio_paths(requested: &[String]) -> Result<Vec<String>> {
         }
     }
 
-    anyhow::ensure!(!found_paths.is_empty(), "no supported audio files were found");
+    anyhow::ensure!(
+        !found_paths.is_empty(),
+        "no supported audio files were found"
+    );
     found_paths.sort_by(|left, right| path_sort_key(left).cmp(&path_sort_key(right)));
     Ok(found_paths)
 }
 
-fn expand_import_paths(app: &AppHandle, data_dir: &Path, requested: &[String]) -> Result<Vec<String>> {
+fn expand_import_paths(
+    app: &AppHandle,
+    data_dir: &Path,
+    requested: &[String],
+) -> Result<Vec<String>> {
     #[cfg(target_os = "android")]
     {
-        anyhow::ensure!(!requested.is_empty(), "choose at least one audio file or folder");
+        anyhow::ensure!(
+            !requested.is_empty(),
+            "choose at least one audio file or folder"
+        );
         anyhow::ensure!(
             requested.len() <= MAX_IMPORT_ITEMS,
             "an import request accepts at most 50,000 selections"
@@ -465,7 +503,10 @@ fn expand_android_files(
 
     anyhow::ensure!(!audio_files.is_empty(), "{empty_error}");
     fs::create_dir_all(destination_root).with_context(|| {
-        format!("cannot create local Android staging directory {}", destination_root.display())
+        format!(
+            "cannot create local Android staging directory {}",
+            destination_root.display()
+        )
     })?;
     let mut paths = Vec::with_capacity(audio_files.len());
     let mut seen_paths = HashSet::new();
@@ -524,9 +565,9 @@ fn android_uri_has_audio_signature<R: tauri::Runtime>(
     api: &tauri_plugin_android_fs::api::api_sync::AndroidFs<R>,
     uri: &FsUri,
 ) -> Result<bool> {
-    let mut file = api
-        .open_file_readable(uri)
-        .map_err(|error| anyhow::anyhow!("cannot inspect selected Android audio content: {error}"))?;
+    let mut file = api.open_file_readable(uri).map_err(|error| {
+        anyhow::anyhow!("cannot inspect selected Android audio content: {error}")
+    })?;
     let mut header = [0_u8; 16];
     let read = file
         .read(&mut header)
@@ -536,11 +577,18 @@ fn android_uri_has_audio_signature<R: tauri::Runtime>(
 
 #[cfg(target_os = "android")]
 fn is_supported_audio_name(name: &str) -> bool {
-    let basename = name.rsplit(|character| character == '/' || character == '\\').next().unwrap_or(name);
+    let basename = name
+        .rsplit(|character| character == '/' || character == '\\')
+        .next()
+        .unwrap_or(name);
     Path::new(basename)
         .extension()
         .and_then(|value| value.to_str())
-        .is_some_and(|extension| AUDIO_EXTENSIONS.iter().any(|allowed| extension.eq_ignore_ascii_case(allowed)))
+        .is_some_and(|extension| {
+            AUDIO_EXTENSIONS
+                .iter()
+                .any(|allowed| extension.eq_ignore_ascii_case(allowed))
+        })
 }
 
 #[cfg(target_os = "android")]
@@ -581,7 +629,10 @@ fn stage_android_file<R: tauri::Runtime>(
     destination_root: &Path,
 ) -> Result<PathBuf> {
     fs::create_dir_all(destination_root).with_context(|| {
-        format!("cannot create local staging directory {}", destination_root.display())
+        format!(
+            "cannot create local staging directory {}",
+            destination_root.display()
+        )
     })?;
     let safe_name = sanitize_android_filename(name);
     let mut input = api
@@ -594,20 +645,30 @@ fn stage_android_file<R: tauri::Runtime>(
                 output: &mut output,
                 hasher: Sha256::new(),
             };
-            io::copy(&mut input, &mut writer).context("could not copy selected Android file locally")?;
-            writer.flush().context("could not flush staged Android file")?;
+            io::copy(&mut input, &mut writer)
+                .context("could not copy selected Android file locally")?;
+            writer
+                .flush()
+                .context("could not flush staged Android file")?;
             hex::encode(writer.hasher.clone().finalize())
         };
-        output.sync_all().context("could not finalize staged Android file")?;
+        output
+            .sync_all()
+            .context("could not finalize staged Android file")?;
         let destination = destination_root.join(format!("{digest}-{safe_name}"));
         if destination.exists() {
-            fs::remove_file(&temporary_path).context("could not remove duplicate Android staging file")?;
+            fs::remove_file(&temporary_path)
+                .context("could not remove duplicate Android staging file")?;
         } else if let Err(error) = fs::rename(&temporary_path, &destination) {
             if destination.exists() {
-                fs::remove_file(&temporary_path).context("could not remove duplicate Android staging file")?;
+                fs::remove_file(&temporary_path)
+                    .context("could not remove duplicate Android staging file")?;
             } else {
                 return Err(error).with_context(|| {
-                    format!("could not store staged Android file at {}", destination.display())
+                    format!(
+                        "could not store staged Android file at {}",
+                        destination.display()
+                    )
                 });
             }
         }
@@ -624,10 +685,16 @@ fn create_android_stage_file(directory: &Path) -> Result<(PathBuf, fs::File)> {
     for _ in 0..100 {
         let id = ANDROID_STAGE_FILE_ID.fetch_add(1, Ordering::Relaxed);
         let path = directory.join(format!(".stage-{}-{id}.tmp", std::process::id()));
-        match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
             Ok(file) => return Ok((path, file)),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error).with_context(|| format!("cannot create {}", path.display())),
+            Err(error) => {
+                return Err(error).with_context(|| format!("cannot create {}", path.display()))
+            }
         }
     }
     anyhow::bail!("could not allocate a unique Android staging file")
@@ -635,7 +702,10 @@ fn create_android_stage_file(directory: &Path) -> Result<(PathBuf, fs::File)> {
 
 #[cfg(target_os = "android")]
 fn sanitize_android_filename(name: &str) -> String {
-    let basename = name.rsplit(|character| character == '/' || character == '\\').next().unwrap_or(name);
+    let basename = name
+        .rsplit(|character| character == '/' || character == '\\')
+        .next()
+        .unwrap_or(name);
     let sanitized = basename
         .chars()
         .map(|character| {
@@ -646,7 +716,8 @@ fn sanitize_android_filename(name: &str) -> String {
             }
         })
         .collect::<String>();
-    let sanitized = sanitized.trim_matches(|character: char| character == '.' || character.is_whitespace());
+    let sanitized =
+        sanitized.trim_matches(|character: char| character == '.' || character.is_whitespace());
     if sanitized.is_empty() {
         "audio".to_owned()
     } else {
@@ -674,8 +745,9 @@ pub fn pick_android_sample_folder(app: &AppHandle) -> Result<Option<String>, Str
         .map_err(|error| format!("could not resolve application data directory: {error}"))?;
     let destination = data_dir.join("samples").join("android-selected");
     if destination.exists() {
-        fs::remove_dir_all(&destination)
-            .map_err(|error| format!("could not clear previous Android sample selection: {error}"))?;
+        fs::remove_dir_all(&destination).map_err(|error| {
+            format!("could not clear previous Android sample selection: {error}")
+        })?;
     }
     expand_android_files(
         app,
@@ -720,7 +792,10 @@ pub fn pick_android_import_paths(app: &AppHandle, directory: bool) -> Result<Vec
 }
 
 #[cfg(not(target_os = "android"))]
-pub fn pick_android_import_paths(_app: &AppHandle, _directory: bool) -> Result<Vec<String>, String> {
+pub fn pick_android_import_paths(
+    _app: &AppHandle,
+    _directory: bool,
+) -> Result<Vec<String>, String> {
     Err("the Storage Access Framework picker is only available on Android".to_owned())
 }
 
@@ -763,7 +838,11 @@ pub fn pick_android_model(_app: &AppHandle, _extension: &str) -> Result<Option<S
     Err("the Storage Access Framework model picker is only available on Android".to_owned())
 }
 
-fn add_audio_path(path: PathBuf, seen: &mut HashSet<String>, found: &mut Vec<String>) -> Result<()> {
+fn add_audio_path(
+    path: PathBuf,
+    seen: &mut HashSet<String>,
+    found: &mut Vec<String>,
+) -> Result<()> {
     let canonical = fs::canonicalize(&path)
         .with_context(|| format!("could not resolve audio file {}", path.display()))?;
     ensure_local_path(&canonical)?;
@@ -772,7 +851,10 @@ fn add_audio_path(path: PathBuf, seen: &mut HashSet<String>, found: &mut Vec<Str
     if seen.insert(key) {
         found.push(value);
     }
-    anyhow::ensure!(found.len() <= MAX_IMPORT_ITEMS, "an import batch is limited to 50,000 audio tracks");
+    anyhow::ensure!(
+        found.len() <= MAX_IMPORT_ITEMS,
+        "an import batch is limited to 50,000 audio tracks"
+    );
     Ok(())
 }
 
@@ -908,10 +990,8 @@ fn run_import_job(
         config.cpu_threads,
         config.use_directml,
     )?;
-    let whisper = whisper::LocalWhisper::load(
-        Path::new(&config.whisper_model_path),
-        config.cpu_threads,
-    )?;
+    let whisper =
+        whisper::LocalWhisper::load(Path::new(&config.whisper_model_path), config.cpu_threads)?;
     let embedding_path = manager
         .data_dir()
         .join("models")
@@ -1059,8 +1139,12 @@ fn process_import_item_inner(
             .with_context(|| format!("cannot clean import workspace {}", workspace.display()))?;
     }
     if stem_dir.exists() {
-        fs::remove_dir_all(stem_dir)
-            .with_context(|| format!("cannot clean unfinished stem directory {}", stem_dir.display()))?;
+        fs::remove_dir_all(stem_dir).with_context(|| {
+            format!(
+                "cannot clean unfinished stem directory {}",
+                stem_dir.display()
+            )
+        })?;
     }
     fs::create_dir_all(workspace)
         .with_context(|| format!("cannot create import workspace {}", workspace.display()))?;
@@ -1070,11 +1154,8 @@ fn process_import_item_inner(
     set_stage(state, job_id, "decoding-source")?;
     emit_job(app, job_id);
     let normalized_wav = workspace.join("normalized-44100-stereo.wav");
-    let decoded = media::decode_to_wav(
-        Path::new(&item.source_path),
-        &normalized_wav,
-        cancellation,
-    )?;
+    let decoded =
+        media::decode_to_wav(Path::new(&item.source_path), &normalized_wav, cancellation)?;
     check_cancel(state, job_id, cancellation)?;
 
     set_stage(state, job_id, "analyzing-bpm-key-energy")?;
@@ -1097,12 +1178,7 @@ fn process_import_item_inner(
         decoded.frames,
         cancellation,
         |progress| {
-            update_progress(
-                app,
-                job_id,
-                &separator_stage,
-                0.10 + progress * 0.65,
-            );
+            update_progress(app, job_id, &separator_stage, 0.10 + progress * 0.65);
         },
     )?;
     anyhow::ensure!(
@@ -1380,6 +1456,9 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_path_deduplication_is_case_insensitive() {
-        assert_eq!(path_sort_key(r"C:\Music\Track.FLAC"), path_sort_key(r"c:\music\track.flac"));
+        assert_eq!(
+            path_sort_key(r"C:\Music\Track.FLAC"),
+            path_sort_key(r"c:\music\track.flac")
+        );
     }
 }

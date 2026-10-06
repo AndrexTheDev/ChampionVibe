@@ -342,7 +342,10 @@ impl MixEngine {
         self.active_audio_engine().sample_catalog()
     }
 
-    pub fn load_sample_folder(&self, path: &std::path::Path) -> Result<Vec<audio::SampleInfo>, String> {
+    pub fn load_sample_folder(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<Vec<audio::SampleInfo>, String> {
         let first = self.decks[0].load_sample_folder(path)?;
         self.decks[1].load_sample_folder(path)?;
         Ok(first)
@@ -372,13 +375,16 @@ fn mix_worker(
             Ok(MixCommand::Start { track_id, preset }) => {
                 stop_decks(&decks);
                 active_mix = None;
-                publish(&shared_status, MixStatus {
-                    phase: MixPhase::Loading,
-                    preset: Some(preset),
-                    intensity_override,
-                    current_track_id: Some(track_id),
-                    ..MixStatus::default()
-                });
+                publish(
+                    &shared_status,
+                    MixStatus {
+                        phase: MixPhase::Loading,
+                        preset: Some(preset),
+                        intensity_override,
+                        current_track_id: Some(track_id),
+                        ..MixStatus::default()
+                    },
+                );
                 match start_active_mix(
                     track_id,
                     preset,
@@ -539,7 +545,12 @@ fn start_active_mix(
 
     reset_deck(&decks[0], DEFAULT_MASTER_GAIN, 1.0)?;
     decks[0]
-        .load_at_with_loudness(current_stems, track_beat_grid(&current), 0, current.integrated_lufs)
+        .load_at_with_loudness(
+            current_stems,
+            track_beat_grid(&current),
+            0,
+            current.integrated_lufs,
+        )
         .map_err(|error| format!("could not load current local track: {error}"))?;
     decks[0]
         .play()
@@ -628,8 +639,16 @@ fn prepare_next(
         intensity_override,
         active_stem_count,
     )
-    .ok_or_else(|| format!("no other playable local track with {active_stem_count} active stems is available"))?;
-    let style = effective_style(preset, current, Some(&next), previous_style, intensity_override);
+    .ok_or_else(|| {
+        format!("no other playable local track with {active_stem_count} active stems is available")
+    })?;
+    let style = effective_style(
+        preset,
+        current,
+        Some(&next),
+        previous_style,
+        intensity_override,
+    );
     let tempo = calculate_tempo_match(current.bpm, source_playback_rate, next.bpm);
     let same_riddim = shares_riddim(current, &next);
     let decision = build_decision(
@@ -830,8 +849,8 @@ fn tick_active_mix(
         }
         RunnerPhase::Transitioning { since } => {
             let duration = Duration::from_millis(run.prepared.decision.fade_duration_ms.max(1));
-            let progress = (since.elapsed().as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0)
-                as f32;
+            let progress =
+                (since.elapsed().as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0) as f32;
             apply_crossfade_gains(run, decks, progress)?;
             publish_status(run, decks, shared_status, MixPhase::Transitioning, progress);
             if progress >= 1.0 {
@@ -872,7 +891,9 @@ fn begin_crossfade(
     decks[incoming]
         .play()
         .map_err(|error| format!("could not start the incoming deck: {error}"))?;
-    run.phase = RunnerPhase::Transitioning { since: Instant::now() };
+    run.phase = RunnerPhase::Transitioning {
+        since: Instant::now(),
+    };
     publish_status(run, decks, shared_status, MixPhase::Transitioning, 0.0);
     Ok(())
 }
@@ -1069,24 +1090,27 @@ fn publish_status(
     progress: f32,
 ) {
     let position_ms = audio_position_ms(&decks[run.active_deck].status());
-    publish(shared_status, MixStatus {
-        active: true,
-        phase,
-        preset: Some(run.pending_preset.unwrap_or(run.preset)),
-        style: Some(run.style),
-        intensity_override: run
-            .pending_intensity_override
-            .unwrap_or(run.intensity_override),
-        current_track_id: Some(run.current.id),
-        current_title: Some(run.current.title.clone()),
-        next_track_id: Some(run.prepared.next.id),
-        next_title: Some(run.prepared.next.title.clone()),
-        position_ms,
-        transition_progress: progress,
-        active_deck: Some(run.active_deck),
-        decision: Some(run.prepared.decision.clone()),
-        error: None,
-    });
+    publish(
+        shared_status,
+        MixStatus {
+            active: true,
+            phase,
+            preset: Some(run.pending_preset.unwrap_or(run.preset)),
+            style: Some(run.style),
+            intensity_override: run
+                .pending_intensity_override
+                .unwrap_or(run.intensity_override),
+            current_track_id: Some(run.current.id),
+            current_title: Some(run.current.title.clone()),
+            next_track_id: Some(run.prepared.next.id),
+            next_title: Some(run.prepared.next.title.clone()),
+            position_ms,
+            transition_progress: progress,
+            active_deck: Some(run.active_deck),
+            decision: Some(run.prepared.decision.clone()),
+            error: None,
+        },
+    );
 }
 
 fn publish(status: &Arc<Mutex<MixStatus>>, value: MixStatus) {
@@ -1278,10 +1302,7 @@ fn classify_maestro_style(
     {
         return MixStyle::ClubHype;
     }
-    if current
-        .energy_density
-        .is_some_and(|energy| energy <= 0.36)
-    {
+    if current.energy_density.is_some_and(|energy| energy <= 0.36) {
         return MixStyle::DeepRoots;
     }
     previous.unwrap_or(MixStyle::DeepRoots)
@@ -1334,29 +1355,45 @@ fn calculate_tempo_match(
 
     // Half-/double-time are beat interpretations, while WSOLA applies only a gentle ±20% speed
     // change. This keeps rhythm matching broad without changing the voice/instrument pitch.
-    [(0.5_f64, TempoMode::HalfTime), (1.0, TempoMode::Normal), (2.0, TempoMode::DoubleTime)]
-        .into_iter()
-        .map(|(beat_factor, mode)| {
-            let interpreted_bpm = incoming_bpm * beat_factor;
-            let playback_rate = (source_bpm / interpreted_bpm).clamp(0.8, 1.2) as f32;
-            let matched_bpm = interpreted_bpm * f64::from(playback_rate);
-            let relative_error = ((matched_bpm - source_bpm) / source_bpm).abs();
-            let preference = if mode == TempoMode::Normal { 0.0 } else { 1.0e-9 };
-            (relative_error + preference, playback_rate, mode, matched_bpm, relative_error)
-        })
-        .min_by(|left, right| left.0.total_cmp(&right.0))
-        .map(|(_, playback_rate, mode, matched_bpm, relative_error)| TempoMatch {
+    [
+        (0.5_f64, TempoMode::HalfTime),
+        (1.0, TempoMode::Normal),
+        (2.0, TempoMode::DoubleTime),
+    ]
+    .into_iter()
+    .map(|(beat_factor, mode)| {
+        let interpreted_bpm = incoming_bpm * beat_factor;
+        let playback_rate = (source_bpm / interpreted_bpm).clamp(0.8, 1.2) as f32;
+        let matched_bpm = interpreted_bpm * f64::from(playback_rate);
+        let relative_error = ((matched_bpm - source_bpm) / source_bpm).abs();
+        let preference = if mode == TempoMode::Normal {
+            0.0
+        } else {
+            1.0e-9
+        };
+        (
+            relative_error + preference,
+            playback_rate,
+            mode,
+            matched_bpm,
+            relative_error,
+        )
+    })
+    .min_by(|left, right| left.0.total_cmp(&right.0))
+    .map(
+        |(_, playback_rate, mode, matched_bpm, relative_error)| TempoMatch {
             mode,
             playback_rate,
             matched_bpm: Some(matched_bpm),
             relative_error: Some(relative_error),
-        })
-        .unwrap_or(TempoMatch {
-            mode: TempoMode::Normal,
-            playback_rate: 1.0,
-            matched_bpm: Some(incoming_bpm),
-            relative_error: None,
-        })
+        },
+    )
+    .unwrap_or(TempoMatch {
+        mode: TempoMode::Normal,
+        playback_rate: 1.0,
+        matched_bpm: Some(incoming_bpm),
+        relative_error: None,
+    })
 }
 
 fn choose_candidate_for_profile(
@@ -1370,7 +1407,9 @@ fn choose_candidate_for_profile(
     active_stem_count: usize,
 ) -> Option<(database::MixTrackRecord, Option<WordPlayMatch>)> {
     let same_riddim_exists = style == MixStyle::ClubHype
-        && candidates.iter().any(|candidate| shares_riddim(current, candidate));
+        && candidates
+            .iter()
+            .any(|candidate| shares_riddim(current, candidate));
     let scored = candidates
         .iter()
         .filter(|candidate| {
@@ -1386,7 +1425,11 @@ fn choose_candidate_for_profile(
             let tempo = calculate_tempo_match(current.bpm, source_playback_rate, candidate.bpm);
             let mut score = 0.0;
             if same_riddim {
-                score += if style == MixStyle::ClubHype { 100.0 } else { 22.0 };
+                score += if style == MixStyle::ClubHype {
+                    100.0
+                } else {
+                    22.0
+                };
             }
             if intensity_override.is_none()
                 && preset != MixPreset::FreestyleMaestro
@@ -1397,7 +1440,10 @@ fn choose_candidate_for_profile(
             if let Some(error) = tempo.relative_error {
                 score -= error * 45.0;
             }
-            score += key_compatibility(current.musical_key.as_deref(), candidate.musical_key.as_deref()) * 6.0;
+            score += key_compatibility(
+                current.musical_key.as_deref(),
+                candidate.musical_key.as_deref(),
+            ) * 6.0;
             score += transition_score(mir_profile(current), mir_profile(candidate)) * 12.0;
             if style == MixStyle::AggressiveClash {
                 if let Some(word_play) = &word_play {
@@ -1415,11 +1461,17 @@ fn choose_candidate_for_profile(
         .collect::<Vec<_>>();
 
     let has_semantic_route = style == MixStyle::AggressiveClash
-        && scored.iter().any(|(_, _, _, word_play)| word_play.is_some());
+        && scored
+            .iter()
+            .any(|(_, _, _, word_play)| word_play.is_some());
     scored
         .into_iter()
         .filter(|(_, _, _, word_play)| !has_semantic_route || word_play.is_some())
-        .max_by(|left, right| left.0.total_cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
+        .max_by(|left, right| {
+            left.0
+                .total_cmp(&right.0)
+                .then_with(|| right.1.cmp(&left.1))
+        })
         .map(|(_, _, track, word_play)| (track, word_play))
 }
 
@@ -1442,7 +1494,9 @@ fn build_decision(
         .map(|bpm| (4.0 * 60_000.0 / bpm).round() as u64)
         .unwrap_or(2_000)
         .clamp(500, 20_000);
-    let duration = current.duration_ms.and_then(|value| u64::try_from(value).ok());
+    let duration = current
+        .duration_ms
+        .and_then(|value| u64::try_from(value).ok());
     let chorus_cut = find_chorus_markers(current)
         .into_iter()
         .find(|time| *time >= CHORUS_MIN_START_MS);
@@ -1465,65 +1519,77 @@ fn build_decision(
         incoming_chorus,
     );
 
-    let (transition, transition_at_ms, fade_duration_ms, mut incoming_cue_ms, rationale) = match style {
-        MixStyle::DeepRoots => {
-            let fade = crossfade_duration_ms(current.bpm, source_playback_rate, mir_plan.crossfade_bars);
-            let requested_start = duration.map(|duration| duration.saturating_sub(fade));
-            let start = requested_start.map(|time| snap_to_previous_bar(current, time));
-            (
-                TransitionKind::LongCrossfade,
-                start,
-                fade,
-                mir_plan.ideal_drop_cue_ms,
-                if same_riddim_family {
-                    format!("Deep/Roots: {}-bar MIR-scored equal-power crossfade; same riddim family, mood, rhythm, key and loudness metadata guide the bass hand-off and local Auto-Dub.", mir_plan.crossfade_bars)
-                } else {
-                    format!("Deep/Roots: {}-bar MIR-scored equal-power crossfade; local mood, rhythm, key and loudness metadata guide the EQ sweep and drop cue.", mir_plan.crossfade_bars)
-                },
-            )
-        }
-        MixStyle::ClubHype => {
-            let cut = chorus_cut
-                .or_else(|| duration.map(|duration| duration.saturating_sub(one_bar_ms)))
-                .map(|time| snap_to_previous_bar(current, time));
-            let cue = mir_plan.ideal_drop_cue_ms;
-            (
-                TransitionKind::HardChorusCut,
-                cut,
-                0,
-                cue,
-                if same_riddim_family {
-                    "Club/Hype: hard cut at the next repeated-lyric chorus; incoming track is kept in the same automatic/manual riddim family.".to_owned()
-                } else {
-                    "Club/Hype: hard cut at the next repeated-lyric chorus; no matching riddim family was available, so tempo/key compatibility is used.".to_owned()
-                },
-            )
-        }
-        MixStyle::AggressiveClash => {
-            let arm = duration.map(|duration| duration.saturating_sub(one_bar_ms));
-            let cue = word_play
-                .as_ref()
-                .map(|matched| matched.cue_ms)
-                .unwrap_or(mir_plan.ideal_drop_cue_ms);
-            (
-                TransitionKind::SemanticRewindCut,
-                arm,
-                crossfade_duration_ms(
+    let (transition, transition_at_ms, fade_duration_ms, mut incoming_cue_ms, rationale) =
+        match style {
+            MixStyle::DeepRoots => {
+                let fade = crossfade_duration_ms(
                     current.bpm,
                     source_playback_rate,
-                    if intensity_override == Some(4) { 1 } else { mir_plan.crossfade_bars },
-                ),
-                cue,
-                if word_play.is_some() {
-                    "Aggressiv/Clash: local Whisper-word match selects and cues the incoming phrase; Auto-Rewind arms the hand-off and all three isolator kill switches drop the outgoing fader.".to_owned()
-                } else {
-                    "Aggressiv/Clash: no Whisper word-play match was found; use the best local tempo/key candidate, Auto-Rewind, and fader kill switches.".to_owned()
-                },
-            )
-        }
-    };
+                    mir_plan.crossfade_bars,
+                );
+                let requested_start = duration.map(|duration| duration.saturating_sub(fade));
+                let start = requested_start.map(|time| snap_to_previous_bar(current, time));
+                (
+                    TransitionKind::LongCrossfade,
+                    start,
+                    fade,
+                    mir_plan.ideal_drop_cue_ms,
+                    if same_riddim_family {
+                        format!("Deep/Roots: {}-bar MIR-scored equal-power crossfade; same riddim family, mood, rhythm, key and loudness metadata guide the bass hand-off and local Auto-Dub.", mir_plan.crossfade_bars)
+                    } else {
+                        format!("Deep/Roots: {}-bar MIR-scored equal-power crossfade; local mood, rhythm, key and loudness metadata guide the EQ sweep and drop cue.", mir_plan.crossfade_bars)
+                    },
+                )
+            }
+            MixStyle::ClubHype => {
+                let cut = chorus_cut
+                    .or_else(|| duration.map(|duration| duration.saturating_sub(one_bar_ms)))
+                    .map(|time| snap_to_previous_bar(current, time));
+                let cue = mir_plan.ideal_drop_cue_ms;
+                (
+                    TransitionKind::HardChorusCut,
+                    cut,
+                    0,
+                    cue,
+                    if same_riddim_family {
+                        "Club/Hype: hard cut at the next repeated-lyric chorus; incoming track is kept in the same automatic/manual riddim family.".to_owned()
+                    } else {
+                        "Club/Hype: hard cut at the next repeated-lyric chorus; no matching riddim family was available, so tempo/key compatibility is used.".to_owned()
+                    },
+                )
+            }
+            MixStyle::AggressiveClash => {
+                let arm = duration.map(|duration| duration.saturating_sub(one_bar_ms));
+                let cue = word_play
+                    .as_ref()
+                    .map(|matched| matched.cue_ms)
+                    .unwrap_or(mir_plan.ideal_drop_cue_ms);
+                (
+                    TransitionKind::SemanticRewindCut,
+                    arm,
+                    crossfade_duration_ms(
+                        current.bpm,
+                        source_playback_rate,
+                        if intensity_override == Some(4) {
+                            1
+                        } else {
+                            mir_plan.crossfade_bars
+                        },
+                    ),
+                    cue,
+                    if word_play.is_some() {
+                        "Aggressiv/Clash: local Whisper-word match selects and cues the incoming phrase; Auto-Rewind arms the hand-off and all three isolator kill switches drop the outgoing fader.".to_owned()
+                    } else {
+                        "Aggressiv/Clash: no Whisper word-play match was found; use the best local tempo/key candidate, Auto-Rewind, and fader kill switches.".to_owned()
+                    },
+                )
+            }
+        };
     incoming_cue_ms = incoming_cue_ms.min(86_400_000);
-    if let Some(next_duration) = next.duration_ms.and_then(|duration| u64::try_from(duration).ok()) {
+    if let Some(next_duration) = next
+        .duration_ms
+        .and_then(|duration| u64::try_from(duration).ok())
+    {
         if next_duration == 0 || incoming_cue_ms >= next_duration {
             incoming_cue_ms = 0;
         }
@@ -1579,8 +1645,7 @@ fn crossfade_duration_ms(bpm: Option<f64>, playback_rate: f32, bars: u32) -> u64
     let duration = bpm
         .filter(|value| value.is_finite() && *value > 0.0)
         .map(|value| {
-            f64::from(bars) * 4.0 * 60_000.0
-                / (value * f64::from(playback_rate.clamp(0.8, 1.2)))
+            f64::from(bars) * 4.0 * 60_000.0 / (value * f64::from(playback_rate.clamp(0.8, 1.2)))
         })
         .unwrap_or(f64::from(bars) * 2_000.0);
     (duration.round() as u64).clamp(MIN_CROSSFADE_MS, MAX_CROSSFADE_MS)
@@ -1593,7 +1658,11 @@ fn find_chorus_markers(track: &database::MixTrackRecord) -> Vec<u64> {
         .filter(|word| word.confidence >= 0.20)
         .filter_map(|word| {
             let token = normalize_word(&word.text)?;
-            Some((token, word.start_ms.max(0) as u64, word.end_ms.max(0) as u64))
+            Some((
+                token,
+                word.start_ms.max(0) as u64,
+                word.end_ms.max(0) as u64,
+            ))
         })
         .collect::<Vec<_>>();
     let phrase_size = 4;
@@ -1616,9 +1685,11 @@ fn find_chorus_markers(track: &database::MixTrackRecord) -> Vec<u64> {
         .into_values()
         .filter(|times| {
             times.len() >= 2
-                && times
-                    .iter()
-                    .any(|first| times.iter().any(|second| second.saturating_sub(*first) >= CHORUS_MIN_REPEAT_GAP_MS as u64))
+                && times.iter().any(|first| {
+                    times.iter().any(|second| {
+                        second.saturating_sub(*first) >= CHORUS_MIN_REPEAT_GAP_MS as u64
+                    })
+                })
         })
         .flatten()
         .collect::<Vec<_>>();
@@ -1700,11 +1771,46 @@ fn semantic_tail_tokens(track: &database::MixTrackRecord) -> Vec<String> {
 fn is_semantic_stop_word(token: &str) -> bool {
     matches!(
         token,
-        "a" | "an" | "and" | "are" | "as" | "at" | "be" | "been" | "but" | "by"
-            | "for" | "from" | "he" | "her" | "him" | "his" | "i" | "in" | "is"
-            | "it" | "its" | "me" | "my" | "of" | "on" | "or" | "our" | "she"
-            | "the" | "their" | "them" | "they" | "this" | "that" | "to" | "was"
-            | "we" | "were" | "with" | "you" | "your"
+        "a" | "an"
+            | "and"
+            | "are"
+            | "as"
+            | "at"
+            | "be"
+            | "been"
+            | "but"
+            | "by"
+            | "for"
+            | "from"
+            | "he"
+            | "her"
+            | "him"
+            | "his"
+            | "i"
+            | "in"
+            | "is"
+            | "it"
+            | "its"
+            | "me"
+            | "my"
+            | "of"
+            | "on"
+            | "or"
+            | "our"
+            | "she"
+            | "the"
+            | "their"
+            | "them"
+            | "they"
+            | "this"
+            | "that"
+            | "to"
+            | "was"
+            | "we"
+            | "were"
+            | "with"
+            | "you"
+            | "your"
     )
 }
 
@@ -1731,7 +1837,9 @@ fn find_word_play(
         .words
         .iter()
         .filter(|word| word.confidence >= 0.20)
-        .filter_map(|word| normalize_word(&word.text).map(|token| (token, word.start_ms.max(0) as u64)))
+        .filter_map(|word| {
+            normalize_word(&word.text).map(|token| (token, word.start_ms.max(0) as u64))
+        })
         .collect::<Vec<_>>();
     if normalized.is_empty() {
         return None;
@@ -1795,22 +1903,31 @@ fn shares_riddim(left: &database::MixTrackRecord, right: &database::MixTrackReco
 }
 
 fn key_compatibility(left: Option<&str>, right: Option<&str>) -> f64 {
-    let (Some(left), Some(right)) = (parse_key(left.unwrap_or_default()), parse_key(right.unwrap_or_default())) else {
+    let (Some(left), Some(right)) = (
+        parse_key(left.unwrap_or_default()),
+        parse_key(right.unwrap_or_default()),
+    ) else {
         return 0.0;
     };
-    let semitones = (left.0 as i8 - right.0 as i8).unsigned_abs().min(12 - (left.0 as i8 - right.0 as i8).unsigned_abs()) as u8;
+    let semitones = (left.0 as i8 - right.0 as i8)
+        .unsigned_abs()
+        .min(12 - (left.0 as i8 - right.0 as i8).unsigned_abs()) as u8;
     if left == right {
         1.0
     } else if left.0 == right.0 {
         0.8
-    } else if left.1 != right.1
-        && ((left.0 + 3) % 12 == right.0 || (right.0 + 3) % 12 == left.0)
-    {
+    } else if left.1 != right.1 && ((left.0 + 3) % 12 == right.0 || (right.0 + 3) % 12 == left.0) {
         0.65
     } else {
         let circle = [0_u8, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5];
-        let left_circle = circle.iter().position(|pitch| *pitch == left.0).unwrap_or(0) as u8;
-        let right_circle = circle.iter().position(|pitch| *pitch == right.0).unwrap_or(0) as u8;
+        let left_circle = circle
+            .iter()
+            .position(|pitch| *pitch == left.0)
+            .unwrap_or(0) as u8;
+        let right_circle = circle
+            .iter()
+            .position(|pitch| *pitch == right.0)
+            .unwrap_or(0) as u8;
         let circle_distance = left_circle
             .abs_diff(right_circle)
             .min(12_u8 - left_circle.abs_diff(right_circle));
@@ -1825,13 +1942,19 @@ fn key_compatibility(left: Option<&str>, right: Option<&str>) -> f64 {
 }
 
 fn parse_key(value: &str) -> Option<(u8, bool)> {
-    let compact = value.trim().to_ascii_lowercase().replace('♯', "#").replace('♭', "b");
+    let compact = value
+        .trim()
+        .to_ascii_lowercase()
+        .replace('♯', "#")
+        .replace('♭', "b");
     if compact.is_empty() {
         return None;
     }
     let is_minor = compact.contains("minor") || compact.ends_with('m');
     let chars = compact.chars().collect::<Vec<_>>();
-    let note_index = chars.iter().position(|character| ('a'..='g').contains(character))?;
+    let note_index = chars
+        .iter()
+        .position(|character| ('a'..='g').contains(character))?;
     let note = chars[note_index].to_ascii_uppercase();
     let mut accidental = None;
     if let Some(next) = chars.get(note_index + 1) {
@@ -1866,8 +1989,10 @@ fn track_stem_files_for_profile(
     let mut paths = HashMap::<String, PathBuf>::with_capacity(4);
     for stem in &track.stems {
         let kind = stem.kind.trim().to_ascii_lowercase();
-        if !matches!(kind.as_str(), "acapella" | "instrumental" | "bass" | "drums")
-            || (active_stem_count == 2 && !matches!(kind.as_str(), "acapella" | "instrumental"))
+        if !matches!(
+            kind.as_str(),
+            "acapella" | "instrumental" | "bass" | "drums"
+        ) || (active_stem_count == 2 && !matches!(kind.as_str(), "acapella" | "instrumental"))
         {
             continue;
         }
@@ -1878,7 +2003,10 @@ fn track_stem_files_for_profile(
             return Err(format!("local {kind} stem is missing: {}", path.display()));
         }
         if paths.insert(kind.clone(), path).is_some() {
-            return Err(format!("track {} has duplicate {kind} stem paths", track.id));
+            return Err(format!(
+                "track {} has duplicate {kind} stem paths",
+                track.id
+            ));
         }
     }
     let mut take = |kind: &str| {
@@ -1893,7 +2021,12 @@ fn track_stem_files_for_profile(
     } else {
         (instrumental.clone(), instrumental.clone())
     };
-    Ok(audio::StemFiles { acapella, instrumental, bass, drums })
+    Ok(audio::StemFiles {
+        acapella,
+        instrumental,
+        bass,
+        drums,
+    })
 }
 
 fn track_beat_grid(track: &database::MixTrackRecord) -> audio::BeatGrid {
@@ -1966,9 +2099,15 @@ mod tests {
 
     #[test]
     fn two_stem_profile_does_not_require_unused_bass_or_drums_files() {
-        use std::{fs, time::{SystemTime, UNIX_EPOCH}};
+        use std::{
+            fs,
+            time::{SystemTime, UNIX_EPOCH},
+        };
 
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let directory = std::env::temp_dir().join(format!(
             "championvibe-two-stem-test-{}-{nonce}",
             std::process::id(),
@@ -1981,8 +2120,14 @@ mod tests {
 
         let mut current = track(1);
         current.stems = vec![
-            StemPath { kind: "acapella".to_owned(), file_path: acapella.to_string_lossy().into_owned() },
-            StemPath { kind: "instrumental".to_owned(), file_path: instrumental.to_string_lossy().into_owned() },
+            StemPath {
+                kind: "acapella".to_owned(),
+                file_path: acapella.to_string_lossy().into_owned(),
+            },
+            StemPath {
+                kind: "instrumental".to_owned(),
+                file_path: instrumental.to_string_lossy().into_owned(),
+            },
         ];
         let files = track_stem_files_for_profile(&current, 2).unwrap();
         assert_eq!(files.acapella, acapella);
@@ -1997,10 +2142,22 @@ mod tests {
     fn preset_one_two_three_and_four_take_the_declared_routes() {
         let mut current = track(1);
         current.acoustic_tag = Some("Deep".to_owned());
-        assert_eq!(route_style(MixPreset::SmoothSelector, &current, None, None), MixStyle::DeepRoots);
-        assert_eq!(route_style(MixPreset::ClubHype, &current, None, None), MixStyle::ClubHype);
-        assert_eq!(route_style(MixPreset::AggressiveClash, &current, None, None), MixStyle::AggressiveClash);
-        assert_eq!(route_style(MixPreset::FreestyleMaestro, &current, None, None), MixStyle::DeepRoots);
+        assert_eq!(
+            route_style(MixPreset::SmoothSelector, &current, None, None),
+            MixStyle::DeepRoots
+        );
+        assert_eq!(
+            route_style(MixPreset::ClubHype, &current, None, None),
+            MixStyle::ClubHype
+        );
+        assert_eq!(
+            route_style(MixPreset::AggressiveClash, &current, None, None),
+            MixStyle::AggressiveClash
+        );
+        assert_eq!(
+            route_style(MixPreset::FreestyleMaestro, &current, None, None),
+            MixStyle::DeepRoots
+        );
         assert_eq!(intensity_to_style(1), MixStyle::DeepRoots);
         assert_eq!(intensity_to_style(2), MixStyle::ClubHype);
         assert_eq!(intensity_to_style(3), MixStyle::AggressiveClash);
@@ -2012,52 +2169,105 @@ mod tests {
         let mut current = track(1);
         current.acoustic_tag = Some("Aggressiv".to_owned());
         current.sentiment = Some(0.8);
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::AggressiveClash);
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::AggressiveClash
+        );
 
         current.acoustic_tag = Some("Hype".to_owned());
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::ClubHype);
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::ClubHype
+        );
         current.acoustic_tag = Some("Conscious".to_owned());
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::DeepRoots);
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::DeepRoots
+        );
 
         current.acoustic_tag = None;
         current.sentiment = Some(-0.7);
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::AggressiveClash);
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::AggressiveClash
+        );
         current.sentiment = Some(0.6);
         current.energy_density = Some(0.8);
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::ClubHype);
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::ClubHype
+        );
         current.sentiment = None;
         current.energy_density = None;
-        assert_eq!(classify_maestro_style(&current, None, Some(MixStyle::AggressiveClash)), MixStyle::AggressiveClash);
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::DeepRoots);
+        assert_eq!(
+            classify_maestro_style(&current, None, Some(MixStyle::AggressiveClash)),
+            MixStyle::AggressiveClash
+        );
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::DeepRoots
+        );
 
         current.sentiment_label = Some("negative".to_owned());
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::AggressiveClash);
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::AggressiveClash
+        );
         current.sentiment_label = Some("positive".to_owned());
         current.energy_density = Some(0.5);
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::ClubHype);
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::ClubHype
+        );
         current.sentiment_label = None;
         current.energy_density = Some(0.2);
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::DeepRoots);
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::DeepRoots
+        );
     }
 
     #[test]
     fn maestro_uses_manual_tags_and_incoming_track_when_source_metadata_is_missing() {
         let mut current = track(1);
-        current.tags.push(("genre".to_owned(), "Roots Reggae".to_owned()));
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::DeepRoots);
+        current
+            .tags
+            .push(("genre".to_owned(), "Roots Reggae".to_owned()));
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::DeepRoots
+        );
         current.tags.clear();
-        current.tags.push(("custom".to_owned(), "Clash battle".to_owned()));
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::AggressiveClash);
+        current
+            .tags
+            .push(("custom".to_owned(), "Clash battle".to_owned()));
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::AggressiveClash
+        );
         current.tags.clear();
-        current.tags.push(("genre".to_owned(), "Club Hype".to_owned()));
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::ClubHype);
+        current
+            .tags
+            .push(("genre".to_owned(), "Club Hype".to_owned()));
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::ClubHype
+        );
         current.tags.push(("genre".to_owned(), "Roots".to_owned()));
-        current.tags.push(("custom".to_owned(), "Aggressiv Clash".to_owned()));
-        assert_eq!(classify_maestro_style(&current, None, None), MixStyle::AggressiveClash);
+        current
+            .tags
+            .push(("custom".to_owned(), "Aggressiv Clash".to_owned()));
+        assert_eq!(
+            classify_maestro_style(&current, None, None),
+            MixStyle::AggressiveClash
+        );
         current.tags.clear();
         let mut incoming = track(2);
         incoming.acoustic_tag = Some("Hype".to_owned());
-        assert_eq!(classify_maestro_style(&current, Some(&incoming), None), MixStyle::ClubHype);
+        assert_eq!(
+            classify_maestro_style(&current, Some(&incoming), None),
+            MixStyle::ClubHype
+        );
     }
 
     #[test]
@@ -2085,9 +2295,18 @@ mod tests {
         let mut current = track(1);
         let mut next = track(2);
         current.words = [
-            ("we", 10_000), ("are", 10_200), ("roots", 10_400), ("rocking", 10_600),
-            ("all", 10_800), ("night", 11_000), ("we", 35_000), ("are", 35_200),
-            ("roots", 35_400), ("rocking", 35_600), ("all", 35_800), ("night", 36_000),
+            ("we", 10_000),
+            ("are", 10_200),
+            ("roots", 10_400),
+            ("rocking", 10_600),
+            ("all", 10_800),
+            ("night", 11_000),
+            ("we", 35_000),
+            ("are", 35_200),
+            ("roots", 35_400),
+            ("rocking", 35_600),
+            ("all", 35_800),
+            ("night", 36_000),
         ]
         .into_iter()
         .map(|(text, time)| word(text, time))
@@ -2096,7 +2315,15 @@ mod tests {
         let tempo = calculate_tempo_match(current.bpm, 1.0, next.bpm);
 
         let deep = build_decision(
-            MixPreset::SmoothSelector, MixStyle::DeepRoots, &current, &next, tempo, None, true, 1.0, None,
+            MixPreset::SmoothSelector,
+            MixStyle::DeepRoots,
+            &current,
+            &next,
+            tempo,
+            None,
+            true,
+            1.0,
+            None,
         );
         assert_eq!(deep.transition, TransitionKind::LongCrossfade);
         assert_eq!(deep.fade_duration_ms, 16_000);
@@ -2104,7 +2331,15 @@ mod tests {
         assert!(!deep.auto_rewind && !deep.fader_kill_switches);
 
         let club = build_decision(
-            MixPreset::ClubHype, MixStyle::ClubHype, &current, &next, tempo, None, true, 1.0, None,
+            MixPreset::ClubHype,
+            MixStyle::ClubHype,
+            &current,
+            &next,
+            tempo,
+            None,
+            true,
+            1.0,
+            None,
         );
         assert_eq!(club.transition, TransitionKind::HardChorusCut);
         assert_eq!(club.transition_at_ms, Some(10_000));
@@ -2114,14 +2349,30 @@ mod tests {
 
         current.words.clear();
         let no_chorus = build_decision(
-            MixPreset::ClubHype, MixStyle::ClubHype, &current, &next, tempo, None, false, 1.0, None,
+            MixPreset::ClubHype,
+            MixStyle::ClubHype,
+            &current,
+            &next,
+            tempo,
+            None,
+            false,
+            1.0,
+            None,
         );
         assert_eq!(no_chorus.transition_at_ms, Some(178_000));
         assert_eq!(no_chorus.incoming_cue_ms, 10_000);
 
         current.duration_ms = None;
         let unknown_length = build_decision(
-            MixPreset::SmoothSelector, MixStyle::DeepRoots, &current, &next, tempo, None, false, 1.0, None,
+            MixPreset::SmoothSelector,
+            MixStyle::DeepRoots,
+            &current,
+            &next,
+            tempo,
+            None,
+            false,
+            1.0,
+            None,
         );
         assert_eq!(unknown_length.transition_at_ms, None);
         current.duration_ms = Some(180_000);
@@ -2172,9 +2423,18 @@ mod tests {
     fn repeated_four_word_phrases_form_chorus_cues() {
         let mut current = track(1);
         current.words = [
-            ("we", 10_000), ("are", 10_200), ("roots", 10_400), ("rocking", 10_600),
-            ("all", 10_800), ("night", 11_000), ("we", 35_000), ("are", 35_200),
-            ("roots", 35_400), ("rocking", 35_600), ("all", 35_800), ("night", 36_000),
+            ("we", 10_000),
+            ("are", 10_200),
+            ("roots", 10_400),
+            ("rocking", 10_600),
+            ("all", 10_800),
+            ("night", 11_000),
+            ("we", 35_000),
+            ("are", 35_200),
+            ("roots", 35_400),
+            ("rocking", 35_600),
+            ("all", 35_800),
+            ("night", 36_000),
         ]
         .into_iter()
         .map(|(text, time)| word(text, time))

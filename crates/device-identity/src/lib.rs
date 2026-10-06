@@ -3,15 +3,15 @@ use tauri::{
     Manager, Runtime, State,
 };
 
-#[cfg(target_os = "android")]
-mod mobile;
 #[cfg(not(target_os = "android"))]
 mod desktop;
-
 #[cfg(target_os = "android")]
-pub use mobile::DeviceIdentity;
+mod mobile;
+
 #[cfg(not(target_os = "android"))]
 pub use desktop::DeviceIdentity;
+#[cfg(target_os = "android")]
+pub use mobile::DeviceIdentity;
 
 /// Access the plugin's native Android identity bridge from Rust.
 pub trait DeviceIdentityExt<R: Runtime> {

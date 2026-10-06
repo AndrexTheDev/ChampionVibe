@@ -100,14 +100,15 @@ impl LookaheadLimiter {
         if sample_rate == 0 {
             return 0.0;
         }
-        let lookahead = ((sample_rate as f32 * DEFAULT_LOOKAHEAD_MS / 1_000.0).round() as usize).max(1);
+        let lookahead =
+            ((sample_rate as f32 * DEFAULT_LOOKAHEAD_MS / 1_000.0).round() as usize).max(1);
         (lookahead + TRUE_PEAK_CENTER + 1) as f32 * 1_000.0 / sample_rate as f32
     }
 
     pub(super) fn new(sample_rate: u32) -> Self {
         let sample_rate = sample_rate.max(1);
-        let lookahead_frames = ((sample_rate as f32 * DEFAULT_LOOKAHEAD_MS / 1_000.0).round() as usize)
-            .max(1);
+        let lookahead_frames =
+            ((sample_rate as f32 * DEFAULT_LOOKAHEAD_MS / 1_000.0).round() as usize).max(1);
         // The centered interpolator needs eight more input samples before its estimate is final.
         let latency_frames = lookahead_frames + TRUE_PEAK_CENTER + 1;
         let mut history = VecDeque::with_capacity(TRUE_PEAK_TAPS);
@@ -121,7 +122,9 @@ impl LookaheadLimiter {
             delay: vec![StereoFrame::default(); latency_frames + 1],
             history,
             coefficients: loudness::true_peak_interpolation_coefficients(),
-            peak_window: VecDeque::with_capacity(lookahead_frames.saturating_mul(2).saturating_add(32)),
+            peak_window: VecDeque::with_capacity(
+                lookahead_frames.saturating_mul(2).saturating_add(32),
+            ),
             gain: SoftKneeGain::new(
                 sample_rate,
                 DEFAULT_CEILING_DBTP,
@@ -224,7 +227,11 @@ impl LookaheadLimiter {
 
 #[inline]
 fn finite_sample(sample: f32) -> f32 {
-    if sample.is_finite() { sample } else { 0.0 }
+    if sample.is_finite() {
+        sample
+    } else {
+        0.0
+    }
 }
 
 #[cfg(test)]
@@ -257,10 +264,17 @@ mod tests {
         assert!(limiter.latency_ms() >= 5.0 && limiter.latency_ms() <= 6.0);
         let mut output = Vec::new();
         for _ in 0..4_000 {
-            output.push(limiter.process(StereoFrame { left: 1.5, right: -1.5 }));
+            output.push(limiter.process(StereoFrame {
+                left: 1.5,
+                right: -1.5,
+            }));
         }
         let ceiling = 10.0_f32.powf(-1.0 / 20.0);
-        let peak = output.iter().skip(limiter.latency_frames()).map(|frame| frame.left.abs().max(frame.right.abs())).fold(0.0, f32::max);
+        let peak = output
+            .iter()
+            .skip(limiter.latency_frames())
+            .map(|frame| frame.left.abs().max(frame.right.abs()))
+            .fold(0.0, f32::max);
         assert!(peak <= ceiling + 1.0e-4, "peak {peak} exceeds {ceiling}");
     }
 
@@ -269,7 +283,10 @@ mod tests {
         let mut limiter = LookaheadLimiter::new(44_100);
         let mut last = StereoFrame::default();
         for _ in 0..2_000 {
-            last = limiter.process(StereoFrame { left: f32::NAN, right: f32::INFINITY });
+            last = limiter.process(StereoFrame {
+                left: f32::NAN,
+                right: f32::INFINITY,
+            });
         }
         assert_eq!(last.left, 0.0);
         assert_eq!(last.right, 0.0);

@@ -279,9 +279,21 @@ impl DspChain {
         let high_right = self.isolator_high[1].process(right);
         let mid_left = left - low_left - high_left;
         let mid_right = right - low_right - high_right;
-        let bass_gain = if parameters.kill_bass { 0.0 } else { parameters.bass_gain };
-        let mid_gain = if parameters.kill_mid { 0.0 } else { parameters.mid_gain };
-        let high_gain = if parameters.kill_high { 0.0 } else { parameters.high_gain };
+        let bass_gain = if parameters.kill_bass {
+            0.0
+        } else {
+            parameters.bass_gain
+        };
+        let mid_gain = if parameters.kill_mid {
+            0.0
+        } else {
+            parameters.mid_gain
+        };
+        let high_gain = if parameters.kill_high {
+            0.0
+        } else {
+            parameters.high_gain
+        };
         let isolated = StereoFrame {
             left: low_left * bass_gain + mid_left * mid_gain + high_left * high_gain,
             right: low_right * bass_gain + mid_right * mid_gain + high_right * high_gain,

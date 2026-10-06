@@ -240,7 +240,12 @@ fn key_compatibility(outgoing: Option<&str>, incoming: Option<&str>) -> Option<f
 
 fn parse_key(value: &str) -> Option<(u8, bool)> {
     let mut parts = value.split_whitespace();
-    let note = parts.next()?.trim().to_ascii_lowercase().replace('♯', "#").replace('♭', "b");
+    let note = parts
+        .next()?
+        .trim()
+        .to_ascii_lowercase()
+        .replace('♯', "#")
+        .replace('♭', "b");
     let pitch = match note.as_str() {
         "c" | "b#" => 0,
         "c#" | "db" => 1,
@@ -256,7 +261,9 @@ fn parse_key(value: &str) -> Option<(u8, bool)> {
         "b" | "cb" => 11,
         _ => return None,
     };
-    let mode = parts.next().is_some_and(|part| matches!(part.to_ascii_lowercase().as_str(), "minor" | "min" | "m"));
+    let mode = parts
+        .next()
+        .is_some_and(|part| matches!(part.to_ascii_lowercase().as_str(), "minor" | "min" | "m"));
     Some((pitch, mode))
 }
 
@@ -282,8 +289,15 @@ fn choose_drop_cue(
     fallback_drop_ms: Option<u64>,
 ) -> u64 {
     let fallback = fallback_drop_ms.unwrap_or(0).min(86_400_000);
-    let pattern = profile.rhythm_pattern.unwrap_or_default().to_ascii_lowercase();
-    let stride = if pattern.contains("dembow") || pattern.contains("dancehall") { 2 } else { 4 };
+    let pattern = profile
+        .rhythm_pattern
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let stride = if pattern.contains("dembow") || pattern.contains("dancehall") {
+        2
+    } else {
+        4
+    };
     for (index, beat) in beat_times_seconds.iter().enumerate() {
         if !beat.is_finite() || *beat < 0.0 || *beat > 86_400.0 {
             continue;
@@ -294,9 +308,11 @@ fn choose_drop_cue(
         }
     }
     if !beat_times_seconds.is_empty() {
-        if let Some(beat) = beat_times_seconds.iter().copied().find(|beat| {
-            beat.is_finite() && *beat >= 0.0 && *beat <= 86_400.0
-        }) {
+        if let Some(beat) = beat_times_seconds
+            .iter()
+            .copied()
+            .find(|beat| beat.is_finite() && *beat >= 0.0 && *beat <= 86_400.0)
+        {
             return (beat * 1_000.0).round() as u64;
         }
     }
@@ -375,8 +391,14 @@ mod tests {
     #[test]
     fn key_mode_parser_handles_major_minor_and_enharmonic_spellings() {
         let same_mode = plan_transition(
-            MirProfile { musical_key: Some("C# major"), ..MirProfile::default() },
-            MirProfile { musical_key: Some("Db major"), ..MirProfile::default() },
+            MirProfile {
+                musical_key: Some("C# major"),
+                ..MirProfile::default()
+            },
+            MirProfile {
+                musical_key: Some("Db major"),
+                ..MirProfile::default()
+            },
             TransitionStyle::DeepRoots,
             false,
             &[],
@@ -384,8 +406,14 @@ mod tests {
         );
         assert_eq!(same_mode.key_compatibility, Some(1.0));
         let parallel_mode = plan_transition(
-            MirProfile { musical_key: Some("C major"), ..MirProfile::default() },
-            MirProfile { musical_key: Some("C minor"), ..MirProfile::default() },
+            MirProfile {
+                musical_key: Some("C major"),
+                ..MirProfile::default()
+            },
+            MirProfile {
+                musical_key: Some("C minor"),
+                ..MirProfile::default()
+            },
             TransitionStyle::DeepRoots,
             false,
             &[],

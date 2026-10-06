@@ -39,9 +39,17 @@ impl SeparationEngine {
             .and_then(|value| value.to_str())
             .is_some_and(|name| name.to_ascii_lowercase().ends_with(".cvmodel.json"));
         if is_mdx_manifest {
-            Ok(Self::Mdx(MdxSeparator::load(model_path, threads, use_directml)?))
+            Ok(Self::Mdx(MdxSeparator::load(
+                model_path,
+                threads,
+                use_directml,
+            )?))
         } else {
-            Ok(Self::HtDemucs(LocalSeparator::load(model_path, threads, use_directml)?))
+            Ok(Self::HtDemucs(LocalSeparator::load(
+                model_path,
+                threads,
+                use_directml,
+            )?))
         }
     }
 
@@ -68,8 +76,12 @@ impl SeparationEngine {
         progress: impl FnMut(f64),
     ) -> Result<Vec<PathBuf>> {
         match self {
-            Self::HtDemucs(separator) => separator.separate(input_path, output_dir, total_frames, cancel, progress),
-            Self::Mdx(separator) => separator.separate(input_path, output_dir, total_frames, cancel, progress),
+            Self::HtDemucs(separator) => {
+                separator.separate(input_path, output_dir, total_frames, cancel, progress)
+            }
+            Self::Mdx(separator) => {
+                separator.separate(input_path, output_dir, total_frames, cancel, progress)
+            }
         }
     }
 }
@@ -104,8 +116,16 @@ impl LocalSeparator {
             .name()
             .to_owned();
         anyhow::ensure!(!input_name.is_empty(), "separator ONNX input name is empty");
-        anyhow::ensure!(!output_name.is_empty(), "separator ONNX output name is empty");
-        Ok(Self { session, input_name, output_name, backend })
+        anyhow::ensure!(
+            !output_name.is_empty(),
+            "separator ONNX output name is empty"
+        );
+        Ok(Self {
+            session,
+            input_name,
+            output_name,
+            backend,
+        })
     }
 
     pub(crate) fn backend(&self) -> &'static str {
@@ -121,10 +141,11 @@ impl LocalSeparator {
         mut progress: impl FnMut(f64),
     ) -> Result<Vec<PathBuf>> {
         anyhow::ensure!(total_frames > 0, "audio source contains no frames");
-        let source_frames = usize::try_from(total_frames)
-            .context("audio source is too long for this platform")?;
-        fs::create_dir_all(output_dir)
-            .with_context(|| format!("cannot create stem output folder {}", output_dir.display()))?;
+        let source_frames =
+            usize::try_from(total_frames).context("audio source is too long for this platform")?;
+        fs::create_dir_all(output_dir).with_context(|| {
+            format!("cannot create stem output folder {}", output_dir.display())
+        })?;
 
         let mut reader = WavReader::open(input_path)
             .with_context(|| format!("cannot open normalized audio {}", input_path.display()))?;
@@ -180,7 +201,10 @@ impl LocalSeparator {
                 let previous = previous_tail
                     .as_ref()
                     .context("separator overlap state is missing")?;
-                anyhow::ensure!(previous.len() == overlap_frames, "separator overlap window is invalid");
+                anyhow::ensure!(
+                    previous.len() == overlap_frames,
+                    "separator overlap window is invalid"
+                );
                 let count = HOP_SAMPLES.min(source_frames - emitted_frames as usize);
                 let mut frames_output = 0_usize;
                 for index in 0..overlap_frames.min(count) {
@@ -198,19 +222,19 @@ impl LocalSeparator {
                     write_raw_frame(&mut raw_files, &mixed)?;
                     frames_output += 1;
                 }
-                let body_end = HOP_SAMPLES.min(overlap_frames + count.saturating_sub(frames_output));
-                for frame in separated
-                    .iter()
-                    .take(body_end)
-                    .skip(overlap_frames)
-                {
+                let body_end =
+                    HOP_SAMPLES.min(overlap_frames + count.saturating_sub(frames_output));
+                for frame in separated.iter().take(body_end).skip(overlap_frames) {
                     if frames_output >= count {
                         break;
                     }
                     write_raw_frame(&mut raw_files, frame)?;
                     frames_output += 1;
                 }
-                anyhow::ensure!(frames_output == count, "separator did not emit the requested frame count");
+                anyhow::ensure!(
+                    frames_output == count,
+                    "separator did not emit the requested frame count"
+                );
                 emitted_frames += count as u64;
                 previous_tail = Some(separated[HOP_SAMPLES..].to_vec());
             }
@@ -296,7 +320,8 @@ impl LocalSeparator {
         let mut frames = Vec::with_capacity(DEMUCS_WINDOW_SAMPLES);
         for frame_index in 0..DEMUCS_WINDOW_SAMPLES {
             let mut frame = [[0.0_f32; 2]; 4];
-            for (destination_stem, source_stem) in SOURCE_INDEX_FOR_CHAMPION_STEM.iter().enumerate() {
+            for (destination_stem, source_stem) in SOURCE_INDEX_FOR_CHAMPION_STEM.iter().enumerate()
+            {
                 let base = *source_stem * 2 * DEMUCS_WINDOW_SAMPLES;
                 frame[destination_stem][0] = data[base + frame_index];
                 frame[destination_stem][1] = data[base + DEMUCS_WINDOW_SAMPLES + frame_index];
@@ -309,7 +334,11 @@ impl LocalSeparator {
 
 pub(crate) fn validate_htdemucs_model(model_path: &Path) -> Result<()> {
     anyhow::ensure!(
-        model_path.is_file() && model_path.extension().and_then(|value| value.to_str()).is_some_and(|extension| extension.eq_ignore_ascii_case("onnx")),
+        model_path.is_file()
+            && model_path
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("onnx")),
         "HT-Demucs model must be a local .onnx file"
     );
     let (session, _) = create_session(model_path, 1, false)?;
@@ -317,12 +346,23 @@ pub(crate) fn validate_htdemucs_model(model_path: &Path) -> Result<()> {
 }
 
 fn validate_htdemucs_session(session: &Session) -> Result<()> {
-    anyhow::ensure!(session.inputs().len() == 1, "HT-Demucs must have exactly one input tensor");
-    anyhow::ensure!(session.outputs().len() == 1, "HT-Demucs must have exactly one output tensor");
+    anyhow::ensure!(
+        session.inputs().len() == 1,
+        "HT-Demucs must have exactly one input tensor"
+    );
+    anyhow::ensure!(
+        session.outputs().len() == 1,
+        "HT-Demucs must have exactly one output tensor"
+    );
     let input = session.inputs().first().context("HT-Demucs has no input")?;
-    let output = session.outputs().first().context("HT-Demucs has no output")?;
-    let input_shape = float_tensor_shape(input.dtype()).context("HT-Demucs input must be float32")?;
-    let output_shape = float_tensor_shape(output.dtype()).context("HT-Demucs output must be float32")?;
+    let output = session
+        .outputs()
+        .first()
+        .context("HT-Demucs has no output")?;
+    let input_shape =
+        float_tensor_shape(input.dtype()).context("HT-Demucs input must be float32")?;
+    let output_shape =
+        float_tensor_shape(output.dtype()).context("HT-Demucs output must be float32")?;
     anyhow::ensure!(
         input_shape.len() == 3
             && shape_axis_matches(input_shape[0], 1)
@@ -338,14 +378,20 @@ fn validate_htdemucs_session(session: &Session) -> Result<()> {
             && shape_axis_matches(output_shape[3], DEMUCS_WINDOW_SAMPLES as i64),
         "HT-Demucs output must be float32 [1, 4, 2, {DEMUCS_WINDOW_SAMPLES}]"
     );
-    anyhow::ensure!(!input.name().is_empty() && !output.name().is_empty(), "HT-Demucs tensor names must not be empty");
+    anyhow::ensure!(
+        !input.name().is_empty() && !output.name().is_empty(),
+        "HT-Demucs tensor names must not be empty"
+    );
     Ok(())
 }
 
 fn float_tensor_shape(value_type: &ValueType) -> Result<Vec<i64>> {
     match value_type {
         ValueType::Tensor { ty, shape, .. } => {
-            anyhow::ensure!(*ty == TensorElementType::Float32, "ONNX tensor must use float32 elements");
+            anyhow::ensure!(
+                *ty == TensorElementType::Float32,
+                "ONNX tensor must use float32 elements"
+            );
             Ok(shape.iter().copied().collect())
         }
         _ => anyhow::bail!("ONNX value must be a tensor"),
@@ -356,7 +402,11 @@ fn shape_axis_matches(actual: i64, expected: i64) -> bool {
     actual == expected || actual == -1
 }
 
-fn create_session(model_path: &Path, threads: usize, use_directml: bool) -> Result<(Session, &'static str)> {
+fn create_session(
+    model_path: &Path,
+    threads: usize,
+    use_directml: bool,
+) -> Result<(Session, &'static str)> {
     #[cfg(windows)]
     if use_directml {
         let directml = Session::builder()
@@ -394,8 +444,12 @@ fn fill_window(
             *frame = [0.0; 2];
             continue;
         }
-        let left = samples.next().context("normalized WAV ended before its declared duration")??;
-        let right = samples.next().context("normalized WAV has an incomplete stereo frame")??;
+        let left = samples
+            .next()
+            .context("normalized WAV ended before its declared duration")??;
+        let right = samples
+            .next()
+            .context("normalized WAV has an incomplete stereo frame")??;
         *frame = [i16_to_f32(left), i16_to_f32(right)];
         *frames_read += 1;
     }
@@ -414,8 +468,12 @@ fn fill_window_tail(
             *frame = [0.0; 2];
             continue;
         }
-        let left = samples.next().context("normalized WAV ended before its declared duration")??;
-        let right = samples.next().context("normalized WAV has an incomplete stereo frame")??;
+        let left = samples
+            .next()
+            .context("normalized WAV ended before its declared duration")??;
+        let right = samples
+            .next()
+            .context("normalized WAV has an incomplete stereo frame")??;
         *frame = [i16_to_f32(left), i16_to_f32(right)];
         *frames_read += 1;
     }
@@ -450,9 +508,13 @@ pub(crate) fn encode_recording_pcm16_to_flac(
     sample_rate: u32,
     frame_count: u64,
 ) -> Result<()> {
-    anyhow::ensure!((8_000..=192_000).contains(&sample_rate), "FLAC sample rate is unsupported");
+    anyhow::ensure!(
+        (8_000..=192_000).contains(&sample_rate),
+        "FLAC sample rate is unsupported"
+    );
     anyhow::ensure!(frame_count > 0, "recording contains no PCM frames");
-    let source_frames = usize::try_from(frame_count).context("recording is too long for FLAC encoding")?;
+    let source_frames =
+        usize::try_from(frame_count).context("recording is too long for FLAC encoding")?;
     let encoded_frames = source_frames.max(16);
     let config = flacenc::config::Encoder::default()
         .into_verified()
@@ -503,10 +565,19 @@ pub(super) fn encode_flac_streaming(
     stream_info
         .write(&mut stream_info_sink)
         .map_err(|error| anyhow::anyhow!("could not write FLAC STREAMINFO: {error:?}"))?;
-    anyhow::ensure!(stream_info_sink.as_slice().len() == 34, "FLAC STREAMINFO has an invalid size");
+    anyhow::ensure!(
+        stream_info_sink.as_slice().len() == 34,
+        "FLAC STREAMINFO has an invalid size"
+    );
     output.write_all(stream_info_sink.as_slice())?;
 
-    let mut source = FilePcm16Source::open(input_path, source_frames, encoded_frames, sample_rate, cancel)?;
+    let mut source = FilePcm16Source::open(
+        input_path,
+        source_frames,
+        encoded_frames,
+        sample_rate,
+        cancel,
+    )?;
     let mut frame_buffer = FrameBuf::with_size(2, block_size)
         .map_err(|error| anyhow::anyhow!("could not allocate FLAC frame buffer: {error}"))?;
     let mut frame_number = 0_usize;
@@ -521,12 +592,15 @@ pub(super) fn encode_flac_streaming(
         if frames_read == 0 {
             break;
         }
-        let frame = flacenc::encode_fixed_size_frame(config, &frame_buffer, frame_number, stream_info)
-            .map_err(|error| anyhow::anyhow!("FLAC frame {frame_number} could not be encoded: {error}"))?;
+        let frame =
+            flacenc::encode_fixed_size_frame(config, &frame_buffer, frame_number, stream_info)
+                .map_err(|error| {
+                    anyhow::anyhow!("FLAC frame {frame_number} could not be encoded: {error}")
+                })?;
         let mut frame_sink = ByteSink::new();
-        frame
-            .write(&mut frame_sink)
-            .map_err(|error| anyhow::anyhow!("could not write FLAC frame {frame_number}: {error:?}"))?;
+        frame.write(&mut frame_sink).map_err(|error| {
+            anyhow::anyhow!("could not write FLAC frame {frame_number}: {error:?}")
+        })?;
         output.write_all(frame_sink.as_slice())?;
         frame_number += 1;
         frames_written += frames_read;
@@ -557,7 +631,8 @@ impl<'a> FilePcm16Source<'a> {
         cancel: &'a AtomicBool,
     ) -> Result<Self> {
         Ok(Self {
-            file: File::open(path).with_context(|| format!("cannot read FLAC input {}", path.display()))?,
+            file: File::open(path)
+                .with_context(|| format!("cannot read FLAC input {}", path.display()))?,
             source_frames,
             encoded_frames,
             sample_rate,
@@ -580,7 +655,11 @@ impl Source for FilePcm16Source<'_> {
         self.sample_rate
     }
 
-    fn read_samples<F: Fill>(&mut self, block_size: usize, dest: &mut F) -> std::result::Result<usize, SourceError> {
+    fn read_samples<F: Fill>(
+        &mut self,
+        block_size: usize,
+        dest: &mut F,
+    ) -> std::result::Result<usize, SourceError> {
         if self.cancel.load(Ordering::Acquire) {
             return Err(SourceError::from_io_error(std::io::Error::new(
                 std::io::ErrorKind::Interrupted,
@@ -595,10 +674,14 @@ impl Source for FilePcm16Source<'_> {
         let mut interleaved = Vec::<i32>::with_capacity(frames * 2);
         if file_frames > 0 {
             let mut bytes = vec![0_u8; file_frames * 2 * 2];
-            self.file.read_exact(&mut bytes).map_err(SourceError::from_io_error)?;
-            interleaved.extend(bytes.chunks_exact(2).map(|sample| {
-                i32::from(i16::from_le_bytes([sample[0], sample[1]]))
-            }));
+            self.file
+                .read_exact(&mut bytes)
+                .map_err(SourceError::from_io_error)?;
+            interleaved.extend(
+                bytes
+                    .chunks_exact(2)
+                    .map(|sample| i32::from(i16::from_le_bytes([sample[0], sample[1]]))),
+            );
         }
         interleaved.resize(frames * 2, 0);
         dest.fill_interleaved(&interleaved)?;

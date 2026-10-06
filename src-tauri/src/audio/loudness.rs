@@ -66,11 +66,16 @@ impl LoudnessAnalyzer {
         // measurable; replace only non-finite decoder output with silence.
         let left = finite_sample(left);
         let right = finite_sample(right);
-        let weighted_left = self.left_high_pass.process(self.left_shelf.process(f64::from(left)));
+        let weighted_left = self
+            .left_high_pass
+            .process(self.left_shelf.process(f64::from(left)));
         let weighted_right = self
             .right_high_pass
             .process(self.right_shelf.process(f64::from(right)));
-        let squares = [weighted_left * weighted_left, weighted_right * weighted_right];
+        let squares = [
+            weighted_left * weighted_left,
+            weighted_right * weighted_right,
+        ];
 
         self.weighted_squares.push_back(squares);
         self.block_square_sum[0] += squares[0];
@@ -117,7 +122,11 @@ impl LoudnessAnalyzer {
 }
 
 fn finite_sample(sample: f32) -> f32 {
-    if sample.is_finite() { sample } else { 0.0 }
+    if sample.is_finite() {
+        sample
+    } else {
+        0.0
+    }
 }
 
 fn integrated_loudness(block_energies: &[f64]) -> Option<f64> {
@@ -279,7 +288,8 @@ impl TruePeakMeter {
     }
 }
 
-pub(crate) fn true_peak_interpolation_coefficients() -> [[f64; TRUE_PEAK_TAPS]; TRUE_PEAK_OVERSAMPLE] {
+pub(crate) fn true_peak_interpolation_coefficients() -> [[f64; TRUE_PEAK_TAPS]; TRUE_PEAK_OVERSAMPLE]
+{
     let mut coefficients = [[0.0; TRUE_PEAK_TAPS]; TRUE_PEAK_OVERSAMPLE];
     let half_width = TRUE_PEAK_TAPS as f64 / 2.0;
     for (phase, phase_coefficients) in coefficients.iter_mut().enumerate() {
@@ -314,11 +324,17 @@ pub(crate) fn true_peak_interpolation_coefficients() -> [[f64; TRUE_PEAK_TAPS]; 
 mod tests {
     use super::LoudnessAnalyzer;
 
-    fn measure_tone(amplitude: f32, frequency_hz: f64, sample_rate: u32, seconds: f64) -> super::LoudnessAnalysis {
+    fn measure_tone(
+        amplitude: f32,
+        frequency_hz: f64,
+        sample_rate: u32,
+        seconds: f64,
+    ) -> super::LoudnessAnalysis {
         let mut analyzer = LoudnessAnalyzer::new(sample_rate);
         let frame_count = (f64::from(sample_rate) * seconds) as usize;
         for index in 0..frame_count {
-            let phase = std::f64::consts::TAU * frequency_hz * index as f64 / f64::from(sample_rate);
+            let phase =
+                std::f64::consts::TAU * frequency_hz * index as f64 / f64::from(sample_rate);
             let sample = amplitude * phase.sin() as f32;
             analyzer.push_stereo(sample, sample);
         }
@@ -331,13 +347,19 @@ mod tests {
         let lufs = analysis.integrated_lufs.unwrap();
         // The BS.1770 K-weighting transfer magnitude at 1 kHz is about +0.654 dB.
         let expected_lufs = -0.691 + 20.0 * 0.1_f64.log10() + 0.654;
-        assert!((lufs - expected_lufs).abs() < 0.12, "measured {lufs}, expected {expected_lufs}");
+        assert!(
+            (lufs - expected_lufs).abs() < 0.12,
+            "measured {lufs}, expected {expected_lufs}"
+        );
         assert!((analysis.gain_offset_db.unwrap() - (-14.0 - lufs)).abs() < 1.0e-9);
 
         let analysis_44k = measure_tone(0.1, 1_000.0, 44_100, 4.0);
         let lufs_44k = analysis_44k.integrated_lufs.unwrap();
         let expected_44k = -0.691 + 20.0 * 0.1_f64.log10() + 0.653;
-        assert!((lufs_44k - expected_44k).abs() < 0.12, "measured {lufs_44k}, expected {expected_44k}");
+        assert!(
+            (lufs_44k - expected_44k).abs() < 0.12,
+            "measured {lufs_44k}, expected {expected_44k}"
+        );
     }
 
     #[test]
@@ -345,10 +367,18 @@ mod tests {
         let analysis = measure_tone(0.8, 7_321.0, 48_000, 2.0);
         let true_peak = analysis.true_peak_dbtp.unwrap();
         let expected_dbtp = 20.0 * 0.8_f64.log10();
-        assert!(true_peak >= expected_dbtp - 0.08, "true peak was {true_peak} dBTP");
-        assert!(true_peak <= expected_dbtp + 0.08, "true peak was {true_peak} dBTP");
+        assert!(
+            true_peak >= expected_dbtp - 0.08,
+            "true peak was {true_peak} dBTP"
+        );
+        assert!(
+            true_peak <= expected_dbtp + 0.08,
+            "true peak was {true_peak} dBTP"
+        );
 
-        let over_range = measure_tone(1.05, 997.0, 48_000, 2.0).true_peak_dbtp.unwrap();
+        let over_range = measure_tone(1.05, 997.0, 48_000, 2.0)
+            .true_peak_dbtp
+            .unwrap();
         let expected_over_range = 20.0 * 1.05_f64.log10();
         assert!((over_range - expected_over_range).abs() < 0.08);
         assert!(over_range > 0.0, "positive true peaks must not be clipped");

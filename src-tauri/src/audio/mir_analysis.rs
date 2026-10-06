@@ -83,7 +83,8 @@ fn analyze_rhythm(
         .filter(|value| value.is_finite() && (40.0..=240.0).contains(value))
         .map(|value| 60.0 / value)
         .or_else(|| median_beat_period(beat_grid_seconds));
-    let Some(period_seconds) = period_seconds.filter(|period| period.is_finite() && *period > 0.0) else {
+    let Some(period_seconds) = period_seconds.filter(|period| period.is_finite() && *period > 0.0)
+    else {
         return RhythmAnalysis {
             pattern: "Unknown".to_owned(),
             confidence: 0.0,
@@ -202,15 +203,13 @@ fn analyze_rhythm(
             "Steppers",
             (quarter_min / quarter_mean.max(1.0e-9) * (1.0 - syncopation)).clamp(0.0, 1.0),
         )
-    } else if syncopation > 0.15
-        && template_coverage(&slots, &[0, 6, 12, 20, 28]) > 0.72
-    {
+    } else if syncopation > 0.15 && template_coverage(&slots, &[0, 6, 12, 20, 28]) > 0.72 {
         ("Clave", template_coverage(&slots, &[0, 6, 12, 20, 28]))
     } else if syncopation > 0.22
         && template_coverage(
-        &slots,
-        &[0, 4, 6, 8, 11, 12, 14, 16, 20, 22, 24, 27, 28, 30],
-    ) > 0.68
+            &slots,
+            &[0, 4, 6, 8, 11, 12, 14, 16, 20, 22, 24, 27, 28, 30],
+        ) > 0.68
         && beat_ratio >= 65.0
     {
         (
@@ -267,8 +266,7 @@ fn template_coverage(slots: &[f64; RHYTHM_SLOTS], target_positions: &[usize]) ->
         .map(|position| slots[*position % RHYTHM_SLOTS])
         .sum::<f64>();
     let fraction_of_grid = target_positions.len().min(RHYTHM_SLOTS) as f64 / RHYTHM_SLOTS as f64;
-    ((target / total - fraction_of_grid) / (1.0 - fraction_of_grid).max(1.0e-9))
-        .clamp(0.0, 1.0)
+    ((target / total - fraction_of_grid) / (1.0 - fraction_of_grid).max(1.0e-9)).clamp(0.0, 1.0)
 }
 
 fn estimate_affect(input: &MirInput<'_>) -> (f64, f64) {
@@ -418,16 +416,16 @@ fn quantized_feature_vector(
             .map(|value| (value / 240.0).clamp(0.0, 1.0) * 2.0 - 1.0)
             .unwrap_or(0.0),
         (input.energy_dbfs / 48.0).clamp(-1.0, 0.0) * 2.0 + 1.0,
-        input
-            .chroma
-            .iter()
-            .copied()
-            .fold(0.0_f64, f64::max)
+        input.chroma.iter().copied().fold(0.0_f64, f64::max)
             / input.chroma.iter().sum::<f64>().max(1.0e-9),
     ];
     features[44..].copy_from_slice(&descriptors);
 
-    let norm = features.iter().map(|value| value * value).sum::<f64>().sqrt();
+    let norm = features
+        .iter()
+        .map(|value| value * value)
+        .sum::<f64>()
+        .sqrt();
     if norm > 1.0e-12 && norm.is_finite() {
         features.iter_mut().for_each(|value| *value /= norm);
     }
@@ -464,9 +462,8 @@ mod tests {
         let grid = (0..32).map(|beat| beat as f64 * 0.5).collect::<Vec<_>>();
         let steppers = pulse_track(|subdivision| subdivision % 4 == 0);
         let one_drop = pulse_track(|subdivision| subdivision % 16 == 8);
-        let dembow = pulse_track(|subdivision| {
-            matches!(subdivision % 16, 0 | 4 | 6 | 8 | 11 | 12 | 14)
-        });
+        let dembow =
+            pulse_track(|subdivision| matches!(subdivision % 16, 0 | 4 | 6 | 8 | 11 | 12 | 14));
         let steppers = analyze_rhythm(&steppers, &grid, Some(120.0), 16.0);
         let one_drop = analyze_rhythm(&one_drop, &grid, Some(120.0), 16.0);
         let dembow = analyze_rhythm(&dembow, &grid, Some(120.0), 16.0);

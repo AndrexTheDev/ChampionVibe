@@ -47,7 +47,12 @@ impl PriceOracle {
         Self::new(ETHEREUM_RPC_DEFAULT)
     }
 
-    pub async fn create_quote(&self, chain: Chain, plan: Plan, treasury: &Treasury) -> Result<Quote> {
+    pub async fn create_quote(
+        &self,
+        chain: Chain,
+        plan: Plan,
+        treasury: &Treasury,
+    ) -> Result<Quote> {
         let chain_id = self.rpc("eth_chainId", json!([])).await?;
         if parse_hex_quantity(&chain_id)? != 1 {
             bail!("configured oracle RPC is not connected to Ethereum mainnet");
@@ -132,10 +137,7 @@ impl PriceOracle {
 
     async fn eth_call(&self, address: &str, data: &str) -> Result<Vec<u8>> {
         let result = self
-            .rpc(
-                "eth_call",
-                json!([{"to": address, "data": data}, "latest"]),
-            )
+            .rpc("eth_call", json!([{"to": address, "data": data}, "latest"]))
             .await?;
         let encoded = result
             .as_str()
@@ -161,7 +163,9 @@ impl PriceOracle {
             .with_context(|| format!("oracle Ethereum RPC method {method} returned an HTTP error"))?
             .json()
             .await
-            .with_context(|| format!("oracle Ethereum RPC method {method} returned invalid JSON"))?;
+            .with_context(|| {
+                format!("oracle Ethereum RPC method {method} returned invalid JSON")
+            })?;
         if let Some(error) = response.get("error") {
             bail!("oracle Ethereum RPC error for {method}: {error}");
         }
@@ -198,9 +202,7 @@ fn validate_feed(name: &str, price: &FeedPrice, now: i64, max_age: i64) -> Resul
 }
 
 fn word_u128(data: &[u8], index: usize) -> Result<u128> {
-    let start = index
-        .checked_mul(32)
-        .context("ABI word index overflow")?;
+    let start = index.checked_mul(32).context("ABI word index overflow")?;
     let word = data
         .get(start..start + 32)
         .context("Chainlink ABI response is missing a word")?;
@@ -242,7 +244,10 @@ mod tests {
     fn formats_native_units_without_float_rounding() {
         assert_eq!(format_units(1_230_000_000, 1_000_000_000, 9), "1.23");
         assert_eq!(format_units(12_000, 100_000_000, 8), "0.00012");
-        assert_eq!(format_units(7, 1_000_000_000_000_000_000, 18), "0.000000000000000007");
+        assert_eq!(
+            format_units(7, 1_000_000_000_000_000_000, 18),
+            "0.000000000000000007"
+        );
         assert_eq!(format_units(100, 100, 2), "1");
     }
 

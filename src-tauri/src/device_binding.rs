@@ -74,7 +74,9 @@ if ([string]::IsNullOrWhiteSpace($board) -or [string]::IsNullOrWhiteSpace($cpu))
                 | "unknown"
                 | "none"
                 | "not specified"
-        ) || value.chars().all(|character| character == '0' || character == '-')
+        ) || value
+            .chars()
+            .all(|character| character == '0' || character == '-')
     };
     if is_placeholder(board) || is_placeholder(cpu) {
         bail!("Windows firmware did not expose usable motherboard and CPU identifiers");

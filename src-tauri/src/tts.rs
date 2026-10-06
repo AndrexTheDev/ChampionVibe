@@ -101,13 +101,21 @@ pub fn build_patois_text(
 }
 
 fn normalize_emotion(value: Option<&str>) -> Result<String, String> {
-    match value.unwrap_or("confident").trim().to_ascii_lowercase().as_str() {
+    match value
+        .unwrap_or("confident")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "energetic" | "hype" => Ok("energetic".to_owned()),
         "calm" | "easy" => Ok("calm".to_owned()),
         "uplifting" | "positive" => Ok("uplifting".to_owned()),
         "conscious" | "serious" => Ok("conscious".to_owned()),
         "confident" | "neutral" | "" => Ok("confident".to_owned()),
-        _ => Err("dubplate emotion must be energetic, calm, uplifting, conscious, or confident".to_owned()),
+        _ => Err(
+            "dubplate emotion must be energetic, calm, uplifting, conscious, or confident"
+                .to_owned(),
+        ),
     }
 }
 
@@ -126,11 +134,7 @@ pub fn generate(
     output_directory: &Path,
     audio: &AudioEngine,
 ) -> Result<DubplateResult, String> {
-    let phrase = build_patois_text(
-        &request.preset,
-        &request.text,
-        request.dj_name.as_deref(),
-    )?;
+    let phrase = build_patois_text(&request.preset, &request.text, request.dj_name.as_deref())?;
     let emotion = normalize_emotion(request.emotion.as_deref())?;
     let text = apply_emotion_cue(&phrase, &emotion);
     let musical_key = parse_key_pitch_class(&request.musical_key)
@@ -194,7 +198,9 @@ fn generate_with_piper(
     write_pcm_wav(&output_path, sample_rate, &leveled.samples)?;
     let sample = audio
         .add_tts_file(&output_path, Some("dubplate"))
-        .map_err(|error| format!("dubplate was rendered but could not be loaded into RAM: {error}"))?;
+        .map_err(|error| {
+            format!("dubplate was rendered but could not be loaded into RAM: {error}")
+        })?;
     Ok(DubplateResult {
         text,
         audio_path: output_path.to_string_lossy().into_owned(),
@@ -218,7 +224,11 @@ struct VoiceLevel {
 }
 
 #[cfg(feature = "local-piper-tts")]
-fn normalize_voice_to_r128(mut samples: Vec<f32>, sample_rate: u32, target_lufs: f64) -> VoiceLevel {
+fn normalize_voice_to_r128(
+    mut samples: Vec<f32>,
+    sample_rate: u32,
+    target_lufs: f64,
+) -> VoiceLevel {
     let mut analyzer = crate::audio::loudness::LoudnessAnalyzer::new(sample_rate);
     for sample in &samples {
         let sample = if sample.is_finite() { *sample } else { 0.0 };
@@ -234,7 +244,11 @@ fn normalize_voice_to_r128(mut samples: Vec<f32>, sample_rate: u32, target_lufs:
             .filter(|sample| sample.is_finite())
             .map(f32::abs)
             .fold(0.0_f32, f32::max);
-        if peak > 0.0 { 20.0 * f64::from(peak).log10() } else { -120.0 }
+        if peak > 0.0 {
+            20.0 * f64::from(peak).log10()
+        } else {
+            -120.0
+        }
     });
     let loudness_offset = measurement
         .integrated_lufs
@@ -243,16 +257,20 @@ fn normalize_voice_to_r128(mut samples: Vec<f32>, sample_rate: u32, target_lufs:
         .clamp(-48.0, 24.0);
     // Apply no gain that would exceed the conservative true-peak ceiling. This is static leveling,
     // not a substitute for the master lookahead limiter on the live bus.
-    let gain_db = loudness_offset
-        .min(-1.5 - peak_db)
-        .clamp(-48.0, 24.0) as f32;
+    let gain_db = loudness_offset.min(-1.5 - peak_db).clamp(-48.0, 24.0) as f32;
     let gain = 10.0_f32.powf(gain_db / 20.0);
     for sample in &mut samples {
-        *sample = if sample.is_finite() { *sample * gain } else { 0.0 };
+        *sample = if sample.is_finite() {
+            *sample * gain
+        } else {
+            0.0
+        };
     }
     VoiceLevel {
         samples,
-        integrated_lufs: measurement.integrated_lufs.map(|lufs| lufs + f64::from(gain_db)),
+        integrated_lufs: measurement
+            .integrated_lufs
+            .map(|lufs| lufs + f64::from(gain_db)),
         gain_db,
     }
 }
@@ -263,14 +281,21 @@ fn canonical_local_file(path_text: &str, extension: &str) -> Result<PathBuf, Str
         return Err(format!("a local .{extension} model file is required"));
     }
     let supplied = PathBuf::from(path_text.trim());
-    let path = fs::canonicalize(&supplied)
-        .map_err(|error| format!("cannot resolve local model file {}: {error}", supplied.display()))?;
+    let path = fs::canonicalize(&supplied).map_err(|error| {
+        format!(
+            "cannot resolve local model file {}: {error}",
+            supplied.display()
+        )
+    })?;
     if !path.is_file() {
         return Err(format!("model path is not a file: {}", path.display()));
     }
     crate::import::ensure_local_path(&path)
         .map_err(|error| format!("TTS models must be stored locally: {error:#}"))?;
-    let actual = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
+    let actual = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
     if !actual.eq_ignore_ascii_case(extension) {
         return Err(format!("expected a local .{extension} model file"));
     }
@@ -283,7 +308,10 @@ fn next_dubplate_filename() -> String {
         .map(|duration| duration.as_millis())
         .unwrap_or_default();
     let sequence = DUBPLATE_FILE_ID.fetch_add(1, Ordering::Relaxed);
-    format!("dubplate-{unix_millis}-{}-{sequence}.wav", std::process::id())
+    format!(
+        "dubplate-{unix_millis}-{}-{sequence}.wav",
+        std::process::id()
+    )
 }
 
 fn write_pcm_wav(path: &Path, sample_rate: u32, samples: &[f32]) -> Result<(), String> {
@@ -296,7 +324,11 @@ fn write_pcm_wav(path: &Path, sample_rate: u32, samples: &[f32]) -> Result<(), S
     let mut writer = hound::WavWriter::create(path, spec)
         .map_err(|error| format!("could not create dubplate WAV {}: {error}", path.display()))?;
     for sample in samples {
-        let sample = if sample.is_finite() { sample.clamp(-1.0, 1.0) } else { 0.0 };
+        let sample = if sample.is_finite() {
+            sample.clamp(-1.0, 1.0)
+        } else {
+            0.0
+        };
         writer
             .write_sample((sample * i16::MAX as f32).round() as i16)
             .map_err(|error| format!("could not write dubplate audio: {error}"))?;
@@ -308,9 +340,7 @@ fn write_pcm_wav(path: &Path, sample_rate: u32, samples: &[f32]) -> Result<(), S
 
 fn parse_key_pitch_class(value: &str) -> Option<u8> {
     let key = value.trim().split_whitespace().next()?.to_ascii_lowercase();
-    let normalized = key
-        .replace("♯", "#")
-        .replace("♭", "b");
+    let normalized = key.replace("♯", "#").replace("♭", "b");
     match normalized.as_str() {
         "c" | "b#" => Some(0),
         "c#" | "db" => Some(1),
@@ -333,9 +363,8 @@ fn transpose_to_key(samples: &[f32], sample_rate: u32, target_key: u8) -> Option
     let fundamental = estimate_median_f0(samples, sample_rate)?;
     let voice_midi = 69.0 + 12.0 * (fundamental / 440.0).log2();
     let current_pitch_class = voice_midi.round() as i32;
-    let difference = (i32::from(target_key) - current_pitch_class.rem_euclid(12) + 6)
-        .rem_euclid(12)
-        - 6;
+    let difference =
+        (i32::from(target_key) - current_pitch_class.rem_euclid(12) + 6).rem_euclid(12) - 6;
     if difference == 0 {
         return Some((normalize_peak(samples.to_vec()), 0));
     }
@@ -368,7 +397,11 @@ fn normalize_peak(mut samples: Vec<f32>) -> Vec<f32> {
     if peak > 1.0e-6 {
         let gain = TARGET_PEAK / peak;
         for sample in &mut samples {
-            *sample = if sample.is_finite() { *sample * gain } else { 0.0 };
+            *sample = if sample.is_finite() {
+                *sample * gain
+            } else {
+                0.0
+            };
         }
     }
     samples
@@ -382,13 +415,14 @@ fn estimate_median_f0(samples: &[f32], sample_rate: u32) -> Option<f32> {
     let frame_size = (sample_rate as usize * 32 / 1_000).max(128);
     let hop_size = (sample_rate as usize * 12 / 1_000).max(64);
     let min_lag = (sample_rate as usize / 400).max(1);
-    let max_lag = (sample_rate as usize / 65).max(min_lag + 1).min(frame_size / 2);
+    let max_lag = (sample_rate as usize / 65)
+        .max(min_lag + 1)
+        .min(frame_size / 2);
     let mut pitches = Vec::new();
     let mut start = 0usize;
     while start + frame_size <= samples.len() {
         let window = &samples[start..start + frame_size];
-        let energy = window.iter().map(|sample| sample * sample).sum::<f32>()
-            / frame_size as f32;
+        let energy = window.iter().map(|sample| sample * sample).sum::<f32>() / frame_size as f32;
         if energy > 1.0e-5 {
             let mut correlations = Vec::with_capacity(max_lag - min_lag + 1);
             let mut best_lag = min_lag;
@@ -448,8 +482,8 @@ mod tests {
 
     #[test]
     fn patois_templates_keep_custom_block_and_name() {
-        let result = build_patois_text("wheel", "Forward the tune", Some("DJ K"))
-            .expect("valid phrase");
+        let result =
+            build_patois_text("wheel", "Forward the tune", Some("DJ K")).expect("valid phrase");
         assert!(result.contains("Forward the tune"));
         assert!(result.contains("DJ K"));
         assert!(build_patois_text("unknown", "hello", None).is_err());
@@ -458,8 +492,14 @@ mod tests {
     #[test]
     fn emotion_cues_are_validated_and_shape_local_phrase_prosody() {
         let phrase = build_patois_text("wheel", "Forward the tune", Some("DJ K")).unwrap();
-        assert!(apply_emotion_cue(&phrase, &normalize_emotion(Some("energetic")).unwrap()).starts_with("Yo!"));
-        assert!(apply_emotion_cue(&phrase, &normalize_emotion(Some("calm")).unwrap()).starts_with("Easy now..."));
+        assert!(
+            apply_emotion_cue(&phrase, &normalize_emotion(Some("energetic")).unwrap())
+                .starts_with("Yo!")
+        );
+        assert!(
+            apply_emotion_cue(&phrase, &normalize_emotion(Some("calm")).unwrap())
+                .starts_with("Easy now...")
+        );
         assert!(normalize_emotion(Some("cloud")).is_err());
     }
 
@@ -469,11 +509,15 @@ mod tests {
         let sample_rate = 48_000;
         let samples = (0..sample_rate * 3)
             .map(|index| {
-                (std::f64::consts::TAU * 220.0 * f64::from(index) / f64::from(sample_rate)).sin() as f32 * 0.01
+                (std::f64::consts::TAU * 220.0 * f64::from(index) / f64::from(sample_rate)).sin()
+                    as f32
+                    * 0.01
             })
             .collect::<Vec<_>>();
         let leveled = normalize_voice_to_r128(samples, sample_rate, -14.0);
-        assert!(leveled.integrated_lufs.is_some_and(|lufs| (lufs + 14.0).abs() < 0.2));
+        assert!(leveled
+            .integrated_lufs
+            .is_some_and(|lufs| (lufs + 14.0).abs() < 0.2));
         assert!(leveled.gain_db > 0.0 && leveled.gain_db < 40.0);
     }
 

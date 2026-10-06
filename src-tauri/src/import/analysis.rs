@@ -221,7 +221,8 @@ impl FeatureAccumulator {
         self.fft_buffer.fill(Complex32::new(0.0, 0.0));
         let mut window_square_sum = 0.0f64;
         for (index, sample) in self.mono_window.iter().copied().enumerate() {
-            let hann = 0.5 - 0.5 * (std::f32::consts::TAU * index as f32 / (FFT_SIZE - 1) as f32).cos();
+            let hann =
+                0.5 - 0.5 * (std::f32::consts::TAU * index as f32 / (FFT_SIZE - 1) as f32).cos();
             let value = sample * hann;
             self.fft_buffer[index].re = value;
             window_square_sum += f64::from(value) * f64::from(value);
@@ -255,8 +256,11 @@ impl FeatureAccumulator {
                 self.chroma[pitch_class] += f64::from(magnitude);
             }
         }
-        self.onsets
-            .push(if magnitude_sum > 1.0e-8 { flux / magnitude_sum } else { 0.0 });
+        self.onsets.push(if magnitude_sum > 1.0e-8 {
+            flux / magnitude_sum
+        } else {
+            0.0
+        });
         if magnitude_sum > 1.0e-8 {
             self.centroid_sum += centroid_numerator;
             self.centroid_weight += f64::from(magnitude_sum);
@@ -321,7 +325,8 @@ fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f6
         let score = dot / (left_power * right_power).sqrt().max(1.0e-12);
         scores.push((lag, score));
     }
-    let Some((best_lag, best_score)) = scores.iter().copied().max_by(|a, b| a.1.total_cmp(&b.1)) else {
+    let Some((best_lag, best_score)) = scores.iter().copied().max_by(|a, b| a.1.total_cmp(&b.1))
+    else {
         return (None, 0.0, Vec::new());
     };
     if best_score < 0.03 {
@@ -333,8 +338,8 @@ fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f6
         .filter(|(lag, _)| lag.abs_diff(best_lag) > 2 && lag.abs_diff(best_lag * 2) > 2)
         .map(|(_, score)| *score)
         .fold(0.0, f64::max);
-    let confidence = ((best_score - second_score).max(0.0) / best_score.max(1.0e-12) * 2.0)
-        .clamp(0.0, 1.0);
+    let confidence =
+        ((best_score - second_score).max(0.0) / best_score.max(1.0e-12) * 2.0).clamp(0.0, 1.0);
     let period_seconds = best_lag as f64 / frame_rate;
     let bpm = 60.0 / period_seconds;
 
@@ -369,8 +374,16 @@ fn estimate_key(chroma: &[f64; 12]) -> (Option<String>, f64) {
     }
     let mut candidates = Vec::<(f64, usize, bool)>::with_capacity(24);
     for tonic in 0..12 {
-        candidates.push((profile_correlation(chroma, &MAJOR_PROFILE, tonic), tonic, true));
-        candidates.push((profile_correlation(chroma, &MINOR_PROFILE, tonic), tonic, false));
+        candidates.push((
+            profile_correlation(chroma, &MAJOR_PROFILE, tonic),
+            tonic,
+            true,
+        ));
+        candidates.push((
+            profile_correlation(chroma, &MINOR_PROFILE, tonic),
+            tonic,
+            false,
+        ));
     }
     candidates.sort_by(|a, b| b.0.total_cmp(&a.0));
     let best = candidates[0];
@@ -433,14 +446,22 @@ fn classify_acoustic(
     let scores = AcousticScores {
         aggressive: (0.38 * loudness + 0.26 * brightness + 0.20 * transient + 0.16 * compression)
             .clamp(0.0, 1.0),
-        deep: (0.34 * low_ratio + 0.24 * (1.0 - brightness) + 0.18 * (1.0 - tempo)
-            + 0.14 * (1.0 - transient) + 0.10 * (1.0 - loudness))
+        deep: (0.34 * low_ratio
+            + 0.24 * (1.0 - brightness)
+            + 0.18 * (1.0 - tempo)
+            + 0.14 * (1.0 - transient)
+            + 0.10 * (1.0 - loudness))
             .clamp(0.0, 1.0),
-        conscious: (0.34 * mid_ratio + 0.24 * (1.0 - transient) + 0.20 * (1.0 - loudness)
+        conscious: (0.34 * mid_ratio
+            + 0.24 * (1.0 - transient)
+            + 0.20 * (1.0 - loudness)
             + 0.12 * (dynamic_range_db / 24.0).clamp(0.0, 1.0)
             + 0.10 * (1.0 - brightness))
             .clamp(0.0, 1.0),
-        hype: (0.30 * loudness + 0.28 * transient + 0.20 * tempo + 0.12 * brightness
+        hype: (0.30 * loudness
+            + 0.28 * transient
+            + 0.20 * tempo
+            + 0.12 * brightness
             + 0.10 * low_ratio)
             .clamp(0.0, 1.0),
     };

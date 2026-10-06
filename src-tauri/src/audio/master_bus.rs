@@ -14,11 +14,9 @@ use cpal::{
     FromSample, SampleFormat, SizedSample, Stream, StreamConfig,
 };
 use rtrb::{Consumer, Producer, PushError, RingBuffer};
-use std::{
-    sync::{
-        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering},
-        Arc, Mutex,
-    },
+use std::sync::{
+    atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering},
+    Arc, Mutex,
 };
 
 const MASTER_DECK_RING_FRAMES: usize = 2_048;
@@ -231,7 +229,10 @@ impl MasterTtsAux {
                 clip.frames = None;
                 continue;
             };
-            let second = frames.get(frame_index.saturating_add(1)).copied().unwrap_or(first);
+            let second = frames
+                .get(frame_index.saturating_add(1))
+                .copied()
+                .unwrap_or(first);
             let fraction = (clip.source_frame - frame_index as f64) as f32;
             sum.left += first.left + (second.left - first.left) * fraction;
             sum.right += first.right + (second.right - first.right) * fraction;
@@ -262,7 +263,9 @@ pub(super) struct DeckOutput {
 
 impl DeckOutput {
     pub(super) fn new(producer: Producer<DeckFrame>) -> Self {
-        Self { producer: Mutex::new(Some(producer)) }
+        Self {
+            producer: Mutex::new(Some(producer)),
+        }
     }
 
     pub(super) fn take_producer(&self) -> Result<Producer<DeckFrame>, String> {
@@ -357,10 +360,15 @@ impl MasterBus {
         start_deck_frame: u64,
     ) -> Result<u32, String> {
         if frames.is_empty() || input_sample_rate == 0 || deck_id >= self.statuses.len() {
-            return Err("TTS auxiliary audio must have frames, a valid sample rate, and a valid deck".to_owned());
+            return Err(
+                "TTS auxiliary audio must have frames, a valid sample rate, and a valid deck"
+                    .to_owned(),
+            );
         }
         let config = self.ensure_started()?;
-        let frame_bytes = frames.len().saturating_mul(std::mem::size_of::<StereoFrame>());
+        let frame_bytes = frames
+            .len()
+            .saturating_mul(std::mem::size_of::<StereoFrame>());
         if frame_bytes > MAX_MASTER_TTS_BYTES {
             return Err("TTS audio buffer exceeds the 64 MiB master-aux limit".to_owned());
         }
@@ -375,12 +383,18 @@ impl MasterBus {
         retained.retain(|buffer| Arc::strong_count(buffer) > 1);
         let retained_bytes = retained
             .iter()
-            .map(|buffer| buffer.len().saturating_mul(std::mem::size_of::<StereoFrame>()))
+            .map(|buffer| {
+                buffer
+                    .len()
+                    .saturating_mul(std::mem::size_of::<StereoFrame>())
+            })
             .fold(0usize, usize::saturating_add);
         if retained.len() >= MAX_MASTER_TTS_BUFFERS
             || retained_bytes.saturating_add(frame_bytes) > MAX_MASTER_TTS_BYTES
         {
-            return Err("master TTS queue is busy; wait for the current shoutout to finish".to_owned());
+            return Err(
+                "master TTS queue is busy; wait for the current shoutout to finish".to_owned(),
+            );
         }
 
         let event = MasterTtsEvent {
@@ -495,7 +509,9 @@ impl MasterBus {
                 flush_requested,
                 pitch_lock_enabled,
             ),
-            format => Err(format!("unsupported native output sample format: {format:?}")),
+            format => Err(format!(
+                "unsupported native output sample format: {format:?}"
+            )),
         }?;
         stream
             .play()
@@ -580,7 +596,9 @@ where
             },
             None,
         )
-        .map_err(|error| format!("could not create the single native master output stream: {error}"))
+        .map_err(|error| {
+            format!("could not create the single native master output stream: {error}")
+        })
 }
 
 impl MasterOutputGraph {
@@ -595,9 +613,10 @@ impl MasterOutputGraph {
         }
         let timestamp = info.timestamp();
         let playback_delay = timestamp.playback.duration_since(timestamp.callback);
-        let callback_start_ns = self.clock.now_ns().saturating_add(
-            playback_delay.as_nanos().min(u64::MAX as u128) as u64,
-        );
+        let callback_start_ns = self
+            .clock
+            .now_ns()
+            .saturating_add(playback_delay.as_nanos().min(u64::MAX as u128) as u64);
         let capture_this_callback = self.recording.flags.is_active();
         let active_a = self.statuses[0].playing.load(Ordering::Relaxed);
         let active_b = self.statuses[1].playing.load(Ordering::Relaxed);
@@ -636,10 +655,14 @@ impl MasterOutputGraph {
                 }
             };
             if deck_a.advances_timeline {
-                self.statuses[0].position_frames.fetch_add(1, Ordering::Relaxed);
+                self.statuses[0]
+                    .position_frames
+                    .fetch_add(1, Ordering::Relaxed);
             }
             if deck_b.advances_timeline {
-                self.statuses[1].position_frames.fetch_add(1, Ordering::Relaxed);
+                self.statuses[1]
+                    .position_frames
+                    .fetch_add(1, Ordering::Relaxed);
             }
             let (deck_a_audio, samples_a, tts_a) = if active_a && !discard_a {
                 (
@@ -652,7 +675,11 @@ impl MasterOutputGraph {
                     deck_a.tts_audio,
                 )
             } else {
-                (StereoFrame::default(), StereoFrame::default(), StereoFrame::default())
+                (
+                    StereoFrame::default(),
+                    StereoFrame::default(),
+                    StereoFrame::default(),
+                )
             };
             let (deck_b_audio, samples_b, tts_b) = if active_b && !discard_b {
                 (
@@ -665,7 +692,11 @@ impl MasterOutputGraph {
                     deck_b.tts_audio,
                 )
             } else {
-                (StereoFrame::default(), StereoFrame::default(), StereoFrame::default())
+                (
+                    StereoFrame::default(),
+                    StereoFrame::default(),
+                    StereoFrame::default(),
+                )
             };
             let samples = StereoFrame {
                 left: samples_a.left + samples_b.left,
@@ -692,7 +723,9 @@ impl MasterOutputGraph {
                 left: tts_a.left + tts_b.left + global_tts.left,
                 right: tts_a.right + tts_b.right + global_tts.right,
             };
-            let mixed = self.mixer.process_frame(deck_a_audio, deck_b_audio, samples, tts);
+            let mixed = self
+                .mixer
+                .process_frame(deck_a_audio, deck_b_audio, samples, tts);
 
             let callback_offset_ns = ((frame_index as u128 * 1_000_000_000_u128)
                 / self.sample_rate.max(1) as u128)
@@ -734,7 +767,11 @@ impl MasterOutputGraph {
 
 #[inline]
 fn finite_sample(sample: f32) -> f32 {
-    if sample.is_finite() { sample } else { 0.0 }
+    if sample.is_finite() {
+        sample
+    } else {
+        0.0
+    }
 }
 
 #[cfg(test)]
@@ -748,9 +785,18 @@ mod tests {
     fn standalone_master_tts_aux_waits_for_its_target_and_resamples_24khz_to_48khz() {
         let (mut producer, consumer) = RingBuffer::new(4);
         let frames: Arc<[StereoFrame]> = vec![
-            StereoFrame { left: 0.0, right: 0.0 },
-            StereoFrame { left: 1.0, right: -1.0 },
-            StereoFrame { left: 0.0, right: 0.0 },
+            StereoFrame {
+                left: 0.0,
+                right: 0.0,
+            },
+            StereoFrame {
+                left: 1.0,
+                right: -1.0,
+            },
+            StereoFrame {
+                left: 0.0,
+                right: 0.0,
+            },
         ]
         .into();
         assert!(producer
@@ -765,18 +811,30 @@ mod tests {
         let mut aux = MasterTtsAux::new(consumer, 48_000);
         let generations = [7, 0];
 
-        assert_eq!(aux.next_frame([0, 0], generations, [true, false], [false, false]), StereoFrame::default());
-        assert_eq!(aux.next_frame([1, 0], generations, [true, false], [false, false]), StereoFrame::default());
+        assert_eq!(
+            aux.next_frame([0, 0], generations, [true, false], [false, false]),
+            StereoFrame::default()
+        );
+        assert_eq!(
+            aux.next_frame([1, 0], generations, [true, false], [false, false]),
+            StereoFrame::default()
+        );
         assert_eq!(
             aux.next_frame([2, 0], generations, [true, false], [false, false]),
-            StereoFrame { left: 0.0, right: 0.0 },
+            StereoFrame {
+                left: 0.0,
+                right: 0.0
+            },
         );
         let interpolated = aux.next_frame([3, 0], generations, [true, false], [false, false]);
         assert!((interpolated.left - 0.5).abs() < 1e-6);
         assert!((interpolated.right + 0.5).abs() < 1e-6);
         assert_eq!(
             aux.next_frame([4, 0], generations, [true, false], [false, false]),
-            StereoFrame { left: 1.0, right: -1.0 },
+            StereoFrame {
+                left: 1.0,
+                right: -1.0
+            },
         );
         let down_slope = aux.next_frame([5, 0], generations, [true, false], [false, false]);
         assert!((down_slope.left - 0.5).abs() < 1e-6);
@@ -786,7 +844,11 @@ mod tests {
     #[test]
     fn master_tts_aux_discards_events_from_a_replaced_deck_timeline() {
         let (mut producer, consumer) = RingBuffer::new(4);
-        let frames: Arc<[StereoFrame]> = vec![StereoFrame { left: 0.8, right: -0.8 }].into();
+        let frames: Arc<[StereoFrame]> = vec![StereoFrame {
+            left: 0.8,
+            right: -0.8,
+        }]
+        .into();
         assert!(producer
             .push(MasterTtsEvent {
                 frames,
@@ -810,7 +872,14 @@ mod tests {
     #[test]
     fn standalone_master_tts_is_summed_before_the_master_limiter() {
         let (mut producer, consumer) = RingBuffer::new(4);
-        let frames: Arc<[StereoFrame]> = vec![StereoFrame { left: 0.75, right: -0.75 }; 512].into();
+        let frames: Arc<[StereoFrame]> = vec![
+            StereoFrame {
+                left: 0.75,
+                right: -0.75
+            };
+            512
+        ]
+        .into();
         assert!(producer
             .push(MasterTtsEvent {
                 frames,
@@ -826,14 +895,20 @@ mod tests {
         for deck_frame in 0..1_024 {
             let global_tts = aux.next_frame([deck_frame], [1, 0], [true, false], [false, false]);
             let output = master.process_frame(
-                StereoFrame { left: 0.75, right: -0.75 },
+                StereoFrame {
+                    left: 0.75,
+                    right: -0.75,
+                },
                 StereoFrame::default(),
                 StereoFrame::default(),
                 global_tts,
             );
             peak = peak.max(output.left.abs()).max(output.right.abs());
         }
-        assert!(peak > 0.75, "global TTS was not included in the pre-limiter sum: {peak}");
+        assert!(
+            peak > 0.75,
+            "global TTS was not included in the pre-limiter sum: {peak}"
+        );
         assert!(peak <= 1.0, "post-sum limiter exceeded full scale: {peak}");
     }
 
@@ -841,14 +916,20 @@ mod tests {
     fn post_sum_master_limiter_handles_decks_samples_and_tts() {
         let meter = MasterMeter::new();
         let mut master = MasterMixer::new(48_000, meter.clone());
-        let source = StereoFrame { left: 0.8, right: -0.8 };
+        let source = StereoFrame {
+            left: 0.8,
+            right: -0.8,
+        };
         let mut peak = 0.0_f32;
         for _ in 0..8_000 {
             let output = master.process_frame(source, source, source, source);
             peak = peak.max(output.left.abs()).max(output.right.abs());
         }
         assert!(peak <= 1.0, "master output exceeded the PCM rail: {peak}");
-        assert!(meter.gain_reduction_db() > 0.0, "master limiter did not report gain reduction");
+        assert!(
+            meter.gain_reduction_db() > 0.0,
+            "master limiter did not report gain reduction"
+        );
         assert!(meter.limiter_latency_ms() >= 5.0);
     }
 
@@ -861,8 +942,14 @@ mod tests {
             output = master.process_frame(
                 StereoFrame::default(),
                 StereoFrame::default(),
-                StereoFrame { left: 0.2, right: -0.2 },
-                StereoFrame { left: 0.3, right: -0.3 },
+                StereoFrame {
+                    left: 0.2,
+                    right: -0.2,
+                },
+                StereoFrame {
+                    left: 0.3,
+                    right: -0.3,
+                },
             );
         }
         assert!((output.left - 0.5).abs() < 0.02);
@@ -876,7 +963,10 @@ mod tests {
         let mut master = MasterMixer::new(48_000, meter.clone());
         for _ in 0..8_000 {
             let _ = master.process_frame(
-                StereoFrame { left: 0.2, right: 0.1 },
+                StereoFrame {
+                    left: 0.2,
+                    right: 0.1,
+                },
                 StereoFrame::default(),
                 StereoFrame::default(),
                 StereoFrame::default(),

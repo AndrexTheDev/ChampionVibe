@@ -41,7 +41,9 @@ pub(crate) struct CaptureClock {
 
 impl CaptureClock {
     fn new() -> Self {
-        Self { origin: Instant::now() }
+        Self {
+            origin: Instant::now(),
+        }
     }
 
     pub(crate) fn now_ns(&self) -> u64 {
@@ -127,7 +129,9 @@ impl RecordingFormat {
             "mp3" | "mp3_320" => Ok(Self::Mp3_320),
             "oggVorbis" | "ogg" | "vorbis" => Ok(Self::OggVorbis),
             "m4aAac" | "m4a" | "aac" => Ok(Self::M4aAac),
-            _ => Err("Unknown recording format. Choose WAV, FLAC, MP3, OGG/Vorbis, or M4A/AAC.".into()),
+            _ => Err(
+                "Unknown recording format. Choose WAV, FLAC, MP3, OGG/Vorbis, or M4A/AAC.".into(),
+            ),
         }
     }
 
@@ -306,7 +310,11 @@ impl RecordingHub {
             return Err("The active audio device has an unsupported recording sample rate.".into());
         }
         if self.flags.active.load(Ordering::Acquire)
-            || self.snapshot.lock().map_err(|_| "Recording status is unavailable.")?.active
+            || self
+                .snapshot
+                .lock()
+                .map_err(|_| "Recording status is unavailable.")?
+                .active
         {
             return Err("A master recording is already running.".into());
         }
@@ -326,12 +334,16 @@ impl RecordingHub {
             .recv_timeout(START_TIMEOUT)
             .map_err(|_| "The recording worker did not start in time.".to_string())??;
         if self.clock.now_ns() >= license_deadline_ns {
-            self.flags.stop_reason.store(REASON_LICENSE_EXPIRED, Ordering::Release);
+            self.flags
+                .stop_reason
+                .store(REASON_LICENSE_EXPIRED, Ordering::Release);
             self.flags.active.store(false, Ordering::Release);
             return Err("Pro license expired; recording is unavailable.".into());
         }
         self.flags.start_ns.store(start_ns, Ordering::Relaxed);
-        self.flags.deadline_ns.store(license_deadline_ns, Ordering::Relaxed);
+        self.flags
+            .deadline_ns
+            .store(license_deadline_ns, Ordering::Relaxed);
         self.flags.dropped_frames.store(0, Ordering::Relaxed);
         self.flags.stop_reason.store(REASON_NONE, Ordering::Relaxed);
         self.flags.active.store(true, Ordering::Release);
@@ -411,7 +423,9 @@ fn lower_worker_priority() {
 fn lower_worker_priority() {}
 
 enum WorkerCommand {
-    Attach { consumer: Consumer<CapturedFrame> },
+    Attach {
+        consumer: Consumer<CapturedFrame>,
+    },
     Detach,
     Start {
         path: PathBuf,
@@ -517,7 +531,9 @@ impl StreamingPcmResampler {
                 break;
             }
             let first = self.frame_at(first_index).unwrap_or_default();
-            let second = self.frame_at(first_index.saturating_add(1)).unwrap_or(first);
+            let second = self
+                .frame_at(first_index.saturating_add(1))
+                .unwrap_or(first);
             let fraction = (self.next_output_position - first_index as f64) as f32;
             output[output_count] = StereoFrame {
                 left: first.left + (second.left - first.left) * fraction,
@@ -655,14 +671,15 @@ impl OggRecordingEncoder {
         let mut builder = vorbis_rs::VorbisEncoderBuilder::new_with_serial(
             std::num::NonZeroU32::new(output_rate)
                 .ok_or_else(|| "OGG output sample rate must be nonzero".to_owned())?,
-            std::num::NonZeroU8::new(2)
-                .ok_or_else(|| "OGG output must be stereo".to_owned())?,
+            std::num::NonZeroU8::new(2).ok_or_else(|| "OGG output must be stereo".to_owned())?,
             sink,
             NEXT_OGG_SERIAL.fetch_add(1, Ordering::Relaxed) as i32,
         );
-        builder.bitrate_management_strategy(vorbis_rs::VorbisBitrateManagementStrategy::QualityVbr {
-            target_quality: 0.45,
-        });
+        builder.bitrate_management_strategy(
+            vorbis_rs::VorbisBitrateManagementStrategy::QualityVbr {
+                target_quality: 0.45,
+            },
+        );
         let encoder = builder
             .build()
             .map_err(|error| format!("Could not initialize OGG/Vorbis encoder: {error}"))?;
@@ -757,12 +774,10 @@ impl AacMp4RecordingEncoder {
         writer
             .add_track(&track)
             .map_err(|error| format!("Could not add AAC audio track to M4A: {error}"))?;
-        let encoder = rusty_aac::encode::AacEncoder::new(
-            rusty_aac::encode::AacEncoderConfig {
-                bitrate_bps: Self::BITRATE_BPS,
-                ..rusty_aac::encode::AacEncoderConfig::default()
-            },
-        );
+        let encoder = rusty_aac::encode::AacEncoder::new(rusty_aac::encode::AacEncoderConfig {
+            bitrate_bps: Self::BITRATE_BPS,
+            ..rusty_aac::encode::AacEncoderConfig::default()
+        });
         Ok(Self {
             encoder,
             writer,
@@ -888,7 +903,9 @@ fn worker_loop(
     while !shutting_down {
         loop {
             match receiver.try_recv() {
-                Ok(WorkerCommand::Attach { consumer: new_consumer }) => {
+                Ok(WorkerCommand::Attach {
+                    consumer: new_consumer,
+                }) => {
                     drain_one(&mut consumer, &mut writer, &flags);
                     consumer = Some(new_consumer);
                 }
@@ -907,9 +924,17 @@ fn worker_loop(
                     if writer.is_some() {
                         let _ = reply.send(Err("A master recording is already running.".into()));
                     } else if consumer.is_none() {
-                        let _ = reply.send(Err("Load a track on at least one mix deck before recording.".into()));
+                        let _ = reply.send(Err(
+                            "Load a track on at least one mix deck before recording.".into(),
+                        ));
                     } else {
-                        match ActiveWriter::create(path, format, sample_rate, start_ns, license_deadline_ns) {
+                        match ActiveWriter::create(
+                            path,
+                            format,
+                            sample_rate,
+                            start_ns,
+                            license_deadline_ns,
+                        ) {
                             Ok(active) => {
                                 writer = Some(active);
                                 flags.dropped_frames.store(0, Ordering::Relaxed);
@@ -921,7 +946,9 @@ fn worker_loop(
                                         format: Some(format.label().into()),
                                         sample_rate: Some(format.output_sample_rate(sample_rate)),
                                         bit_depth: Some(format.bits_per_sample()),
-                                        path: writer.as_ref().map(|active| active.output_path.display().to_string()),
+                                        path: writer
+                                            .as_ref()
+                                            .map(|active| active.output_path.display().to_string()),
                                         frames_written: 0,
                                         dropped_frames: 0,
                                         error: None,
@@ -941,7 +968,8 @@ fn worker_loop(
                         let error = if reason == REASON_LICENSE_EXPIRED {
                             "Recording aborted: the Pro license expired.".to_string()
                         } else if reason == REASON_RING_OVERFLOW {
-                            "Recording aborted: the real-time capture buffer overflowed.".to_string()
+                            "Recording aborted: the real-time capture buffer overflowed."
+                                .to_string()
                         } else {
                             "There is no active master recording.".to_string()
                         };
@@ -1028,7 +1056,8 @@ fn worker_loop(
                                         current.status_code = "recording.saved".into();
                                         current.path = Some(file.path.clone());
                                         current.frames_written = file.frames;
-                                        current.dropped_frames = flags.dropped_frames.load(Ordering::Relaxed);
+                                        current.dropped_frames =
+                                            flags.dropped_frames.load(Ordering::Relaxed);
                                         current.error = None;
                                     }
                                     if let Some(reply) = pending_stop.take() {
@@ -1096,7 +1125,9 @@ fn worker_loop(
         let _ = fs::remove_file(active.encoded_partial_path);
     }
     if let Some(reply) = pending_stop.take() {
-        let _ = reply.send(Err("The recording worker stopped before finalizing the file.".into()));
+        let _ = reply.send(Err(
+            "The recording worker stopped before finalizing the file.".into(),
+        ));
     }
 }
 
@@ -1112,7 +1143,9 @@ fn handle_deferred_command(
     shutting_down: &mut bool,
 ) {
     match command {
-        WorkerCommand::Attach { consumer: new_consumer } => {
+        WorkerCommand::Attach {
+            consumer: new_consumer,
+        } => {
             drain_one(consumer, writer, flags);
             *consumer = Some(new_consumer);
         }
@@ -1120,13 +1153,23 @@ fn handle_deferred_command(
             drain_one(consumer, writer, flags);
             *consumer = None;
         }
-        WorkerCommand::Start { path, format, sample_rate, start_ns, license_deadline_ns, reply } => {
+        WorkerCommand::Start {
+            path,
+            format,
+            sample_rate,
+            start_ns,
+            license_deadline_ns,
+            reply,
+        } => {
             if writer.is_some() {
                 let _ = reply.send(Err("A master recording is already running.".into()));
             } else if consumer.is_none() {
-                let _ = reply.send(Err("Load a track on at least one mix deck before recording.".into()));
+                let _ = reply.send(Err(
+                    "Load a track on at least one mix deck before recording.".into(),
+                ));
             } else {
-                match ActiveWriter::create(path, format, sample_rate, start_ns, license_deadline_ns) {
+                match ActiveWriter::create(path, format, sample_rate, start_ns, license_deadline_ns)
+                {
                     Ok(active) => {
                         *writer = Some(active);
                         flags.dropped_frames.store(0, Ordering::Relaxed);
@@ -1138,7 +1181,9 @@ fn handle_deferred_command(
                                 format: Some(format.label().into()),
                                 sample_rate: Some(format.output_sample_rate(sample_rate)),
                                 bit_depth: Some(format.bits_per_sample()),
-                                path: writer.as_ref().map(|active| active.output_path.display().to_string()),
+                                path: writer
+                                    .as_ref()
+                                    .map(|active| active.output_path.display().to_string()),
                                 frames_written: 0,
                                 dropped_frames: 0,
                                 error: None,
@@ -1146,7 +1191,9 @@ fn handle_deferred_command(
                         }
                         let _ = reply.send(Ok(()));
                     }
-                    Err(error) => { let _ = reply.send(Err(error)); }
+                    Err(error) => {
+                        let _ = reply.send(Err(error));
+                    }
                 }
             }
         }
@@ -1206,11 +1253,14 @@ fn drain_one(
 
 fn frame_at_time(writer: &ActiveWriter, timestamp_ns: u64) -> u64 {
     let elapsed = timestamp_ns.saturating_sub(writer.start_ns) as u128;
-    ((elapsed * writer.input_sample_rate as u128) / 1_000_000_000_u128)
-        .min(u64::MAX as u128) as u64
+    ((elapsed * writer.input_sample_rate as u128) / 1_000_000_000_u128).min(u64::MAX as u128) as u64
 }
 
-fn flush_until(writer: &mut ActiveWriter, inclusive_frame: u64, flags: &CaptureFlags) -> Result<(), String> {
+fn flush_until(
+    writer: &mut ActiveWriter,
+    inclusive_frame: u64,
+    flags: &CaptureFlags,
+) -> Result<(), String> {
     if writer.max_frame.is_none() && inclusive_frame == 0 {
         return Ok(());
     }
@@ -1243,15 +1293,27 @@ fn flush_until(writer: &mut ActiveWriter, inclusive_frame: u64, flags: &CaptureF
 }
 
 fn quantize(sample: f32, bit_depth: u16) -> i32 {
-    let scale = if bit_depth == 24 { 8_388_607.0 } else { 32_767.0 };
+    let scale = if bit_depth == 24 {
+        8_388_607.0
+    } else {
+        32_767.0
+    };
     (sample.clamp(-1.0, 1.0) * scale).round() as i32
 }
 
 fn finite_sample(sample: f32) -> f32 {
-    if sample.is_finite() { sample } else { 0.0 }
+    if sample.is_finite() {
+        sample
+    } else {
+        0.0
+    }
 }
 
-fn update_snapshot(snapshot: &Mutex<RecordingSnapshot>, writer: &ActiveWriter, flags: &CaptureFlags) {
+fn update_snapshot(
+    snapshot: &Mutex<RecordingSnapshot>,
+    writer: &ActiveWriter,
+    flags: &CaptureFlags,
+) {
     if let Ok(mut current) = snapshot.lock() {
         current.active = true;
         current.frames_written = writer.frames_written;
@@ -1312,7 +1374,8 @@ impl ActiveWriter {
             return Err("A recording with this file name already exists.".into());
         }
         let partial_path = output_path.with_file_name(format!(".{file_name}.partial"));
-        let encoded_partial_path = output_path.with_file_name(format!(".{file_name}.encoded.partial"));
+        let encoded_partial_path =
+            output_path.with_file_name(format!(".{file_name}.encoded.partial"));
         if encoded_partial_path.exists() {
             return Err("A temporary recording file already exists.".into());
         }
@@ -1328,12 +1391,18 @@ impl ActiveWriter {
                     .map_err(|error| format!("Could not initialize the WAV encoder: {error}"))
             }
             RecordingFormat::Flac => Ok(PcmStageWriter::Raw16(BufWriter::new(file))),
-            RecordingFormat::Mp3_320 => Mp3RecordingEncoder::new(file, input_sample_rate, sample_rate)
-                .map(PcmStageWriter::Mp3),
-            RecordingFormat::OggVorbis => OggRecordingEncoder::new(file, input_sample_rate, sample_rate)
-                .map(PcmStageWriter::Ogg),
-            RecordingFormat::M4aAac => AacMp4RecordingEncoder::new(file, input_sample_rate, sample_rate)
-                .map(PcmStageWriter::M4a),
+            RecordingFormat::Mp3_320 => {
+                Mp3RecordingEncoder::new(file, input_sample_rate, sample_rate)
+                    .map(PcmStageWriter::Mp3)
+            }
+            RecordingFormat::OggVorbis => {
+                OggRecordingEncoder::new(file, input_sample_rate, sample_rate)
+                    .map(PcmStageWriter::Ogg)
+            }
+            RecordingFormat::M4aAac => {
+                AacMp4RecordingEncoder::new(file, input_sample_rate, sample_rate)
+                    .map(PcmStageWriter::M4a)
+            }
         };
         let writer = match writer_result {
             Ok(writer) => writer,
@@ -1375,8 +1444,9 @@ impl ActiveWriter {
                 wav.finalize()
                     .map_err(|error| format!("Could not finalize the WAV recording: {error}"))?;
                 sync_file(&self.partial_path, "WAV")?;
-                fs::rename(&self.partial_path, &self.output_path)
-                    .map_err(|error| format!("Could not publish the completed recording: {error}"))?;
+                fs::rename(&self.partial_path, &self.output_path).map_err(|error| {
+                    format!("Could not publish the completed recording: {error}")
+                })?;
             }
             PcmStageWriter::Raw16(mut raw) => {
                 raw.flush()
@@ -1390,32 +1460,38 @@ impl ActiveWriter {
                 )
                 .map_err(|error| format!("Could not encode FLAC recording: {error:#}"))?;
                 sync_file(&self.encoded_partial_path, "FLAC")?;
-                fs::rename(&self.encoded_partial_path, &self.output_path)
-                    .map_err(|error| format!("Could not publish the completed FLAC recording: {error}"))?;
+                fs::rename(&self.encoded_partial_path, &self.output_path).map_err(|error| {
+                    format!("Could not publish the completed FLAC recording: {error}")
+                })?;
                 let _ = fs::remove_file(&self.partial_path);
             }
             PcmStageWriter::Mp3(mp3) => {
                 self.frames_written = self.frames_written.saturating_add(mp3.finish()?);
                 sync_file(&self.partial_path, "MP3")?;
-                fs::rename(&self.partial_path, &self.output_path)
-                    .map_err(|error| format!("Could not publish the completed MP3 recording: {error}"))?;
+                fs::rename(&self.partial_path, &self.output_path).map_err(|error| {
+                    format!("Could not publish the completed MP3 recording: {error}")
+                })?;
             }
             PcmStageWriter::Ogg(ogg) => {
                 self.frames_written = self.frames_written.saturating_add(ogg.finish()?);
                 sync_file(&self.partial_path, "OGG/Vorbis")?;
-                fs::rename(&self.partial_path, &self.output_path)
-                    .map_err(|error| format!("Could not publish the completed OGG recording: {error}"))?;
+                fs::rename(&self.partial_path, &self.output_path).map_err(|error| {
+                    format!("Could not publish the completed OGG recording: {error}")
+                })?;
             }
             PcmStageWriter::M4a(m4a) => {
                 self.frames_written = self.frames_written.saturating_add(m4a.finish()?);
                 sync_file(&self.partial_path, "M4A/AAC")?;
-                fs::rename(&self.partial_path, &self.output_path)
-                    .map_err(|error| format!("Could not publish the completed M4A recording: {error}"))?;
+                fs::rename(&self.partial_path, &self.output_path).map_err(|error| {
+                    format!("Could not publish the completed M4A recording: {error}")
+                })?;
             }
         }
         if self.frames_written == 0 {
             let _ = fs::remove_file(&self.output_path);
-            return Err("The encoder produced no audio frames; the recording was not saved.".into());
+            return Err(
+                "The encoder produced no audio frames; the recording was not saved.".into(),
+            );
         }
         let metadata = fs::metadata(&self.output_path)
             .map_err(|error| format!("Could not read the completed recording: {error}"))?;
@@ -1466,7 +1542,10 @@ mod tests {
         assert!(!flags.should_capture(9));
         assert!(flags.should_capture(19));
         assert!(!flags.should_capture(20));
-        assert_eq!(flags.stop_reason.load(Ordering::Relaxed), REASON_LICENSE_EXPIRED);
+        assert_eq!(
+            flags.stop_reason.load(Ordering::Relaxed),
+            REASON_LICENSE_EXPIRED
+        );
         assert!(!flags.active.load(Ordering::Acquire));
     }
 
@@ -1476,24 +1555,31 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("system time is after Unix epoch")
             .as_nanos();
-        let unique = format!("championvibe-recording-test-{}-{timestamp}.wav", std::process::id());
+        let unique = format!(
+            "championvibe-recording-test-{}-{timestamp}.wav",
+            std::process::id()
+        );
         let path = std::env::temp_dir().join(unique);
         let hub = RecordingHub::new().expect("recording worker starts");
         let (mut master, consumer) = hub.new_capture_ring();
-        hub.attach(consumer, 48_000).expect("attach post-mix master tap");
+        hub.attach(consumer, 48_000)
+            .expect("attach post-mix master tap");
         hub.start(path.clone(), RecordingFormat::WavPcm16, 48_000, u64::MAX)
             .expect("start master recording");
 
         let start_ns = hub.flags.start_ns.load(Ordering::Acquire);
         for frame_index in 0..128_u64 {
             let timestamp_ns = start_ns.saturating_add(
-                ((frame_index as u128 * 1_000_000_000_u128) / 48_000)
-                    .min(u64::MAX as u128) as u64,
+                ((frame_index as u128 * 1_000_000_000_u128) / 48_000).min(u64::MAX as u128) as u64,
             );
             // This is the post-summation/post-limiter master sample. The recorder must
             // serialize it as-is rather than summing the source deck taps a second time.
             master
-                .push(CapturedFrame { timestamp_ns, left: 0.5, right: -0.5 })
+                .push(CapturedFrame {
+                    timestamp_ns,
+                    left: 0.5,
+                    right: -0.5,
+                })
                 .expect("master ring has room");
         }
         let file = hub.stop().expect("stop and finalize master WAV");
@@ -1528,11 +1614,14 @@ mod tests {
         let start_ns = hub.flags.start_ns.load(Ordering::Acquire);
         for frame_index in 0..128_u64 {
             let timestamp_ns = start_ns.saturating_add(
-                ((frame_index as u128 * 1_000_000_000_u128) / 44_100)
-                    .min(u64::MAX as u128) as u64,
+                ((frame_index as u128 * 1_000_000_000_u128) / 44_100).min(u64::MAX as u128) as u64,
             );
             producer
-                .push(CapturedFrame { timestamp_ns, left: 0.2, right: -0.2 })
+                .push(CapturedFrame {
+                    timestamp_ns,
+                    left: 0.2,
+                    right: -0.2,
+                })
                 .expect("capture ring has room");
         }
         let file = hub.stop().expect("stop and encode FLAC");
@@ -1540,7 +1629,8 @@ mod tests {
         assert_eq!(file.frames, 128);
         let mut flac = File::open(&path).expect("final FLAC is readable");
         let mut signature = [0_u8; 4];
-        flac.read_exact(&mut signature).expect("FLAC signature exists");
+        flac.read_exact(&mut signature)
+            .expect("FLAC signature exists");
         assert_eq!(&signature, b"fLaC");
         drop(hub);
         fs::remove_file(path).expect("remove temporary FLAC");
@@ -1565,7 +1655,8 @@ mod tests {
             ));
             let hub = RecordingHub::new().expect("recording worker starts");
             let (mut producer, consumer) = hub.new_capture_ring();
-            hub.attach(consumer, 48_000).expect("attach post-master tap");
+            hub.attach(consumer, 48_000)
+                .expect("attach post-master tap");
             let started = hub
                 .start(path.clone(), format, 48_000, u64::MAX)
                 .expect("start compressed master recording");
@@ -1574,8 +1665,8 @@ mod tests {
             let start_ns = hub.flags.start_ns.load(Ordering::Acquire);
             for frame_index in 0..8_192_u64 {
                 let timestamp_ns = start_ns.saturating_add(
-                    ((frame_index as u128 * 1_000_000_000_u128) / 48_000)
-                        .min(u64::MAX as u128) as u64,
+                    ((frame_index as u128 * 1_000_000_000_u128) / 48_000).min(u64::MAX as u128)
+                        as u64,
                 );
                 let phase = frame_index as f32 * 0.013;
                 producer
@@ -1593,7 +1684,11 @@ mod tests {
             drop(hub);
 
             let bytes = fs::read(&path).expect("final encoded file is readable");
-            assert!(bytes.len() > 128, "{} output should not be empty", format.label());
+            assert!(
+                bytes.len() > 128,
+                "{} output should not be empty",
+                format.label()
+            );
             match format {
                 RecordingFormat::Mp3_320 => {
                     let contains_320kbps_mpeg1_layer3_frame = bytes.windows(4).any(|header| {
@@ -1603,16 +1698,31 @@ mod tests {
                             && (header[1] >> 1) & 0x03 == 0x01
                             && (header[2] >> 4) & 0x0f == 0x0e
                     });
-                    assert!(contains_320kbps_mpeg1_layer3_frame, "MP3 frame header missing");
+                    assert!(
+                        contains_320kbps_mpeg1_layer3_frame,
+                        "MP3 frame header missing"
+                    );
                 }
                 RecordingFormat::OggVorbis => {
-                    assert!(bytes.starts_with(b"OggS"), "OGG page capture pattern missing");
+                    assert!(
+                        bytes.starts_with(b"OggS"),
+                        "OGG page capture pattern missing"
+                    );
                     assert!(bytes.windows(6).any(|window| window == b"\x01vorbis"));
                 }
                 RecordingFormat::M4aAac => {
-                    assert!(bytes.windows(4).any(|window| window == b"ftyp"), "MP4 ftyp box missing");
-                    assert!(bytes.windows(4).any(|window| window == b"mdat"), "MP4 mdat box missing");
-                    assert!(bytes.windows(4).any(|window| window == b"moov"), "MP4 moov box missing");
+                    assert!(
+                        bytes.windows(4).any(|window| window == b"ftyp"),
+                        "MP4 ftyp box missing"
+                    );
+                    assert!(
+                        bytes.windows(4).any(|window| window == b"mdat"),
+                        "MP4 mdat box missing"
+                    );
+                    assert!(
+                        bytes.windows(4).any(|window| window == b"moov"),
+                        "MP4 moov box missing"
+                    );
                     let mp4_reader = mp4::Mp4Reader::read_header(
                         File::open(&path).expect("M4A file opens"),
                         file.size_bytes,
@@ -1630,12 +1740,30 @@ mod tests {
     #[test]
     fn recording_format_parser_accepts_only_implemented_format_families() {
         assert_eq!(RecordingFormat::parse(None), Ok(RecordingFormat::WavPcm16));
-        assert_eq!(RecordingFormat::parse(Some("wavPcm16")), Ok(RecordingFormat::WavPcm16));
-        assert_eq!(RecordingFormat::parse(Some("wavPcm24")), Ok(RecordingFormat::WavPcm24));
-        assert_eq!(RecordingFormat::parse(Some("flac")), Ok(RecordingFormat::Flac));
-        assert_eq!(RecordingFormat::parse(Some("mp3")), Ok(RecordingFormat::Mp3_320));
-        assert_eq!(RecordingFormat::parse(Some("oggVorbis")), Ok(RecordingFormat::OggVorbis));
-        assert_eq!(RecordingFormat::parse(Some("m4a")), Ok(RecordingFormat::M4aAac));
+        assert_eq!(
+            RecordingFormat::parse(Some("wavPcm16")),
+            Ok(RecordingFormat::WavPcm16)
+        );
+        assert_eq!(
+            RecordingFormat::parse(Some("wavPcm24")),
+            Ok(RecordingFormat::WavPcm24)
+        );
+        assert_eq!(
+            RecordingFormat::parse(Some("flac")),
+            Ok(RecordingFormat::Flac)
+        );
+        assert_eq!(
+            RecordingFormat::parse(Some("mp3")),
+            Ok(RecordingFormat::Mp3_320)
+        );
+        assert_eq!(
+            RecordingFormat::parse(Some("oggVorbis")),
+            Ok(RecordingFormat::OggVorbis)
+        );
+        assert_eq!(
+            RecordingFormat::parse(Some("m4a")),
+            Ok(RecordingFormat::M4aAac)
+        );
         assert!(RecordingFormat::parse(Some("opus")).is_err());
     }
 

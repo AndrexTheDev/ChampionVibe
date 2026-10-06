@@ -115,7 +115,9 @@ pub fn rebuild_in_state(state: &AppState) -> Result<RebuildReport> {
         let mut statement = connection.prepare(
             "SELECT track_id, source_path FROM instrumental_fingerprints ORDER BY track_id",
         )?;
-        let rows = statement.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     let missing_source_ids = indexed_sources
@@ -133,9 +135,8 @@ pub fn rebuild_in_state(state: &AppState) -> Result<RebuildReport> {
             .map_err(|_| anyhow::anyhow!("SQLite connection lock is poisoned"))?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         {
-            let mut delete = transaction.prepare(
-                "DELETE FROM instrumental_fingerprints WHERE track_id = ?1",
-            )?;
+            let mut delete =
+                transaction.prepare("DELETE FROM instrumental_fingerprints WHERE track_id = ?1")?;
             for track_id in missing_source_ids {
                 delete.execute([track_id])?;
             }
@@ -216,8 +217,9 @@ pub fn set_track_tags_in_state(
     let mut normalized = Vec::with_capacity(tags.len());
     let mut seen = HashSet::with_capacity(tags.len());
     for tag in tags {
-        let namespace = normalize_namespace(&tag.namespace)
-            .ok_or_else(|| anyhow::anyhow!("unsupported manual tag namespace: {}", tag.namespace))?;
+        let namespace = normalize_namespace(&tag.namespace).ok_or_else(|| {
+            anyhow::anyhow!("unsupported manual tag namespace: {}", tag.namespace)
+        })?;
         let display_tag = tag.tag.trim();
         anyhow::ensure!(
             !display_tag.is_empty() && display_tag.chars().count() <= 96,
@@ -293,7 +295,10 @@ pub fn list_families(connection: &Connection, limit: u32) -> Result<Vec<RiddimFa
         .context("could not read riddim families")
 }
 
-pub fn family_for_track(connection: &Connection, track_id: i64) -> Result<Option<TrackRiddimFamily>> {
+pub fn family_for_track(
+    connection: &Connection,
+    track_id: i64,
+) -> Result<Option<TrackRiddimFamily>> {
     connection
         .query_row(
             "SELECT f.id, f.name, f.track_count, m.match_score, m.match_method
@@ -324,9 +329,7 @@ fn missing_instrumentals(connection: &Connection) -> Result<Vec<(i64, String)>> 
            AND (f.track_id IS NULL OR f.source_path != s.file_path OR f.algorithm_version != ?1)
          ORDER BY s.track_id",
     )?;
-    let rows = statement.query_map([FINGERPRINT_VERSION], |row| {
-        Ok((row.get(0)?, row.get(1)?))
-    })?;
+    let rows = statement.query_map([FINGERPRINT_VERSION], |row| Ok((row.get(0)?, row.get(1)?)))?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .context("could not locate unindexed instrumental stems")
 }
@@ -349,7 +352,8 @@ fn store_fingerprints(
                 fingerprint_hash = excluded.fingerprint_hash,
                 created_at = excluded.created_at",
         )?;
-        let mut clear_bands = transaction.prepare("DELETE FROM fingerprint_bands WHERE track_id = ?1")?;
+        let mut clear_bands =
+            transaction.prepare("DELETE FROM fingerprint_bands WHERE track_id = ?1")?;
         let mut insert_band = transaction.prepare(
             "INSERT INTO fingerprint_bands(track_id, band, band_value) VALUES (?1, ?2, ?3)",
         )?;
@@ -830,8 +834,8 @@ fn fingerprint_instrumental(path: &Path) -> Result<Fingerprint> {
         let interleaved_count = decoded.samples_interleaved();
         let mut interleaved = vec![0.0f32; interleaved_count];
         decoded.copy_to_slice_interleaved(&mut interleaved);
-        let max_input_frames = (u64::from(sample_rate)
-            .saturating_mul(u64::from(MAX_FINGERPRINT_SECONDS))) as usize;
+        let max_input_frames =
+            (u64::from(sample_rate).saturating_mul(u64::from(MAX_FINGERPRINT_SECONDS))) as usize;
         for channel_frame in interleaved.chunks_exact(channels) {
             if mono.len() >= max_input_frames {
                 break 'packets;
@@ -854,18 +858,21 @@ fn fingerprint_instrumental(path: &Path) -> Result<Fingerprint> {
     if mono.len() > input_limit {
         mono.truncate(input_limit);
     }
-    let output_length = ((mono.len() as u64 * u64::from(TARGET_SAMPLE_RATE))
-        / u64::from(input_rate)) as usize;
+    let output_length =
+        ((mono.len() as u64 * u64::from(TARGET_SAMPLE_RATE)) / u64::from(input_rate)) as usize;
     let mut samples = Vec::with_capacity(output_length.max(FFT_SIZE));
     for output_index in 0..output_length {
-        let source_position = output_index as f64 * f64::from(input_rate)
-            / f64::from(TARGET_SAMPLE_RATE);
+        let source_position =
+            output_index as f64 * f64::from(input_rate) / f64::from(TARGET_SAMPLE_RATE);
         let first_index = (source_position.floor() as usize).min(mono.len() - 1);
         let second_index = first_index.saturating_add(1).min(mono.len() - 1);
         let fraction = (source_position - first_index as f64) as f32;
         samples.push(mono[first_index] + (mono[second_index] - mono[first_index]) * fraction);
     }
-    anyhow::ensure!(samples.len() >= FFT_SIZE, "instrumental stem is shorter than the fingerprint window");
+    anyhow::ensure!(
+        samples.len() >= FFT_SIZE,
+        "instrumental stem is shorter than the fingerprint window"
+    );
 
     let mut planner = FftPlanner::<f32>::new();
     let fft = planner.plan_fft_forward(FFT_SIZE);
@@ -881,8 +888,7 @@ fn fingerprint_instrumental(path: &Path) -> Result<Fingerprint> {
         let time_bin = ((start * TIME_BINS) / sample_duration).min(TIME_BINS - 1);
         for index in 0..FFT_SIZE {
             let window = 0.5f32
-                - 0.5f32
-                    * (std::f32::consts::TAU * index as f32 / (FFT_SIZE - 1) as f32).cos();
+                - 0.5f32 * (std::f32::consts::TAU * index as f32 / (FFT_SIZE - 1) as f32).cos();
             fft_buffer[index] = Complex32::new(samples[start + index] * window, 0.0);
         }
         fft.process(&mut fft_buffer);
@@ -933,11 +939,19 @@ fn fingerprint_instrumental(path: &Path) -> Result<Fingerprint> {
         features[time_bin * FEATURES_PER_BIN + SPECTRAL_BANDS] =
             bucket_log_energy[time_bin] - energy_mean;
     }
-    let norm = features.iter().map(|value| value * value).sum::<f64>().sqrt();
+    let norm = features
+        .iter()
+        .map(|value| value * value)
+        .sum::<f64>()
+        .sqrt();
     anyhow::ensure!(norm > 1.0e-9, "instrumental has no usable spectral energy");
     let quantized = features
         .into_iter()
-        .map(|value| ((value / norm) * i16::MAX as f64).round().clamp(-32767.0, 32767.0) as i16)
+        .map(|value| {
+            ((value / norm) * i16::MAX as f64)
+                .round()
+                .clamp(-32767.0, 32767.0) as i16
+        })
         .collect::<Vec<_>>();
     let simhash = calculate_simhash(&quantized);
     let hash = hex::encode(Sha256::digest(encode_features(&quantized)));
@@ -954,7 +968,11 @@ fn calculate_simhash(features: &[i16]) -> u64 {
         std::array::from_fn(|bit| {
             std::array::from_fn(|index| {
                 let seed = ((bit as u64) << 32) ^ index as u64 ^ 0x6a09_e667_f3bc_c909;
-                if mix64(seed) & 1 == 0 { 1 } else { -1 }
+                if mix64(seed) & 1 == 0 {
+                    1
+                } else {
+                    -1
+                }
             })
         })
     });

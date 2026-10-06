@@ -51,9 +51,15 @@ pub(super) fn run_worker(
         }
     };
     let tempo_changed = (playback_rate - 1.0).abs() > 0.0005;
-    let mut source = SharedStemSource::new(decoder, start_offset_frames, usize::from(tempo_changed) + 1);
+    let mut source =
+        SharedStemSource::new(decoder, start_offset_frames, usize::from(tempo_changed) + 1);
     let mut stretcher = if tempo_changed {
-        match WsolaProcessor::new(output_rate, playback_rate, stem_index == 1, Arc::clone(&schedule)) {
+        match WsolaProcessor::new(
+            output_rate,
+            playback_rate,
+            stem_index == 1,
+            Arc::clone(&schedule),
+        ) {
             Ok(processor) => Some(processor),
             Err(error) => {
                 if stem_index == 1 {
@@ -75,10 +81,7 @@ pub(super) fn run_worker(
 
         let decoded = if tempo_changed {
             let wsola_frame = match stretcher.as_mut() {
-                Some(stretcher) => stretcher.next_frame(
-                    &mut || source.next_frame_for(0),
-                    &cancel,
-                ),
+                Some(stretcher) => stretcher.next_frame(&mut || source.next_frame_for(0), &cancel),
                 None => unreachable!("tempo-changing stems have a WSOLA processor"),
             };
             let wsola_frame = match wsola_frame {
@@ -87,7 +90,14 @@ pub(super) fn run_worker(
                     if stem_index == 1 {
                         schedule.finish();
                     }
-                    report_worker_error(&path, error, &status, &finished, &startup, &mut ready_sent);
+                    report_worker_error(
+                        &path,
+                        error,
+                        &status,
+                        &finished,
+                        &startup,
+                        &mut ready_sent,
+                    );
                     return;
                 }
             };
@@ -112,14 +122,24 @@ pub(super) fn run_worker(
                     if stem_index == 1 {
                         schedule.finish();
                     }
-                    report_worker_error(&path, error, &status, &finished, &startup, &mut ready_sent);
+                    report_worker_error(
+                        &path,
+                        error,
+                        &status,
+                        &finished,
+                        &startup,
+                        &mut ready_sent,
+                    );
                     return;
                 }
             }
         } else {
-            source
-                .next_frame_for(0)
-                .map(|frame| frame.map(|frame| PitchFrame { wsola: frame, varispeed: frame }))
+            source.next_frame_for(0).map(|frame| {
+                frame.map(|frame| PitchFrame {
+                    wsola: frame,
+                    varispeed: frame,
+                })
+            })
         };
 
         match decoded {
@@ -321,11 +341,10 @@ impl SharedStemSource {
             return Ok(None);
         }
         let offset = cursor.saturating_sub(self.base_index) as usize;
-        let frame = self
-            .frames
-            .get(offset)
-            .copied()
-            .ok_or_else(|| "internal stem branch requested a released source frame".to_owned())?;
+        let frame =
+            self.frames.get(offset).copied().ok_or_else(|| {
+                "internal stem branch requested a released source frame".to_owned()
+            })?;
         self.cursors[branch] = cursor.saturating_add(1);
 
         let consumed_by_all = self.cursors[..self.branch_count]
@@ -362,7 +381,9 @@ impl StemDecoder {
                 FormatOptions::default(),
                 MetadataOptions::default(),
             )
-            .map_err(|error| format!("{}: unsupported audio container ({error})", path.display()))?;
+            .map_err(|error| {
+                format!("{}: unsupported audio container ({error})", path.display())
+            })?;
         let (track_id, codec_parameters) = format
             .tracks()
             .iter()
@@ -466,11 +487,14 @@ pub(super) fn waveform_packet(
 
     if let Some(duration_ms) = duration_ms.filter(|duration| *duration > 0) {
         let duration_ms = duration_ms.min(86_400_000) as u64;
-        let expected_frames = (duration_ms.saturating_mul(u64::from(PEAK_SAMPLE_RATE)) / 1_000).max(1);
+        let expected_frames =
+            (duration_ms.saturating_mul(u64::from(PEAK_SAMPLE_RATE)) / 1_000).max(1);
         let mut decoder = StemDecoder::open(path, PEAK_SAMPLE_RATE)?;
         let mut frame_index = 0_u64;
         while frame_index < expected_frames {
-            let Some(frame) = decoder.next_frame()? else { break };
+            let Some(frame) = decoder.next_frame()? else {
+                break;
+            };
             let bucket = (frame_index.saturating_mul(peak_count as u64) / expected_frames)
                 .min((peak_count - 1) as u64) as usize;
             let magnitude = frame.left.abs().max(frame.right.abs());
@@ -578,7 +602,10 @@ mod tests {
     fn equal_rate_resampling_preserves_frames_and_flushes_tail() {
         let mut resampler = LinearResampler::new(48_000, 48_000);
         for value in [0.0, 1.0, 2.0] {
-            resampler.push(StereoFrame { left: value, right: value });
+            resampler.push(StereoFrame {
+                left: value,
+                right: value,
+            });
         }
 
         assert_eq!(resampler.next_frame(false).unwrap().left, 0.0);
@@ -592,7 +619,10 @@ mod tests {
     fn upsampling_interpolates_between_source_frames() {
         let mut resampler = LinearResampler::new(24_000, 48_000);
         for value in [0.0, 1.0, 2.0] {
-            resampler.push(StereoFrame { left: value, right: value });
+            resampler.push(StereoFrame {
+                left: value,
+                right: value,
+            });
         }
 
         let output: Vec<_> = std::iter::from_fn(|| resampler.next_frame(true))
@@ -604,10 +634,22 @@ mod tests {
     #[test]
     fn disabled_pitch_lock_uses_bounded_streaming_varispeed() {
         let mut source = std::collections::VecDeque::from(vec![
-            StereoFrame { left: 0.0, right: 0.0 },
-            StereoFrame { left: 1.0, right: 1.0 },
-            StereoFrame { left: 2.0, right: 2.0 },
-            StereoFrame { left: 3.0, right: 3.0 },
+            StereoFrame {
+                left: 0.0,
+                right: 0.0,
+            },
+            StereoFrame {
+                left: 1.0,
+                right: 1.0,
+            },
+            StereoFrame {
+                left: 2.0,
+                right: 2.0,
+            },
+            StereoFrame {
+                left: 3.0,
+                right: 3.0,
+            },
         ]);
         let mut next = || Ok(source.pop_front());
         let mut processor = VarispeedProcessor::new(1.5);
@@ -625,8 +667,22 @@ mod tests {
         assert_eq!(u32::from_le_bytes(packet[4..8].try_into().unwrap()), 128);
         assert_eq!(u32::from_le_bytes(packet[8..12].try_into().unwrap()), 2);
         assert_eq!(&packet[16..16 + peaks.len()], peaks.as_slice());
-        assert_eq!(u32::from_le_bytes(packet[16 + peaks.len()..20 + peaks.len()].try_into().unwrap()), 0);
-        assert_eq!(u32::from_le_bytes(packet[20 + peaks.len()..24 + peaks.len()].try_into().unwrap()), 500);
+        assert_eq!(
+            u32::from_le_bytes(
+                packet[16 + peaks.len()..20 + peaks.len()]
+                    .try_into()
+                    .unwrap()
+            ),
+            0
+        );
+        assert_eq!(
+            u32::from_le_bytes(
+                packet[20 + peaks.len()..24 + peaks.len()]
+                    .try_into()
+                    .unwrap()
+            ),
+            500
+        );
         assert!(waveform_packet_from_peak_blob(&[0, 1], Some(120.0), &[], 128).is_err());
     }
 }

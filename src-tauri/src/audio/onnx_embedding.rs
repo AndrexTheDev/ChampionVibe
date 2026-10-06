@@ -26,7 +26,12 @@ impl OnnxMirEmbedder {
             .with_inter_threads(1)?
             .with_parallel_execution(false)?
             .commit_from_file(path)
-            .with_context(|| format!("could not load local audio embedding model {}", path.display()))?;
+            .with_context(|| {
+                format!(
+                    "could not load local audio embedding model {}",
+                    path.display()
+                )
+            })?;
         let input_name = session
             .inputs()
             .first()
@@ -39,8 +44,14 @@ impl OnnxMirEmbedder {
             .context("audio embedding ONNX model has no outputs")?
             .name()
             .to_owned();
-        anyhow::ensure!(!input_name.is_empty(), "audio embedding ONNX input name is empty");
-        anyhow::ensure!(!output_name.is_empty(), "audio embedding ONNX output name is empty");
+        anyhow::ensure!(
+            !input_name.is_empty(),
+            "audio embedding ONNX input name is empty"
+        );
+        anyhow::ensure!(
+            !output_name.is_empty(),
+            "audio embedding ONNX output name is empty"
+        );
         Ok(Self {
             session,
             input_name,
@@ -48,7 +59,10 @@ impl OnnxMirEmbedder {
         })
     }
 
-    pub(crate) fn embed(&mut self, descriptor: &[i8; FEATURE_COUNT]) -> Result<[i8; FEATURE_COUNT]> {
+    pub(crate) fn embed(
+        &mut self,
+        descriptor: &[i8; FEATURE_COUNT],
+    ) -> Result<[i8; FEATURE_COUNT]> {
         let input = descriptor
             .iter()
             .map(|value| f32::from(*value) / 127.0)
@@ -115,7 +129,10 @@ mod tests {
 
     #[test]
     fn zero_embedding_stays_zero_and_bad_shapes_fail_closed() {
-        assert_eq!(quantize_embedding(&vec![0.0; FEATURE_COUNT]).unwrap(), [0; FEATURE_COUNT]);
+        assert_eq!(
+            quantize_embedding(&vec![0.0; FEATURE_COUNT]).unwrap(),
+            [0; FEATURE_COUNT]
+        );
         assert!(quantize_embedding(&[1.0, 2.0]).is_err());
     }
 }

@@ -94,7 +94,8 @@ impl SharedSchedule {
 
     fn wait_for(&self, sequence: usize, cancel: &AtomicBool) -> Option<u64> {
         let mut state = self.state.lock().ok()?;
-        while state.offsets.len() <= sequence && !state.finished && !cancel.load(Ordering::Acquire) {
+        while state.offsets.len() <= sequence && !state.finished && !cancel.load(Ordering::Acquire)
+        {
             let (next, _) = self
                 .changed
                 .wait_timeout(state, Duration::from_millis(10))
@@ -148,7 +149,11 @@ impl WsolaProcessor {
         let sample_rate = sample_rate.max(1);
         let window_frames = ((sample_rate as f32 * WINDOW_MS / 1_000.0).round() as usize)
             .clamp(MIN_WINDOW_FRAMES, MAX_WINDOW_FRAMES);
-        let window_frames = if window_frames % 2 == 0 { window_frames } else { window_frames + 1 };
+        let window_frames = if window_frames % 2 == 0 {
+            window_frames
+        } else {
+            window_frames + 1
+        };
         let hop_frames = window_frames / 2;
         let search_frames = ((sample_rate as f32 * SEARCH_MS / 1_000.0).round() as usize)
             .min(hop_frames / 2)
@@ -219,7 +224,8 @@ impl WsolaProcessor {
                 return Ok(());
             }
             let grain = self.grain_at(0);
-            self.output.extend(grain.iter().take(self.hop_frames).copied());
+            self.output
+                .extend(grain.iter().take(self.hop_frames).copied());
             self.previous_tail
                 .copy_from_slice(&grain[self.hop_frames..self.window_frames]);
             self.previous_start = 0;
@@ -227,13 +233,18 @@ impl WsolaProcessor {
             return Ok(());
         }
 
-        let advance = (self.hop_frames as f64 * f64::from(self.speed)).round().max(1.0) as u64;
+        let advance = (self.hop_frames as f64 * f64::from(self.speed))
+            .round()
+            .max(1.0) as u64;
         let expected = self.previous_start.saturating_add(advance);
         let minimum = expected
             .saturating_sub(self.search_frames as u64)
             .max(self.previous_start.saturating_add(1));
         let maximum = expected.saturating_add(self.search_frames as u64);
-        self.fill_until(maximum.saturating_add(self.window_frames as u64), next_input)?;
+        self.fill_until(
+            maximum.saturating_add(self.window_frames as u64),
+            next_input,
+        )?;
         if cancel.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -358,7 +369,8 @@ impl WsolaProcessor {
             let denominator = (reference_energy * candidate_energy).sqrt().max(1.0e-12);
             let normalized = correlation / denominator;
             // Keep the chosen position near the tempo-derived expectation unless alignment wins.
-            let distance_penalty = candidate.abs_diff(expected) as f64 / (self.search_frames as f64).max(1.0);
+            let distance_penalty =
+                candidate.abs_diff(expected) as f64 / (self.search_frames as f64).max(1.0);
             let score = normalized - distance_penalty * 0.002;
             if points > 0 && score > best_score {
                 best = candidate;
@@ -373,7 +385,9 @@ impl WsolaProcessor {
     }
 
     fn discard_before(&mut self, frame: u64) {
-        let discard = frame.saturating_sub(self.input_base).min(self.input.len() as u64) as usize;
+        let discard = frame
+            .saturating_sub(self.input_base)
+            .min(self.input.len() as u64) as usize;
         for _ in 0..discard {
             self.input.pop_front();
         }
@@ -403,7 +417,11 @@ impl WsolaProcessor {
 
 #[inline]
 fn finite_sample(sample: f32) -> f32 {
-    if sample.is_finite() { sample } else { 0.0 }
+    if sample.is_finite() {
+        sample
+    } else {
+        0.0
+    }
 }
 
 #[cfg(test)]
@@ -425,10 +443,14 @@ mod tests {
                         if input_index >= frames {
                             Ok(None)
                         } else {
-                            let phase = std::f64::consts::TAU * sine_hz * input_index as f64 / 48_000.0;
+                            let phase =
+                                std::f64::consts::TAU * sine_hz * input_index as f64 / 48_000.0;
                             let sample = phase.sin() as f32 * 0.25;
                             input_index += 1;
-                            Ok(Some(StereoFrame { left: sample, right: sample }))
+                            Ok(Some(StereoFrame {
+                                left: sample,
+                                right: sample,
+                            }))
                         }
                     },
                     &cancel,
@@ -480,7 +502,10 @@ mod tests {
     #[test]
     fn pitch_lock_mode_changes_use_a_ten_millisecond_ramp() {
         let mut transition = PitchLockTransition::new(1_000, false);
-        let wsola = StereoFrame { left: 1.0, right: 1.0 };
+        let wsola = StereoFrame {
+            left: 1.0,
+            right: 1.0,
+        };
         let varispeed = StereoFrame::default();
         for _ in 0..9 {
             let _ = transition.mix(wsola, varispeed, true);
@@ -496,5 +521,4 @@ mod tests {
         let _ = transition.mix(wsola, varispeed, false);
         assert_eq!(transition.weight(), 0.0);
     }
-
 }

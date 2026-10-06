@@ -59,8 +59,8 @@ pub fn verify_signed_license(
     let signature_bytes = STANDARD
         .decode(&signed.signature)
         .context("license signature is not valid base64")?;
-    let signature = Signature::from_slice(&signature_bytes)
-        .context("license signature must be 64 bytes")?;
+    let signature =
+        Signature::from_slice(&signature_bytes).context("license signature must be 64 bytes")?;
     let message = license_signing_bytes(&signed.payload)?;
     public_key
         .verify_strict(&message, &signature)

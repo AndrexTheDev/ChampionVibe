@@ -56,15 +56,13 @@ impl AutoGainRamp {
         self.current_gain
     }
 
-    pub(super) fn target_db(
-        enabled: bool,
-        integrated_lufs: Option<f32>,
-        target_lufs: f32,
-    ) -> f32 {
+    pub(super) fn target_db(enabled: bool, integrated_lufs: Option<f32>, target_lufs: f32) -> f32 {
         if !enabled {
             return 0.0;
         }
-        let Some(measured) = integrated_lufs.filter(|value| value.is_finite() && (-70.0..=10.0).contains(value)) else {
+        let Some(measured) =
+            integrated_lufs.filter(|value| value.is_finite() && (-70.0..=10.0).contains(value))
+        else {
             return 0.0;
         };
         let target = if target_lufs.is_finite() {

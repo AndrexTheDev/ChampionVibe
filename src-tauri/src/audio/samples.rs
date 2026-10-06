@@ -53,11 +53,7 @@ pub struct SampleBank {
 
 impl SampleBank {
     pub fn builtins() -> Self {
-        let clips = vec![
-            synth_siren(),
-            synth_airhorn(),
-            synth_vinyl_rewind(),
-        ];
+        let clips = vec![synth_siren(), synth_airhorn(), synth_vinyl_rewind()];
         let bytes = clips
             .iter()
             .map(|clip| clip.frames.len() * std::mem::size_of::<StereoFrame>())
@@ -67,29 +63,41 @@ impl SampleBank {
             .enumerate()
             .map(|(position, clip)| (clip.id, position))
             .collect();
-        Self { clips, index, bytes }
+        Self {
+            clips,
+            index,
+            bytes,
+        }
     }
 
     pub fn load_folder(directory: &Path) -> Result<Self, String> {
-        let canonical = fs::canonicalize(directory)
-            .map_err(|error| format!("cannot resolve sample folder {}: {error}", directory.display()))?;
+        let canonical = fs::canonicalize(directory).map_err(|error| {
+            format!(
+                "cannot resolve sample folder {}: {error}",
+                directory.display()
+            )
+        })?;
         crate::import::ensure_local_path(&canonical)
             .map_err(|error| format!("sample folders must be stored locally: {error:#}"))?;
         if !canonical.is_dir() {
-            return Err(format!("sample path is not a folder: {}", canonical.display()));
+            return Err(format!(
+                "sample path is not a folder: {}",
+                canonical.display()
+            ));
         }
 
         let mut bank = Self::builtins();
         let mut directories = vec![canonical];
         let mut files = Vec::<PathBuf>::new();
         while let Some(current) = directories.pop() {
-            let entries = fs::read_dir(&current)
-                .map_err(|error| format!("cannot scan sample folder {}: {error}", current.display()))?;
+            let entries = fs::read_dir(&current).map_err(|error| {
+                format!("cannot scan sample folder {}: {error}", current.display())
+            })?;
             for entry in entries {
                 let entry = entry.map_err(|error| format!("cannot enumerate samples: {error}"))?;
-                let file_type = entry
-                    .file_type()
-                    .map_err(|error| format!("cannot inspect sample {}: {error}", entry.path().display()))?;
+                let file_type = entry.file_type().map_err(|error| {
+                    format!("cannot inspect sample {}: {error}", entry.path().display())
+                })?;
                 if file_type.is_symlink() {
                     continue;
                 }
@@ -100,7 +108,9 @@ impl SampleBank {
                     && path
                         .extension()
                         .and_then(|extension| extension.to_str())
-                        .is_some_and(|extension| matches!(extension.to_ascii_lowercase().as_str(), "wav" | "wave"))
+                        .is_some_and(|extension| {
+                            matches!(extension.to_ascii_lowercase().as_str(), "wav" | "wave")
+                        })
                 {
                     files.push(path);
                 }
@@ -120,7 +130,11 @@ impl SampleBank {
         self.with_routed_wav(path, display_name, false)
     }
 
-    pub(super) fn with_tts_wav(&self, path: &Path, display_name: Option<&str>) -> Result<Self, String> {
+    pub(super) fn with_tts_wav(
+        &self,
+        path: &Path,
+        display_name: Option<&str>,
+    ) -> Result<Self, String> {
         self.with_routed_wav(path, display_name, true)
     }
 
@@ -140,7 +154,9 @@ impl SampleBank {
     }
 
     pub fn get(&self, id: u32) -> Option<&SampleClip> {
-        self.index.get(&id).and_then(|position| self.clips.get(*position))
+        self.index
+            .get(&id)
+            .and_then(|position| self.clips.get(*position))
     }
 
     pub(super) fn shared_frames(&self) -> Vec<Arc<[StereoFrame]>> {
@@ -157,14 +173,21 @@ impl SampleBank {
             .map(|clip| clip.id)
     }
 
-    fn add_wav(&mut self, path: &Path, display_name: Option<&str>, tts_aux: bool) -> Result<(), String> {
+    fn add_wav(
+        &mut self,
+        path: &Path,
+        display_name: Option<&str>,
+        tts_aux: bool,
+    ) -> Result<(), String> {
         if self.clips.len() >= MAX_SAMPLE_COUNT {
             return Err(format!("sample bank is limited to {MAX_SAMPLE_COUNT} WAVs"));
         }
         let canonical = fs::canonicalize(path)
             .map_err(|error| format!("cannot resolve sample {}: {error}", path.display()))?;
         let (sample_rate, frames) = read_wav(&canonical)?;
-        let bytes = frames.len().saturating_mul(std::mem::size_of::<StereoFrame>());
+        let bytes = frames
+            .len()
+            .saturating_mul(std::mem::size_of::<StereoFrame>());
         if self.bytes.saturating_add(bytes) > MAX_BANK_BYTES {
             return Err(format!(
                 "loading {} would exceed the {:.0} MiB in-memory sample limit",
@@ -179,10 +202,7 @@ impl SampleBank {
             .filter(|name| !name.trim().is_empty())
             .unwrap_or("user-sample");
         let fallback = strip_stage_hash_prefix(fallback);
-        let name = unique_display_name(
-            display_name.unwrap_or(fallback).trim(),
-            &self.clips,
-        );
+        let name = unique_display_name(display_name.unwrap_or(fallback).trim(), &self.clips);
         let key = canonical.to_string_lossy();
         let id = unique_id(stable_id(&key), &self.clips);
         self.clips.push(SampleClip {
@@ -240,7 +260,9 @@ fn read_wav(path: &Path) -> Result<(u32, Vec<StereoFrame>), String> {
                 .map(|sample| {
                     sample
                         .map(|sample| (sample as f32 / divisor).clamp(-1.0, 1.0))
-                        .map_err(|error| format!("corrupt PCM sample in {}: {error}", path.display()))
+                        .map_err(|error| {
+                            format!("corrupt PCM sample in {}: {error}", path.display())
+                        })
                 })
                 .collect::<Result<Vec<_>, _>>()?
         }
@@ -249,7 +271,13 @@ fn read_wav(path: &Path) -> Result<(u32, Vec<StereoFrame>), String> {
             .take(max_input_samples)
             .map(|sample| {
                 sample
-                    .map(|sample| if sample.is_finite() { sample.clamp(-1.0, 1.0) } else { 0.0 })
+                    .map(|sample| {
+                        if sample.is_finite() {
+                            sample.clamp(-1.0, 1.0)
+                        } else {
+                            0.0
+                        }
+                    })
                     .map_err(|error| format!("corrupt float sample in {}: {error}", path.display()))
             })
             .collect::<Result<Vec<_>, _>>()?,
@@ -262,7 +290,10 @@ fn read_wav(path: &Path) -> Result<(u32, Vec<StereoFrame>), String> {
         frames.push(StereoFrame { left, right });
     }
     if frames.is_empty() {
-        return Err(format!("sample {} contains no complete frames", path.display()));
+        return Err(format!(
+            "sample {} contains no complete frames",
+            path.display()
+        ));
     }
     Ok((spec.sample_rate, frames))
 }
@@ -283,7 +314,10 @@ fn strip_stage_hash_prefix(name: &str) -> &str {
 
 fn unique_display_name(name: &str, clips: &[SampleClip]) -> String {
     let base = if name.is_empty() { "user-sample" } else { name };
-    if !clips.iter().any(|clip| clip.name.eq_ignore_ascii_case(base)) {
+    if !clips
+        .iter()
+        .any(|clip| clip.name.eq_ignore_ascii_case(base))
+    {
         return base.to_owned();
     }
     for suffix in 2..=MAX_SAMPLE_COUNT {
@@ -417,7 +451,14 @@ mod tests {
         assert!(bank.id_by_name("siren").is_some());
         assert!(bank.id_by_name("airhorn").is_some());
         assert!(bank.id_by_name("vinyl-rewind").is_some());
-        assert_eq!(infos.iter().map(|sample| sample.id).collect::<std::collections::HashSet<_>>().len(), 3);
+        assert_eq!(
+            infos
+                .iter()
+                .map(|sample| sample.id)
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            3
+        );
         assert!(infos.iter().all(|sample| bank.get(sample.id).is_some()));
         assert!(bank.clips.iter().all(|clip| !clip.frames.is_empty()));
     }
@@ -447,7 +488,13 @@ mod tests {
         let sample_bank = SampleBank::builtins()
             .with_wav(&path, Some("airhorn-copy"))
             .expect("load a normal sample");
-        assert!(!sample_bank.clips.last().expect("user sample exists").tts_aux);
+        assert!(
+            !sample_bank
+                .clips
+                .last()
+                .expect("user sample exists")
+                .tts_aux
+        );
         let tts_bank = SampleBank::builtins()
             .with_tts_wav(&path, Some("dubplate"))
             .expect("load a TTS dubplate");

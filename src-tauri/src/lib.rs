@@ -3,9 +3,9 @@ mod commands;
 mod database;
 mod device_binding;
 mod import;
-mod mix_engine;
-mod media_source;
 mod localization;
+mod media_source;
+mod mix_engine;
 mod riddim;
 mod symphonia_support;
 mod tts;
@@ -32,9 +32,7 @@ pub fn run() {
                 app_data_dir,
             )?);
             let state = app.state::<commands::AppState>();
-            state
-                .import_manager
-                .ensure_worker(app.handle().clone())?;
+            state.import_manager.ensure_worker(app.handle().clone())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
