@@ -893,7 +893,7 @@ mod tests {
         let mut master = MasterMixer::new(48_000, MasterMeter::new());
         let mut peak = 0.0_f32;
         for deck_frame in 0..1_024 {
-            let global_tts = aux.next_frame([deck_frame], [1, 0], [true, false], [false, false]);
+            let global_tts = aux.next_frame([deck_frame, 0], [1, 0], [true, false], [false, false]);
             let output = master.process_frame(
                 StereoFrame {
                     left: 0.75,

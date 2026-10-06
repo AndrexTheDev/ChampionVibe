@@ -426,7 +426,7 @@ fn finite_sample(sample: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{SharedSchedule, WsolaProcessor};
+    use super::{PitchLockTransition, SharedSchedule, WsolaProcessor};
     use crate::audio::StereoFrame;
     use std::sync::{atomic::AtomicBool, Arc};
 

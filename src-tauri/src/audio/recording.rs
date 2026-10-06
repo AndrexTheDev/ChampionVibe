@@ -1584,7 +1584,7 @@ mod tests {
         }
         let file = hub.stop().expect("stop and finalize master WAV");
         assert_eq!(file.frames, 128);
-        let reader = hound::WavReader::open(&path).expect("final WAV is readable");
+        let mut reader = hound::WavReader::open(&path).expect("final WAV is readable");
         let samples: Vec<i16> = reader
             .samples::<i16>()
             .map(|sample| sample.expect("valid PCM sample"))
