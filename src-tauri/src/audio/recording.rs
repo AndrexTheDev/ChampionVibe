@@ -1708,7 +1708,7 @@ mod tests {
                         bytes.starts_with(b"OggS"),
                         "OGG page capture pattern missing"
                     );
-                    assert!(bytes.windows(6).any(|window| window == b"\x01vorbis"));
+                    assert!(bytes.windows(7).any(|window| window == b"\x01vorbis"));
                 }
                 RecordingFormat::M4aAac => {
                     assert!(

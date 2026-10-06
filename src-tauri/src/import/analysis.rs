@@ -325,7 +325,16 @@ fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f6
         let score = dot / (left_power * right_power).sqrt().max(1.0e-12);
         scores.push((lag, score));
     }
-    let Some((best_lag, best_score)) = scores.iter().copied().max_by(|a, b| a.1.total_cmp(&b.1))
+    let Some(max_score) = scores.iter().map(|(_, score)| *score).reduce(f64::max) else {
+        return (None, 0.0, Vec::new());
+    };
+    // Autocorrelation has equally strong peaks at multiples of a regular beat period. Prefer
+    // the shortest effectively tied lag so a 120 BPM pulse is not mistaken for 60 BPM.
+    let Some((best_lag, best_score)) = scores
+        .iter()
+        .copied()
+        .filter(|(_, score)| max_score - *score <= 1.0e-9)
+        .min_by_key(|(lag, _)| *lag)
     else {
         return (None, 0.0, Vec::new());
     };
@@ -491,7 +500,8 @@ mod tests {
             onsets[index] = 1.0;
         }
         let (bpm, confidence, grid) = estimate_beat_grid(&onsets, 24.0);
-        assert!((bpm.unwrap() - 117.0).abs() < 8.0);
+        let bpm = bpm.expect("periodic onsets should produce a tempo");
+        assert!((bpm - 117.0).abs() < 8.0, "estimated {bpm} BPM");
         assert!(confidence > 0.0);
         assert!(!grid.is_empty());
     }

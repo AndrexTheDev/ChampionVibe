@@ -656,7 +656,7 @@ mod tests {
         let output = std::iter::from_fn(|| processor.next_frame(&mut next).unwrap())
             .map(|frame| frame.left)
             .collect::<Vec<_>>();
-        assert_eq!(output, vec![0.0, 1.5, 3.0]);
+        assert_eq!(output, vec![0.0, 1.2, 2.4, 3.0]);
     }
 
     #[test]

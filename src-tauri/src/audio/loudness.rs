@@ -341,6 +341,40 @@ mod tests {
         analyzer.finish()
     }
 
+    fn measure_faded_tone(
+        amplitude: f32,
+        frequency_hz: f64,
+        sample_rate: u32,
+        seconds: f64,
+    ) -> (super::LoudnessAnalysis, f64) {
+        let mut analyzer = LoudnessAnalyzer::new(sample_rate);
+        let frame_count = (f64::from(sample_rate) * seconds) as usize;
+        let fade_frames = (sample_rate as usize / 10).max(1);
+        let mut sample_peak = 0.0_f64;
+        for index in 0..frame_count {
+            let frames_from_end = frame_count.saturating_sub(index + 1);
+            let fade_in = if index < fade_frames {
+                0.5 - 0.5 * (std::f64::consts::PI * index as f64 / fade_frames as f64).cos()
+            } else {
+                1.0
+            };
+            let fade_out = if frames_from_end < fade_frames {
+                0.5
+                    - 0.5
+                        * (std::f64::consts::PI * frames_from_end as f64 / fade_frames as f64)
+                            .cos()
+            } else {
+                1.0
+            };
+            let phase =
+                std::f64::consts::TAU * frequency_hz * index as f64 / f64::from(sample_rate);
+            let sample = amplitude * (fade_in.min(fade_out) as f32) * phase.sin() as f32;
+            sample_peak = sample_peak.max(f64::from(sample.abs()));
+            analyzer.push_stereo(sample, sample);
+        }
+        (analyzer.finish(), sample_peak)
+    }
+
     #[test]
     fn dual_mono_sine_matches_bs1770_loudness_and_target_gain() {
         let analysis = measure_tone(0.1, 1_000.0, 48_000, 4.0);
@@ -364,21 +398,23 @@ mod tests {
 
     #[test]
     fn true_peak_reports_inter_sample_peak_and_not_only_sample_peak() {
-        let analysis = measure_tone(0.8, 7_321.0, 48_000, 2.0);
+        // The smooth edges avoid measuring a deliberately abrupt start/stop transient. At 8 kHz,
+        // the six-sample period has no sample exactly at the sine's 0.8-amplitude peak.
+        let (analysis, sample_peak) = measure_faded_tone(0.8, 8_000.0, 48_000, 2.0);
         let true_peak = analysis.true_peak_dbtp.unwrap();
         let expected_dbtp = 20.0 * 0.8_f64.log10();
         assert!(
-            true_peak >= expected_dbtp - 0.08,
-            "true peak was {true_peak} dBTP"
+            (true_peak - expected_dbtp).abs() < 0.08,
+            "true peak was {true_peak} dBTP, expected {expected_dbtp}"
         );
+        let sample_peak_dbtp = 20.0 * sample_peak.log10();
         assert!(
-            true_peak <= expected_dbtp + 0.08,
-            "true peak was {true_peak} dBTP"
+            true_peak > sample_peak_dbtp + 1.0,
+            "true peak {true_peak} dBTP should exceed sample peak {sample_peak_dbtp} dBFS"
         );
 
-        let over_range = measure_tone(1.05, 997.0, 48_000, 2.0)
-            .true_peak_dbtp
-            .unwrap();
+        let (over_range_analysis, _) = measure_faded_tone(1.05, 997.0, 48_000, 2.0);
+        let over_range = over_range_analysis.true_peak_dbtp.unwrap();
         let expected_over_range = 20.0 * 1.05_f64.log10();
         assert!((over_range - expected_over_range).abs() < 0.08);
         assert!(over_range > 0.0, "positive true peaks must not be clipped");

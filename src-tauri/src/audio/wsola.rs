@@ -18,7 +18,7 @@ const WINDOW_MS: f32 = 40.0;
 const SEARCH_MS: f32 = 8.0;
 const MIN_WINDOW_FRAMES: usize = 128;
 const MAX_WINDOW_FRAMES: usize = 8_192;
-const SEARCH_CANDIDATES: usize = 96;
+const SEARCH_CANDIDATES: usize = 384;
 
 #[derive(Default)]
 struct ScheduleState {
@@ -233,10 +233,13 @@ impl WsolaProcessor {
             return Ok(());
         }
 
-        let advance = (self.hop_frames as f64 * f64::from(self.speed))
+        let nominal_advance = self.hop_frames as f64 * f64::from(self.speed);
+        // Anchor every grain to the cumulative ideal source position rather than the prior
+        // correlation offset. Otherwise a small one-sided alignment correction accumulates as
+        // an unintended tempo drift over a long track.
+        let expected = ((self.next_sequence as f64 + 1.0) * nominal_advance)
             .round()
             .max(1.0) as u64;
-        let expected = self.previous_start.saturating_add(advance);
         let minimum = expected
             .saturating_sub(self.search_frames as u64)
             .max(self.previous_start.saturating_add(1));
@@ -302,7 +305,9 @@ impl WsolaProcessor {
             .copy_from_slice(&grain[self.hop_frames..self.window_frames]);
         self.previous_start = selected;
         self.next_sequence = self.next_sequence.saturating_add(1);
-        let next_expected = self.previous_start.saturating_add(advance);
+        let next_expected = ((self.next_sequence as f64 + 1.0) * nominal_advance)
+            .round()
+            .max(1.0) as u64;
         let retain_from = next_expected.saturating_sub(self.search_frames as u64);
         self.discard_before(retain_from);
         Ok(())
@@ -477,8 +482,16 @@ mod tests {
         let input_frames = 48_000;
         let faster = stretch(440.0, 1.2, input_frames);
         let slower = stretch(440.0, 0.8, input_frames);
-        assert!(faster.len() < input_frames * 90 / 100);
-        assert!(slower.len() > input_frames * 110 / 100);
+        assert!(
+            faster.len() < input_frames * 90 / 100,
+            "fast WSOLA emitted {} frames for {input_frames} source frames",
+            faster.len()
+        );
+        assert!(
+            slower.len() > input_frames * 110 / 100,
+            "slow WSOLA emitted {} frames for {input_frames} source frames",
+            slower.len()
+        );
 
         for output in [&faster, &slower] {
             let crossings = output
