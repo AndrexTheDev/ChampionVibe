@@ -30,7 +30,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             #[cfg(target_os = "android")]
             let identity = mobile::init(app, api)?;
             #[cfg(not(target_os = "android"))]
-            let identity = desktop::init();
+            let identity = desktop::init::<R>();
             app.manage(identity);
             Ok(())
         })

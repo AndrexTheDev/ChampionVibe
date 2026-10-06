@@ -4,7 +4,8 @@ use tauri::{
     AppHandle, Runtime,
 };
 
-use crate::DeviceIdentity;
+/// Runtime-bound handle for the Android device identity plugin.
+pub struct DeviceIdentity<R: Runtime>(PluginHandle<R>);
 
 #[derive(Debug, Deserialize)]
 struct AndroidIdResponse {
