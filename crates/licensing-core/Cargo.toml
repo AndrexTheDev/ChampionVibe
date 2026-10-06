@@ -1,0 +1,19 @@
+[package]
+name = "championvibe-licensing-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Shared payment verification and signed-license primitives for ChampionVibe"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+bs58 = "0.5"
+chrono = { version = "0.4", features = ["serde"] }
+ed25519-dalek = "2"
+hex = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rust_decimal = { version = "1.36", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }

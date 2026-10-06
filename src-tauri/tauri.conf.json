@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ChampionVibe",
+  "version": "0.1.0",
+  "identifier": "com.championvibe.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ChampionVibe",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 880,
+        "minHeight": 620,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:1420 https:; img-src 'self' asset: http://asset.localhost data:; style-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "category": "Music",
+    "shortDescription": "ChampionVibe Audio Library",
+    "longDescription": "Cross-platform audio library and licensing foundation.",
+    "android": {
+      "minSdkVersion": 26
+    }
+  }
+}
