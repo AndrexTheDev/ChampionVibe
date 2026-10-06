@@ -6,6 +6,7 @@ use crate::audio::model_manager::{
     read_manifest, validate_manifest_models, SeparatorModelEntry, SeparatorModelManifest,
 };
 use anyhow::{Context, Result};
+use flacenc::error::Verify;
 use hound::WavReader;
 use ort::{session::Session, value::Tensor};
 use rustfft::{num_complex::Complex, Fft, FftPlanner};
@@ -608,12 +609,21 @@ fn create_mdx_session(
     #[cfg(not(windows))]
     let _ = use_directml;
 
-    let session = Session::builder()?
-        .with_intra_threads(threads)?
-        .with_inter_threads(1)?
-        .with_parallel_execution(false)?
+    let session = Session::builder()
+        .map_err(|error| anyhow::anyhow!("could not create ONNX session builder: {error}"))?
+        .with_intra_threads(threads)
+        .map_err(|error| anyhow::anyhow!("could not set ONNX intra-op threads: {error}"))?
+        .with_inter_threads(1)
+        .map_err(|error| anyhow::anyhow!("could not set ONNX inter-op threads: {error}"))?
+        .with_parallel_execution(false)
+        .map_err(|error| anyhow::anyhow!("could not disable ONNX parallel execution: {error}"))?
         .commit_from_file(path)
-        .with_context(|| format!("could not load local MDX-Net ONNX model {}", path.display()))?;
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "could not load local MDX-Net ONNX model {}: {error}",
+                path.display()
+            )
+        })?;
     Ok((session, "CPU"))
 }
 

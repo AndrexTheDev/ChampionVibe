@@ -56,6 +56,15 @@ const MAX_ACTIVE_SAMPLES: usize = 8;
 const REWIND_DURATION_SECONDS: f64 = 0.8;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(8);
 
+#[inline]
+fn finite_sample(sample: f32) -> f32 {
+    if sample.is_finite() {
+        sample
+    } else {
+        0.0
+    }
+}
+
 /// Builds or reuses a binary packet for the currently requested track only.
 /// The packet contains peak buckets and beat times, avoiding JSON number arrays over IPC.
 pub fn waveform_packet(
@@ -1578,7 +1587,7 @@ fn create_session(
     let (startup_tx, startup_rx) = mpsc::channel();
     let mut consumers = Vec::with_capacity(STEM_COUNT);
     let mut finished_flags = Vec::with_capacity(STEM_COUNT);
-    let mut workers = Vec::with_capacity(STEM_COUNT);
+    let mut workers: Vec<JoinHandle<()>> = Vec::with_capacity(STEM_COUNT);
 
     for (stem_index, path) in paths.into_iter().enumerate() {
         let capacity = if stem_index < active_stems {

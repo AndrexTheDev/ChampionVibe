@@ -376,7 +376,7 @@ impl StemDecoder {
         let source = MediaSourceStream::new(source, Default::default());
         let mut format = symphonia::default::get_probe()
             .probe(
-                &symphonia::core::probe::Hint::new(),
+                &symphonia::core::formats::probe::Hint::new(),
                 source,
                 FormatOptions::default(),
                 MetadataOptions::default(),

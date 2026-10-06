@@ -219,7 +219,7 @@ fn key_compatibility(outgoing: Option<&str>, incoming: Option<&str>) -> Option<f
     let (left_key, left_mode) = parse_key(outgoing?)?;
     let (right_key, right_mode) = parse_key(incoming?)?;
     let distance = (left_key as i16 - right_key as i16).rem_euclid(12);
-    let circle_score = match distance {
+    let circle_score: f64 = match distance {
         0 => 1.0,
         5 | 7 => 0.88,
         2 | 10 => 0.72,

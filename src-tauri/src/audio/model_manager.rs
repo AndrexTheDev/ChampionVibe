@@ -901,17 +901,22 @@ struct MdxSignature {
     frames: usize,
 }
 
-fn inspect_mdx_signature(path: &Path) -> Result<MdxSignature> {
-    let session = Session::builder()
-        .context("could not initialize ONNX Runtime")?
+fn local_onnx_session(path: &Path, model_label: &str) -> Result<Session> {
+    let builder = Session::builder()
+        .map_err(|error| anyhow::anyhow!("could not initialize ONNX Runtime: {error}"))?
         .with_intra_threads(1)
-        .context("could not configure ONNX Runtime")?
+        .map_err(|error| anyhow::anyhow!("could not configure ONNX Runtime: {error}"))?
         .with_inter_threads(1)
-        .context("could not configure ONNX Runtime")?
+        .map_err(|error| anyhow::anyhow!("could not configure ONNX Runtime: {error}"))?
         .with_parallel_execution(false)
-        .context("could not configure ONNX Runtime")?
-        .commit_from_file(path)
-        .with_context(|| format!("could not load separator ONNX model {}", path.display()))?;
+        .map_err(|error| anyhow::anyhow!("could not configure ONNX Runtime: {error}"))?;
+    builder.commit_from_file(path).map_err(|error| {
+        anyhow::anyhow!("could not load {model_label} {}: {error}", path.display())
+    })
+}
+
+fn inspect_mdx_signature(path: &Path) -> Result<MdxSignature> {
+    let session = local_onnx_session(path, "separator ONNX model")?;
     anyhow::ensure!(
         session.inputs().len() == 1 && session.outputs().len() == 1,
         "MDX-Net ONNX must have exactly one input and one output tensor"
@@ -983,16 +988,7 @@ fn validate_mdx_model(path: &Path, dim_f: usize, frames: usize) -> Result<()> {
 }
 
 fn validate_kokoro_onnx(path: &Path) -> Result<()> {
-    let session = Session::builder()
-        .context("could not initialize ONNX Runtime")?
-        .with_intra_threads(1)
-        .context("could not configure ONNX Runtime")?
-        .with_inter_threads(1)
-        .context("could not configure ONNX Runtime")?
-        .with_parallel_execution(false)
-        .context("could not configure ONNX Runtime")?
-        .commit_from_file(path)
-        .with_context(|| format!("could not load Kokoro ONNX model {}", path.display()))?;
+    let session = local_onnx_session(path, "Kokoro ONNX model")?;
     let mut input_ids = false;
     let mut style = false;
     let mut speed = false;

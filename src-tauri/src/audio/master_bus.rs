@@ -441,7 +441,7 @@ impl MasterBus {
         let sample_format = supported.sample_format();
         let config: StreamConfig = supported.into();
         let channels = config.channels as usize;
-        let sample_rate = config.sample_rate.0;
+        let sample_rate = config.sample_rate;
         if channels == 0 || sample_rate == 0 {
             return Err("audio device reported an invalid stream format".to_owned());
         }
@@ -581,7 +581,7 @@ where
     };
     device
         .build_output_stream::<T, _, _>(
-            config,
+            *config,
             move |output: &mut [T], info| graph.render(output, channels, info),
             move |error| {
                 callback_meter.device_errors.fetch_add(1, Ordering::Relaxed);
@@ -746,12 +746,12 @@ impl MasterOutputGraph {
                 continue;
             }
             if output_frame.len() == 1 {
-                output_frame[0] = T::from_sample((mixed.left + mixed.right) * 0.5);
+                output_frame[0] = T::from_sample_((mixed.left + mixed.right) * 0.5);
             } else {
-                output_frame[0] = T::from_sample(mixed.left);
-                output_frame[1] = T::from_sample(mixed.right);
+                output_frame[0] = T::from_sample_(mixed.left);
+                output_frame[1] = T::from_sample_(mixed.right);
                 for sample in output_frame.iter_mut().skip(2) {
-                    *sample = T::from_sample(0.0);
+                    *sample = T::from_sample_(0.0);
                 }
             }
         }

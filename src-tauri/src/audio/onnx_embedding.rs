@@ -21,17 +21,20 @@ pub(crate) struct OnnxMirEmbedder {
 impl OnnxMirEmbedder {
     pub(crate) fn load(path: &Path) -> Result<Self> {
         anyhow::ensure!(path.is_file(), "local audio embedding model does not exist");
-        let session = Session::builder()?
-            .with_intra_threads(1)?
-            .with_inter_threads(1)?
-            .with_parallel_execution(false)?
-            .commit_from_file(path)
-            .with_context(|| {
-                format!(
-                    "could not load local audio embedding model {}",
-                    path.display()
-                )
-            })?;
+        let builder = Session::builder()
+            .map_err(|error| anyhow::anyhow!("could not initialize ONNX Runtime: {error}"))?
+            .with_intra_threads(1)
+            .map_err(|error| anyhow::anyhow!("could not configure ONNX Runtime: {error}"))?
+            .with_inter_threads(1)
+            .map_err(|error| anyhow::anyhow!("could not configure ONNX Runtime: {error}"))?
+            .with_parallel_execution(false)
+            .map_err(|error| anyhow::anyhow!("could not configure ONNX Runtime: {error}"))?;
+        let session = builder.commit_from_file(path).map_err(|error| {
+            anyhow::anyhow!(
+                "could not load local audio embedding model {}: {error}",
+                path.display()
+            )
+        })?;
         let input_name = session
             .inputs()
             .first()

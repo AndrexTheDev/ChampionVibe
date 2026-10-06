@@ -13,10 +13,9 @@ use std::{
 use symphonia::core::{
     codecs::audio::AudioDecoderOptions,
     errors::Error as SymphoniaError,
-    formats::{FormatOptions, TrackType},
+    formats::{probe::Hint, FormatOptions, TrackType},
     io::MediaSourceStream,
     meta::MetadataOptions,
-    probe::Hint,
 };
 
 const FINGERPRINT_VERSION: i64 = 1;

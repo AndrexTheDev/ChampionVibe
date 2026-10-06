@@ -1,5 +1,5 @@
 use crate::{
-    audio,
+    audio::{self, AudioControlUpdate},
     audio::dj_engine::{plan_transition, transition_score, MirProfile, TransitionStyle},
     database, import,
 };
