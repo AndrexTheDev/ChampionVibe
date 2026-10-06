@@ -12,7 +12,7 @@ Actions artifacts are retained for 14 days. **The current workflow does not publ
 Push a commit to the branch you want to validate. Once the workflow completes, find its run ID with:
 
 ```sh
-gh run list --workflow ci.yml --branch <branch-name> --limit 5
+gh run list --workflow CI --branch <branch-name> --limit 5
 ```
 
 Watch a run and fail the command if a job fails:

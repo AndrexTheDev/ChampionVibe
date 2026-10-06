@@ -48,7 +48,7 @@ if [[ "$mode" == "latest" ]]; then
     exit 1
   fi
   run_id="$(gh run list \
-    --workflow ci.yml \
+    --workflow CI \
     --repo "$repo" \
     --branch "$branch" \
     --limit 30 \
