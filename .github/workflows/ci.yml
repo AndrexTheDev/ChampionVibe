@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -80,95 +80,13 @@ jobs:
           npm run build
 
       - name: Check Rust formatting
-        id: rust_fmt
-        continue-on-error: true
         run: cargo fmt --all -- --check
 
-      - name: Temporarily apply Rust formatting fixes
-        if: steps.rust_fmt.outcome == 'failure'
-        shell: bash
-        run: |
-          cargo fmt --all
-          git diff --check
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -u -- '*.rs'
-            git commit -m "Apply Rust formatting fixes"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi
-
       - name: Check the complete Rust workspace
-        id: rust_check
-        shell: bash
-        env:
-          CARGO_TERM_COLOR: never
-        run: |
-          set +e
-          cargo check --workspace --message-format=json 2>&1 | tee cargo-check.json
-          result=${PIPESTATUS[0]}
-          exit "$result"
-
-      - name: Extract structured Rust compiler errors temporarily
-        if: failure() && steps.rust_check.outcome == 'failure'
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          errors = []
-          for line in Path("cargo-check.json").read_text(errors="replace").splitlines():
-              try:
-                  record = json.loads(line)
-              except json.JSONDecodeError:
-                  continue
-              if record.get("reason") != "compiler-message":
-                  continue
-              message = record.get("message", {})
-              if message.get("level") == "error":
-                  errors.append(message.get("rendered") or message.get("message", ""))
-
-          output = Path("rust-errors.log")
-          if errors:
-              output.write_text(chr(10).join(errors))
-          else:
-              output.write_text("No structured compiler errors; last cargo messages:" + chr(10) + chr(10).join(Path("cargo-check.json").read_text(errors="replace").splitlines()[-200:]))
-          PY
-
-      - name: Upload temporary Rust compiler errors
-        if: failure() && steps.rust_check.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-diagnostic-rust
-          path: rust-errors.log
-          if-no-files-found: error
-          retention-days: 1
+        run: cargo check --workspace
 
       - name: Test the complete Rust workspace
-        id: rust_test
-        shell: bash
-        env:
-          CARGO_TERM_COLOR: never
-        run: |
-          set +e
-          cargo test --workspace -- --nocapture 2>&1 | tee cargo-test.log
-          result=${PIPESTATUS[0]}
-          exit "$result"
-
-      - name: Prepare temporary Rust test diagnostics
-        if: failure() && steps.rust_test.outcome == 'failure'
-        shell: bash
-        run: tail -n 3000 cargo-test.log > rust-test-diagnostics.log
-
-      - name: Upload temporary Rust test diagnostics
-        if: failure() && steps.rust_test.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-diagnostic-rust-test
-          path: rust-test-diagnostics.log
-          if-no-files-found: error
-          retention-days: 1
+        run: cargo test --workspace
 
   package:
     name: Package ${{ matrix.platform }} test artifact
@@ -200,7 +118,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Android Rust targets
+      - name: Install Android Rust target
         if: matrix.platform == 'android'
         run: rustup target add aarch64-linux-android
 
@@ -239,55 +157,16 @@ jobs:
         run: npm ci
 
       - name: Build Windows MSI and NSIS installer
-        id: windows_build
         if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          npm run tauri -- build --ci --bundles msi,nsis 2>&1 | Tee-Object -FilePath windows-build.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Upload temporary Windows build diagnostics
-        if: failure() && steps.windows_build.outcome == 'failure'
-        shell: pwsh
-        run: |
-          Get-Content windows-build.log -Tail 3000 | Set-Content windows-build-diagnostics.log
-
-      - name: Upload Windows build diagnostic artifact
-        if: failure() && steps.windows_build.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-diagnostic-windows
-          path: windows-build-diagnostics.log
-          if-no-files-found: error
-          retention-days: 1
+        run: npm run tauri -- build --ci --bundles msi,nsis
 
       - name: Initialize Tauri Android project
         if: matrix.platform == 'android'
         run: npm run tauri -- android init --ci
 
-      - name: Build Android APK test package
-        id: android_build
+      - name: Build Android arm64 APK
         if: matrix.platform == 'android'
-        shell: bash
-        run: |
-          set +e
-          npm run tauri -- android build --ci --apk --target aarch64 2>&1 | tee android-build.log
-          result=${PIPESTATUS[0]}
-          exit "$result"
-
-      - name: Upload temporary Android build diagnostics
-        if: failure() && steps.android_build.outcome == 'failure'
-        shell: bash
-        run: tail -n 3000 android-build.log > android-build-diagnostics.log
-
-      - name: Upload Android build diagnostic artifact
-        if: failure() && steps.android_build.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-diagnostic-android
-          path: android-build-diagnostics.log
-          if-no-files-found: error
-          retention-days: 1
+        run: npm run tauri -- android build --ci --apk --target aarch64
 
       - name: Collect Windows installers
         if: matrix.platform == 'windows'
@@ -313,42 +192,3 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
-
-  diagnostics:
-    name: Temporarily collect failed CI diagnostics
-    if: always() && (needs.rust.result == 'failure' || needs.package.result == 'failure')
-    needs:
-      - rust
-      - package
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: write
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Clear previous temporary diagnostics
-        run: rm -rf .ci-diagnostics
-
-      - name: Download diagnostics from failed jobs
-        uses: actions/download-artifact@v4
-        with:
-          pattern: ci-diagnostic-*
-          path: .ci-diagnostics
-          merge-multiple: false
-
-      - name: Publish temporary diagnostics to the session branch
-        shell: bash
-        run: |
-          if ! find .ci-diagnostics -type f -print -quit | grep -q .; then
-            echo "No diagnostics artifacts were available."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .ci-diagnostics
-          git commit -m "Temporarily record CI build diagnostics"
-          git fetch origin "${GITHUB_REF_NAME}"
-          git rebase "origin/${GITHUB_REF_NAME}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
