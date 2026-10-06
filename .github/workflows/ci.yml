@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -83,7 +83,30 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Check the complete Rust workspace
-        run: cargo check --workspace
+        id: rust_check
+        shell: bash
+        run: |
+          set +e
+          cargo check --workspace 2>&1 | tee cargo-check.log
+          result=${PIPESTATUS[0]}
+          exit "$result"
+
+      - name: Temporarily publish Rust check diagnostics
+        if: steps.rust_check.outcome == 'failure'
+        shell: bash
+        run: |
+          mkdir -p .ci-diagnostics
+          tail -n 500 cargo-check.log > .ci-diagnostics/rust-check.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci-diagnostics/rust-check.log
+          git commit -m "Temporarily record Rust CI diagnostics"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}"
+          done
+          exit 1
 
       - name: Test the complete Rust workspace
         run: cargo test --workspace
@@ -157,16 +180,60 @@ jobs:
         run: npm ci
 
       - name: Build Windows MSI and NSIS installer
+        id: windows_build
         if: matrix.platform == 'windows'
-        run: npm run tauri -- build --ci --bundles msi,nsis
+        shell: pwsh
+        run: |
+          npm run tauri -- build --ci --bundles msi,nsis 2>&1 | Tee-Object -FilePath windows-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Temporarily publish Windows build diagnostics
+        if: steps.windows_build.outcome == 'failure'
+        shell: bash
+        run: |
+          mkdir -p .ci-diagnostics
+          tail -n 500 windows-build.log > .ci-diagnostics/windows-build.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci-diagnostics/windows-build.log
+          git commit -m "Temporarily record Windows CI diagnostics"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}"
+          done
+          exit 1
 
       - name: Initialize Tauri Android project
         if: matrix.platform == 'android'
         run: npm run tauri -- android init --ci
 
       - name: Build Android APK test package
+        id: android_build
         if: matrix.platform == 'android'
-        run: npm run tauri -- android build --ci --apk
+        shell: bash
+        run: |
+          set +e
+          npm run tauri -- android build --ci --apk 2>&1 | tee android-build.log
+          result=${PIPESTATUS[0]}
+          exit "$result"
+
+      - name: Temporarily publish Android build diagnostics
+        if: steps.android_build.outcome == 'failure'
+        shell: bash
+        run: |
+          mkdir -p .ci-diagnostics
+          tail -n 500 android-build.log > .ci-diagnostics/android-build.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci-diagnostics/android-build.log
+          git commit -m "Temporarily record Android CI diagnostics"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}"
+          done
+          exit 1
 
       - name: Collect Windows installers
         if: matrix.platform == 'windows'
