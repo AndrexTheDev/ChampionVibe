@@ -146,7 +146,29 @@ jobs:
           retention-days: 1
 
       - name: Test the complete Rust workspace
-        run: cargo test --workspace
+        id: rust_test
+        shell: bash
+        env:
+          CARGO_TERM_COLOR: never
+        run: |
+          set +e
+          cargo test --workspace -- --nocapture 2>&1 | tee cargo-test.log
+          result=${PIPESTATUS[0]}
+          exit "$result"
+
+      - name: Prepare temporary Rust test diagnostics
+        if: failure() && steps.rust_test.outcome == 'failure'
+        shell: bash
+        run: tail -n 3000 cargo-test.log > rust-test-diagnostics.log
+
+      - name: Upload temporary Rust test diagnostics
+        if: failure() && steps.rust_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostic-rust-test
+          path: rust-test-diagnostics.log
+          if-no-files-found: error
+          retention-days: 1
 
   package:
     name: Package ${{ matrix.platform }} test artifact
@@ -180,7 +202,7 @@ jobs:
 
       - name: Install Android Rust targets
         if: matrix.platform == 'android'
-        run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+        run: rustup target add aarch64-linux-android
 
       - name: Install Windows desktop prerequisites
         if: matrix.platform == 'windows'
@@ -249,7 +271,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          npm run tauri -- android build --ci --apk 2>&1 | tee android-build.log
+          npm run tauri -- android build --ci --apk --target aarch64 2>&1 | tee android-build.log
           result=${PIPESTATUS[0]}
           exit "$result"
 

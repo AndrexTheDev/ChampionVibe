@@ -3,7 +3,7 @@
 `.github/workflows/ci.yml` runs on every `push` (all branches), every `pull_request`, and manual `workflow_dispatch`. The `package` matrix uploads two Actions artifacts:
 
 - `championvibe-windows-test-build` — Windows `.msi` and NSIS `.exe` installers.
-- `championvibe-android-apk` — Android `.apk` package(s).
+- `championvibe-android-apk` — Android `.apk` for `arm64-v8a` (64-bit ARM). The CI excludes 32-bit ABIs because the current `whisper-rs-sys` bundled bindings do not compile for them; the APK therefore requires a 64-bit ARM Android device.
 
 Actions artifacts are retained for 14 days. **The current workflow does not publish GitHub Release assets**; it publishes run artifacts only. The download script supports both, so it can also fetch assets after a Release is created and populated separately.
 
