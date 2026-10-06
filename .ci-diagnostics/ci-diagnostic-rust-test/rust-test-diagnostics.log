@@ -1,6 +1,6 @@
    Compiling libc v0.2.190
-   Compiling equivalent v1.0.2
    Compiling hashbrown v0.17.1
+   Compiling equivalent v1.0.2
    Compiling indexmap v2.14.2
    Compiling cfg-if v1.0.5
    Compiling serde_core v1.0.229
@@ -10,10 +10,10 @@
    Compiling log v0.4.34
    Compiling zerofrom v0.1.8
    Compiling smallvec v1.16.2
-   Compiling toml v0.8.2
-   Compiling system-deps v6.2.2
    Compiling itoa v1.0.18
    Compiling bitflags v2.13.2
+   Compiling toml v0.8.2
+   Compiling system-deps v6.2.2
    Compiling writeable v0.6.4
    Compiling litemap v0.8.3
    Compiling utf8_iter v1.0.4
@@ -25,39 +25,39 @@
    Compiling zmij v1.0.23
    Compiling phf_shared v0.13.1
    Compiling pin-project-lite v0.2.17
-   Compiling futures-core v0.3.34
    Compiling phf_generator v0.13.1
+   Compiling futures-core v0.3.34
    Compiling http v1.5.0
    Compiling glib-sys v0.18.1
    Compiling getrandom v0.4.3
    Compiling yoke v0.8.3
    Compiling gobject-sys v0.18.0
    Compiling aho-corasick v1.1.5
-   Compiling base64 v0.23.1
-   Compiling futures-task v0.3.34
-   Compiling slab v0.4.12
    Compiling regex-syntax v0.8.11
+   Compiling futures-task v0.3.34
+   Compiling base64 v0.23.1
+   Compiling slab v0.4.12
    Compiling glob v0.3.4
-   Compiling regex-automata v0.4.18
    Compiling futures-util v0.3.34
+   Compiling regex-automata v0.4.18
    Compiling serde v1.0.229
    Compiling zerovec v0.11.8
    Compiling regex v1.13.1
    Compiling phf_macros v0.13.1
    Compiling num-traits v0.2.19
    Compiling gio-sys v0.18.1
-   Compiling time-core v0.1.9
    Compiling scopeguard v1.2.0
    Compiling num-conv v0.2.2
+   Compiling time-core v0.1.9
    Compiling lock_api v0.4.14
    Compiling thiserror v2.0.21
    Compiling tinystr v0.8.4
    Compiling phf_codegen v0.13.1
    Compiling futures-channel v0.3.34
    Compiling stable_deref_trait v1.2.1
+   Compiling winnow v1.0.4
    Compiling deranged v0.5.8
    Compiling powerfmt v0.2.1
-   Compiling winnow v1.0.4
    Compiling toml_parser v1.1.3+spec-1.1.0
    Compiling icu_locale_core v2.3.0
    Compiling potential_utf v0.1.6
@@ -65,8 +65,8 @@
    Compiling toml_writer v1.1.2+spec-1.1.0
    Compiling icu_provider v2.3.1
    Compiling icu_collections v2.3.0
-   Compiling anyhow v1.0.104
    Compiling typeid v1.0.3
+   Compiling anyhow v1.0.104
    Compiling fnv v1.0.7
    Compiling web-time v1.1.0
    Compiling phf v0.13.1
@@ -82,8 +82,8 @@
    Compiling quick-xml v0.42.0
    Compiling idna_adapter v1.2.2
    Compiling string_cache v0.9.0
-   Compiling serde_json v1.0.151
    Compiling brotli-decompressor v6.0.1
+   Compiling serde_json v1.0.151
    Compiling serde_spanned v1.1.1
    Compiling toml_datetime v1.1.1+spec-1.1.0
    Compiling same-file v1.0.6
@@ -112,9 +112,9 @@
    Compiling atk-sys v0.18.2
    Compiling proc-macro-crate v2.0.2
    Compiling percent-encoding v2.3.2
-   Compiling glib-macros v0.18.5
-   Compiling plist v1.10.1
    Compiling dom_query v0.28.0
+   Compiling plist v1.10.1
+   Compiling glib-macros v0.18.5
    Compiling cargo_metadata v0.19.2
    Compiling serde-untagged v0.1.9
    Compiling json-patch v4.2.0
@@ -133,10 +133,10 @@
    Compiling socket2 v0.6.5
    Compiling tokio v1.53.2
    Compiling num-complex v0.4.6
-   Compiling option-ext v0.2.0
    Compiling futures-io v0.3.34
-   Compiling gio v0.18.4
+   Compiling option-ext v0.2.0
    Compiling dirs-sys v0.5.0
+   Compiling gio v0.18.4
    Compiling block-buffer v0.10.4
    Compiling crypto-common v0.1.7
    Compiling strength_reduce v0.2.4
@@ -191,18 +191,18 @@
    Compiling soup3 v0.5.0
    Compiling javascriptcore-rs v1.1.2
    Compiling tower-service v0.3.3
-   Compiling cookie v0.18.2
    Compiling webkit2gtk v2.0.2
+   Compiling cookie v0.18.2
    Compiling libdbus-sys v0.2.7
    Compiling x11-dl v2.21.0
    Compiling png v0.17.16
    Compiling rustls-pki-types v1.15.1
    Compiling getrandom v0.2.17
    Compiling semver v1.0.28
+   Compiling subtle v2.6.1
    Compiling mime v0.3.17
    Compiling try-lock v0.2.5
    Compiling untrusted v0.9.0
-   Compiling subtle v2.6.1
    Compiling wry v0.57.0
    Compiling ring v0.17.14
    Compiling want v0.3.2
@@ -264,8 +264,8 @@
    Compiling bs58 v0.5.1
    Compiling hex v0.4.3
    Compiling hashbrown v0.14.5
-   Compiling tauri-plugin-android-fs v29.0.0
    Compiling tauri-plugin-dialog v2.8.1
+   Compiling tauri-plugin-android-fs v29.0.0
    Compiling rawpointer v0.2.1
    Compiling matrixmultiply v0.3.11
    Compiling rfd v0.16.0
@@ -299,6 +299,7 @@ warning: unused variable: `api`
    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
 warning: `tauri-plugin-device-identity` (lib) generated 1 warning (run `cargo fix --lib -p tauri-plugin-device-identity` to apply 1 suggestion)
+   Compiling symphonia-codec-vorbis v0.6.1
    Compiling symphonia-codec-alac v0.6.1
    Compiling symphonia-format-caf v0.6.1
    Compiling symphonia-codec-aac v0.6.1
@@ -306,7 +307,6 @@ warning: `tauri-plugin-device-identity` (lib) generated 1 warning (run `cargo fi
    Compiling symphonia-bundle-flac v0.6.1
    Compiling symphonia-format-mkv v0.6.1
    Compiling symphonia-format-ogg v0.6.1
-   Compiling symphonia-codec-vorbis v0.6.1
    Compiling championvibe v0.1.0 (/home/runner/work/ChampionVibe/ChampionVibe/src-tauri)
    Compiling symphonia-codec-pcm v0.6.1
    Compiling symphonia-codec-adpcm v0.6.1
@@ -386,75 +386,6 @@ warning: unused imports: `PathBuf` and `fs`
 5 |     path::{Path, PathBuf},
   |                  ^^^^^^^
 
-error[E0433]: cannot find type `PitchLockTransition` in this scope
-   --> src-tauri/src/audio/wsola.rs:504:30
-    |
-504 |         let mut transition = PitchLockTransition::new(1_000, false);
-    |                              ^^^^^^^^^^^^^^^^^^^ use of undeclared type `PitchLockTransition`
-    |
-help: consider importing this struct
-    |
-429 +     use crate::audio::wsola::PitchLockTransition;
-    |
-
-error[E0433]: cannot find module or crate `audio` in this scope
-    --> src-tauri/src/commands.rs:1507:13
-     |
-1507 |             audio::SampleQuantization::Bar
-     |             ^^^^^ use of unresolved module or unlinked crate `audio`
-     |
-help: to make use of source file src-tauri/src/audio/mod.rs, use `mod audio` in this file to declare the module
-    -->  src-tauri/src/lib.rs:1:1
-     |
-   1 + mod audio;
-     |
-help: consider importing this enum
-     |
-1479 +     use crate::audio::SampleQuantization;
-     |
-help: if you import `SampleQuantization`, refer to it directly
-     |
-1507 -             audio::SampleQuantization::Bar
-1507 +             SampleQuantization::Bar
-     |
-
-error[E0433]: cannot find module or crate `audio` in this scope
-    --> src-tauri/src/commands.rs:1540:13
-     |
-1540 |             audio::SampleQuantization::Beat
-     |             ^^^^^ use of unresolved module or unlinked crate `audio`
-     |
-help: to make use of source file src-tauri/src/audio/mod.rs, use `mod audio` in this file to declare the module
-    -->  src-tauri/src/lib.rs:1:1
-     |
-   1 + mod audio;
-     |
-help: consider importing this enum
-     |
-1479 +     use crate::audio::SampleQuantization;
-     |
-help: if you import `SampleQuantization`, refer to it directly
-     |
-1540 -             audio::SampleQuantization::Beat
-1540 +             SampleQuantization::Beat
-     |
-
-error[E0433]: cannot find module or crate `audio` in this scope
-    --> src-tauri/src/commands.rs:1543:13
-     |
-1543 |             audio::decode_tts_pcm_f32le(&decoded, metadata.sample_rate, metadata.channels).unwrap();
-     |             ^^^^^ use of unresolved module or unlinked crate `audio`
-     |
-help: to make use of source file src-tauri/src/audio/mod.rs, use `mod audio` in this file to declare the module
-    -->  src-tauri/src/lib.rs:1:1
-     |
-   1 + mod audio;
-     |
-help: consider importing this module
-     |
-1479 +     use crate::audio;
-     |
-
 warning: unused import: `path_sort_key`
     --> src-tauri/src/import/mod.rs:1436:42
      |
@@ -466,23 +397,6 @@ warning: unused import: `path::Path`
      |
 1437 |     use std::{path::Path, time::SystemTime};
      |               ^^^^^^^^^^
-
-error[E0308]: mismatched types
-   --> src-tauri/src/audio/master_bus.rs:896:45
-    |
-896 |             let global_tts = aux.next_frame([deck_frame], [1, 0], [true, false], [false, false]);
-    |                                  ---------- ^^^^^^^^^^^^ expected an array with a size of 2, found one with a size of 1
-    |                                  |
-    |                                  arguments to this method are incorrect
-    |
-note: method defined here
-   --> src-tauri/src/audio/master_bus.rs:169:8
-    |
-169 |     fn next_frame(
-    |        ^^^^^^^^^^
-170 |         &mut self,
-171 |         deck_positions: [u64; 2],
-    |         ------------------------
 
 warning: unused import: `AudioDecoder`
   --> src-tauri/src/import/media.rs:14:21
@@ -508,17 +422,6 @@ warning: variable does not need to be mutable
     |             help: remove this `mut`
     |
     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
-
-error[E0596]: cannot borrow `reader` as mutable, as it is not declared as mutable
-    --> src-tauri/src/audio/recording.rs:1588:33
-     |
-1588 |         let samples: Vec<i16> = reader
-     |                                 ^^^^^^ cannot borrow as mutable
-     |
-help: consider changing this to be mutable
-     |
-1587 |         let mut reader = hound::WavReader::open(&path).expect("final WAV is readable");
-     |             +++
 
 warning: unused variable: `high_ratio`
    --> src-tauri/src/import/analysis.rs:438:5
@@ -773,9 +676,147 @@ warning: function `write_pcm_wav` is never used
 317 | fn write_pcm_wav(path: &Path, sample_rate: u32, samples: &[f32]) -> Result<(), String> {
     |    ^^^^^^^^^^^^^
 
-Some errors have detailed explanations: E0308, E0433, E0596.
-For more information about an error, try `rustc --explain E0308`.
-warning: `championvibe` (lib test) generated 13 warnings (11 duplicates)
-error: could not compile `championvibe` (lib test) due to 6 previous errors; 13 warnings emitted
-warning: build failed, waiting for other jobs to finish...
+warning: field `lookahead_frames` is never read
+  --> src-tauri/src/audio/limiter.rs:88:5
+   |
+86 | pub(super) struct LookaheadLimiter {
+   |                   ---------------- field in this struct
+87 |     sample_rate: u32,
+88 |     lookahead_frames: usize,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: `championvibe` (lib test) generated 34 warnings (31 duplicates) (run `cargo fix --lib -p championvibe --tests` to apply 2 suggestions)
 warning: `championvibe` (lib) generated 35 warnings (run `cargo fix --lib -p championvibe` to apply 9 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4m 10s
+     Running unittests src/lib.rs (target/debug/deps/championvibe_lib-f539b11de92de415)
+
+running 98 tests
+test audio::auto_gain::tests::a_missing_measurement_does_not_apply_gain ... ok
+test audio::auto_gain::tests::target_changes_have_a_finite_eight_millisecond_smooth_ramp ... ok
+test audio::auto_gain::tests::r128_gain_offset_uses_adjustable_target_and_is_safely_bounded ... ok
+test audio::decoder::tests::cached_peak_blob_is_packed_with_the_current_binary_beat_grid ... ok
+
+thread 'audio::decoder::tests::disabled_pitch_lock_uses_bounded_streaming_varispeed' (15864) panicked at src-tauri/src/audio/decoder.rs:659:9:
+assertion `left == right` failed
+  left: [0.0, 1.2, 2.4, 3.0]
+ right: [0.0, 1.5, 3.0]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test audio::decoder::tests::equal_rate_resampling_preserves_frames_and_flushes_tail ... ok
+test audio::decoder::tests::disabled_pitch_lock_uses_bounded_streaming_varispeed ... FAILED
+test audio::decoder::tests::upsampling_interpolates_between_source_frames ... ok
+test audio::dj_engine::tests::absent_mir_fields_yield_neutral_compatibility_without_rejecting_track ... ok
+test audio::dj_engine::tests::an_incompatible_key_or_pattern_uses_shorter_crossfade_and_eq_sweep ... ok
+test audio::dj_engine::tests::key_mode_parser_handles_major_minor_and_enharmonic_spellings ... ok
+test audio::dj_engine::tests::similar_mood_rhythm_key_and_loudness_produce_a_layerable_plan ... ok
+test audio::dsp::tests::saturator_is_finite_and_bounded ... ok
+test audio::dsp::tests::biquad_impulse_response_remains_finite ... ok
+test audio::limiter::tests::gain_reduction_attacks_immediately_and_release_recovers_smoothly ... ok
+test audio::limiter::tests::non_finite_audio_is_replaced_with_silence ... ok
+test audio::limiter::tests::soft_knee_is_smooth_and_reaches_the_ceiling_above_the_knee ... ok
+test audio::limiter::tests::lookahead_limiter_has_finite_latency_and_limits_overrange_steady_signal ... ok
+test audio::loudness::tests::digital_silence_and_incomplete_blocks_are_gated ... ok
+
+thread 'audio::loudness::tests::true_peak_reports_inter_sample_peak_and_not_only_sample_peak' (15879) panicked at src-tauri/src/audio/loudness.rs:374:9:
+true peak was -1.6606996575948265 dBTP
+test audio::loudness::tests::true_peak_reports_inter_sample_peak_and_not_only_sample_peak ... FAILED
+test audio::master_bus::tests::master_tts_aux_discards_events_from_a_replaced_deck_timeline ... ok
+test audio::master_bus::tests::post_sum_master_limiter_handles_decks_samples_and_tts ... ok
+test audio::master_bus::tests::sample_and_tts_auxiliary_inputs_reach_the_master_sum ... ok
+test audio::master_bus::tests::standalone_master_tts_aux_waits_for_its_target_and_resamples_24khz_to_48khz ... ok
+test audio::master_bus::tests::standalone_master_tts_is_summed_before_the_master_limiter ... ok
+test audio::master_bus::tests::unity_deck_does_not_create_unnecessary_reduction ... ok
+test audio::mir_analysis::tests::beat_grid_heuristics_recognize_steppers_and_one_drop ... ok
+test audio::mir_analysis::tests::mir_returns_bounded_affect_and_a_compact_signed_int8_descriptor ... ok
+test audio::model_manager::tests::mdx_manifest_defaults_are_stable ... ok
+test audio::model_manager::tests::tensor_dimensions_accept_static_and_dynamic_axes_only ... ok
+test audio::model_manager::tests::voice_pack_requires_an_exact_float_vector_matrix ... ok
+test audio::onnx_embedding::tests::quantization_returns_a_bounded_unit_int8_vector ... ok
+test audio::onnx_embedding::tests::zero_embedding_stays_zero_and_bad_shapes_fail_closed ... ok
+test audio::recording::tests::capture_gate_stops_at_license_deadline ... ok
+
+thread 'audio::recording::tests::compressed_recording_encoders_write_recognizable_final_files' (15894) panicked at src-tauri/src/audio/recording.rs:1711:21:
+assertion failed: bytes.windows(6).any(|window| window == b"\x01vorbis")
+test audio::recording::tests::compressed_recording_encoders_write_recognizable_final_files ... FAILED
+test audio::recording::tests::master_writer_exports_flac_from_background_pcm_stage ... ok
+test audio::recording::tests::master_writer_records_the_post_mix_master_without_resumming_decks ... ok
+test audio::recording::tests::pcm_quantization_uses_signed_integer_ranges ... ok
+test audio::recording::tests::recording_format_parser_accepts_only_implemented_format_families ... ok
+test audio::recording::tests::timestamp_mapping_is_sample_rate_based ... ok
+test audio::samples::tests::android_stage_digest_is_not_shown_as_part_of_the_sample_name ... ok
+test audio::samples::tests::builtins_are_predecoded_and_unique ... ok
+test audio::samples::tests::dubplates_are_tagged_for_the_dedicated_tts_master_input ... ok
+test audio::tests::adjustable_auto_gain_target_and_pitch_lock_controls_are_validated ... ok
+test audio::tests::binary_tts_pcm_decodes_little_endian_mono_and_stereo_frames ... ok
+test audio::tests::binary_tts_pcm_rejects_json_arrays_bad_alignment_and_unsafe_samples ... ok
+test audio::tests::pending_sample_events_are_sorted_by_target_frame ... ok
+test audio::loudness::tests::dual_mono_sine_matches_bs1770_loudness_and_target_gain ... ok
+test audio::tests::sample_quantization_falls_back_to_bpm_when_beat_times_are_missing ... ok
+test audio::tests::sample_quantization_uses_beat_and_bar_positions ... ok
+test audio::tests::tts_scheduler_selects_a_strictly_future_beat_or_bar_on_the_current_grid ... ok
+test audio::tests::two_stem_profile_keeps_inactive_gains_muted_after_deck_reset ... ok
+test audio::tests::retired_sample_frames_wait_for_queued_trigger_references ... ok
+test audio::wsola::tests::pitch_lock_mode_changes_use_a_ten_millisecond_ramp ... ok
+test audio::wsola::tests::short_input_is_faded_out_instead_of_ending_with_a_hard_cut ... ok
+test audio::wsola::tests::wsola_speed_range_is_limited_to_twenty_percent ... ok
+test commands::audio_command_tests::android_base64_tts_fallback_preserves_binary_pcm_without_number_arrays ... ok
+test commands::audio_command_tests::android_demo_profile_requires_only_acapella_and_instrumental_rows ... ok
+test commands::audio_command_tests::binary_tts_ipc_requires_float32_little_endian_and_beat_or_bar_quantization ... ok
+test commands::audio_command_tests::missing_stem_is_rejected_before_audio_threads_start ... ok
+test commands::audio_command_tests::stem_rows_are_mapped_to_the_fixed_mix_order ... ok
+test commands::audio_command_tests::tts_raw_ipc_accepts_binary_bodies_and_rejects_json_number_arrays ... ok
+test database::tests::import_commit_persists_loudness_mir_vector_and_searchable_labels ... ok
+test database::tests::import_job_counters_track_status_changes_without_aggregating_items ... ok
+test database::tests::mix_metadata_and_indexed_whisper_candidate_lookup_use_local_four_stem_tracks ... ok
+test database::tests::paged_track_search_returns_stable_pages_and_matching_total ... ok
+test database::tests::recording_metadata_migration_adds_columns_to_legacy_database ... ok
+test database::tests::recording_metadata_persists_encoder_settings_and_completion_state ... ok
+test database::tests::sqlite_schema_and_track_upsert_work_for_library_records ... ok
+test device_binding::tests::binding_is_stable_and_application_scoped ... ok
+test import::analysis::tests::chroma_profile_returns_a_key ... ok
+
+thread 'import::analysis::tests::periodic_onsets_produce_a_120_bpm_grid' (15935) panicked at src-tauri/src/import/analysis.rs:494:9:
+assertion failed: (bpm.unwrap() - 117.0).abs() < 8.0
+test import::analysis::tests::periodic_onsets_produce_a_120_bpm_grid ... FAILED
+
+thread 'audio::wsola::tests::faster_and_slower_rates_change_duration_without_sample_rate_pitch_shift' (15916) panicked at src-tauri/src/audio/wsola.rs:480:9:
+assertion failed: faster.len() < input_frames * 90 / 100
+test audio::wsola::tests::faster_and_slower_rates_change_duration_without_sample_rate_pitch_shift ... FAILED
+test import::mdx::tests::mdx_stft_uses_the_declared_channel_and_frequency_layout ... ok
+test import::mdx::tests::periodic_hann_window_and_inverse_scale_match_expected_fft_convention ... ok
+test import::media::tests::linear_resampler_preserves_equal_rate_and_interpolates_up ... ok
+test import::tests::audio_import_discovery_uses_file_contents_instead_of_extensions ... ok
+test import::whisper::tests::local_lexicon_scores_positive_and_negated_lyrics ... ok
+test localization::tests::ipc_localization_covers_required_languages_and_import_stages ... ok
+test media_source::tests::recognizes_audio_by_signature_not_filename ... ok
+test media_source::tests::rejects_non_audio_content_even_when_the_extension_might_look_valid ... ok
+test media_source::tests::reports_asf_wma_as_recognized_but_unsupported ... ok
+test media_source::tests::snapshot_is_unchanged_by_source_edits_and_is_removed_after_drop ... ok
+test mix_engine::tests::every_mix_style_builds_its_full_transition_policy ... ok
+test mix_engine::tests::maestro_classifies_explicit_tags_then_sentiment_energy_then_hysteresis ... ok
+test mix_engine::tests::maestro_uses_manual_tags_and_incoming_track_when_source_metadata_is_missing ... ok
+test mix_engine::tests::preset_one_two_three_and_four_take_the_declared_routes ... ok
+test mix_engine::tests::repeated_four_word_phrases_form_chorus_cues ... ok
+test mix_engine::tests::tempo_math_matches_half_and_double_time_without_exceeding_supported_rates ... ok
+test mix_engine::tests::two_stem_profile_does_not_require_unused_bass_or_drums_files ... ok
+test mix_engine::tests::word_play_selects_a_local_whisper_timestamp_for_a_shared_phrase ... ok
+test riddim::tests::manual_riddim_tags_join_tracks_without_audio_fingerprints ... ok
+test riddim::tests::normalized_tags_ignore_case_and_whitespace ... ok
+test riddim::tests::similar_instrumental_vectors_form_a_family ... ok
+test riddim::tests::unrelated_vectors_do_not_match_without_shared_manual_tags ... ok
+test tts::tests::emotion_cues_are_validated_and_shape_local_phrase_prosody ... ok
+test tts::tests::musical_key_names_accept_sharps_and_flats ... ok
+test tts::tests::patois_templates_keep_custom_block_and_name ... ok
+test import::mdx::tests::centered_hann_stft_roundtrips_a_sine_below_dim_f_cutoff ... ok
+
+failures:
+
+failures:
+    audio::decoder::tests::disabled_pitch_lock_uses_bounded_streaming_varispeed
+    audio::loudness::tests::true_peak_reports_inter_sample_peak_and_not_only_sample_peak
+    audio::recording::tests::compressed_recording_encoders_write_recognizable_final_files
+    audio::wsola::tests::faster_and_slower_rates_change_duration_without_sample_rate_pitch_shift
+    import::analysis::tests::periodic_onsets_produce_a_120_bpm_grid
+
+test result: FAILED. 93 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.01s
+
+error: test failed, to rerun pass `-p championvibe --lib`
