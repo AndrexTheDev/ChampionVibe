@@ -347,9 +347,10 @@ fn infer_target(
         progress((chunk_index + 1) as f64 / chunks as f64);
         if chunk_index + 1 < chunks {
             chunk.copy_within(generated_per_chunk.., 0);
+            let fill_start = chunk.len() - generated_per_chunk;
             fill_chunk_tail(
                 &mut chunk,
-                chunk.len() - generated_per_chunk,
+                fill_start,
                 &mut samples,
                 &mut frames_read,
                 total_frames,

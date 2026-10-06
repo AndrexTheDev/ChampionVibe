@@ -424,12 +424,21 @@ fn create_session(
     #[cfg(not(windows))]
     let _ = use_directml;
 
-    let session = Session::builder()?
-        .with_intra_threads(threads)?
-        .with_inter_threads(1)?
-        .with_parallel_execution(false)?
+    let session = Session::builder()
+        .map_err(|error| anyhow::anyhow!("could not create ONNX session builder: {error}"))?
+        .with_intra_threads(threads)
+        .map_err(|error| anyhow::anyhow!("could not set ONNX intra-op threads: {error}"))?
+        .with_inter_threads(1)
+        .map_err(|error| anyhow::anyhow!("could not set ONNX inter-op threads: {error}"))?
+        .with_parallel_execution(false)
+        .map_err(|error| anyhow::anyhow!("could not disable ONNX parallel execution: {error}"))?
         .commit_from_file(model_path)
-        .with_context(|| format!("could not load local ONNX model {}", model_path.display()))?;
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "could not load local ONNX model {}: {error}",
+                model_path.display()
+            )
+        })?;
     Ok((session, "CPU"))
 }
 

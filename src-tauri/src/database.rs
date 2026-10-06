@@ -1445,7 +1445,7 @@ pub fn finish_import_job(connection: &mut Connection, job_id: i64, cancelled: bo
     Ok(())
 }
 
-pub fn fail_import_job(connection: &Connection, job_id: i64, error: &str) -> Result<()> {
+pub fn fail_import_job(connection: &mut Connection, job_id: i64, error: &str) -> Result<()> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let now = unix_time();
     transaction.execute(

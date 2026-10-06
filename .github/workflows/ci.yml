@@ -85,28 +85,49 @@ jobs:
       - name: Check the complete Rust workspace
         id: rust_check
         shell: bash
+        env:
+          CARGO_TERM_COLOR: never
         run: |
           set +e
-          cargo check --workspace 2>&1 | tee cargo-check.log
+          cargo check --workspace --message-format=json 2>&1 | tee cargo-check.json
           result=${PIPESTATUS[0]}
           exit "$result"
 
-      - name: Temporarily publish Rust check diagnostics
+      - name: Extract structured Rust compiler errors temporarily
         if: failure() && steps.rust_check.outcome == 'failure'
         shell: bash
         run: |
-          mkdir -p .ci-diagnostics
-          tail -n 500 cargo-check.log > .ci-diagnostics/rust-check.log
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .ci-diagnostics/rust-check.log
-          git commit -m "Temporarily record Rust CI diagnostics"
-          for attempt in 1 2 3 4 5; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
-            git fetch origin "${GITHUB_REF_NAME}"
-            git rebase "origin/${GITHUB_REF_NAME}"
-          done
-          exit 1
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          errors = []
+          for line in Path("cargo-check.json").read_text(errors="replace").splitlines():
+              try:
+                  record = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              if record.get("reason") != "compiler-message":
+                  continue
+              message = record.get("message", {})
+              if message.get("level") == "error":
+                  errors.append(message.get("rendered") or message.get("message", ""))
+
+          output = Path("rust-errors.log")
+          if errors:
+              output.write_text(chr(10).join(errors))
+          else:
+              output.write_text("No structured compiler errors; last cargo messages:" + chr(10) + chr(10).join(Path("cargo-check.json").read_text(errors="replace").splitlines()[-200:]))
+          PY
+
+      - name: Upload temporary Rust compiler errors
+        if: failure() && steps.rust_check.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostic-rust
+          path: rust-errors.log
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Test the complete Rust workspace
         run: cargo test --workspace
@@ -187,22 +208,20 @@ jobs:
           npm run tauri -- build --ci --bundles msi,nsis 2>&1 | Tee-Object -FilePath windows-build.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Temporarily publish Windows build diagnostics
+      - name: Upload temporary Windows build diagnostics
         if: failure() && steps.windows_build.outcome == 'failure'
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p .ci-diagnostics
-          tail -n 500 windows-build.log > .ci-diagnostics/windows-build.log
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .ci-diagnostics/windows-build.log
-          git commit -m "Temporarily record Windows CI diagnostics"
-          for attempt in 1 2 3 4 5; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
-            git fetch origin "${GITHUB_REF_NAME}"
-            git rebase "origin/${GITHUB_REF_NAME}"
-          done
-          exit 1
+          Get-Content windows-build.log -Tail 3000 | Set-Content windows-build-diagnostics.log
+
+      - name: Upload Windows build diagnostic artifact
+        if: failure() && steps.windows_build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostic-windows
+          path: windows-build-diagnostics.log
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Initialize Tauri Android project
         if: matrix.platform == 'android'
@@ -218,22 +237,19 @@ jobs:
           result=${PIPESTATUS[0]}
           exit "$result"
 
-      - name: Temporarily publish Android build diagnostics
+      - name: Upload temporary Android build diagnostics
         if: failure() && steps.android_build.outcome == 'failure'
         shell: bash
-        run: |
-          mkdir -p .ci-diagnostics
-          tail -n 500 android-build.log > .ci-diagnostics/android-build.log
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .ci-diagnostics/android-build.log
-          git commit -m "Temporarily record Android CI diagnostics"
-          for attempt in 1 2 3 4 5; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
-            git fetch origin "${GITHUB_REF_NAME}"
-            git rebase "origin/${GITHUB_REF_NAME}"
-          done
-          exit 1
+        run: tail -n 3000 android-build.log > android-build-diagnostics.log
+
+      - name: Upload Android build diagnostic artifact
+        if: failure() && steps.android_build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostic-android
+          path: android-build-diagnostics.log
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Collect Windows installers
         if: matrix.platform == 'windows'
@@ -259,3 +275,40 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
+
+  diagnostics:
+    name: Temporarily collect failed CI diagnostics
+    if: always() && (needs.rust.result == 'failure' || needs.package.result == 'failure')
+    needs:
+      - rust
+      - package
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Clear previous temporary diagnostics
+        run: rm -rf .ci-diagnostics
+
+      - name: Download diagnostics from failed jobs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ci-diagnostic-*
+          path: .ci-diagnostics
+          merge-multiple: false
+
+      - name: Publish temporary diagnostics to the session branch
+        shell: bash
+        run: |
+          if ! find .ci-diagnostics -type f -print -quit | grep -q .; then
+            echo "No diagnostics artifacts were available."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci-diagnostics
+          git commit -m "Temporarily record CI build diagnostics"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

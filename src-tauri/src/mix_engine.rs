@@ -823,7 +823,7 @@ fn tick_active_mix(
                     .is_some_and(|time| current_ms >= time)
             {
                 if run.prepared.decision.transition == TransitionKind::HardChorusCut {
-                    hard_cut(run, decks, database, shared_status)?;
+                    hard_cut(run, database, decks, shared_status)?;
                     return Ok(());
                 }
                 begin_crossfade(run, decks, shared_status)?;
