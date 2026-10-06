@@ -1,0 +1,781 @@
+   Compiling libc v0.2.190
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.1
+   Compiling indexmap v2.14.2
+   Compiling cfg-if v1.0.5
+   Compiling serde_core v1.0.229
+   Compiling heck v0.5.0
+   Compiling memchr v2.8.3
+   Compiling toml_edit v0.20.2
+   Compiling log v0.4.34
+   Compiling zerofrom v0.1.8
+   Compiling smallvec v1.16.2
+   Compiling toml v0.8.2
+   Compiling system-deps v6.2.2
+   Compiling itoa v1.0.18
+   Compiling bitflags v2.13.2
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.3
+   Compiling utf8_iter v1.0.4
+   Compiling bytes v1.12.1
+   Compiling once_cell v1.21.4
+   Compiling siphasher v1.0.4
+   Compiling icu_normalizer_data v2.3.0
+   Compiling icu_properties_data v2.3.0
+   Compiling zmij v1.0.23
+   Compiling phf_shared v0.13.1
+   Compiling pin-project-lite v0.2.17
+   Compiling futures-core v0.3.34
+   Compiling phf_generator v0.13.1
+   Compiling http v1.5.0
+   Compiling glib-sys v0.18.1
+   Compiling getrandom v0.4.3
+   Compiling yoke v0.8.3
+   Compiling gobject-sys v0.18.0
+   Compiling aho-corasick v1.1.5
+   Compiling base64 v0.23.1
+   Compiling futures-task v0.3.34
+   Compiling slab v0.4.12
+   Compiling regex-syntax v0.8.11
+   Compiling glob v0.3.4
+   Compiling regex-automata v0.4.18
+   Compiling futures-util v0.3.34
+   Compiling serde v1.0.229
+   Compiling zerovec v0.11.8
+   Compiling regex v1.13.1
+   Compiling phf_macros v0.13.1
+   Compiling num-traits v0.2.19
+   Compiling gio-sys v0.18.1
+   Compiling time-core v0.1.9
+   Compiling scopeguard v1.2.0
+   Compiling num-conv v0.2.2
+   Compiling lock_api v0.4.14
+   Compiling thiserror v2.0.21
+   Compiling tinystr v0.8.4
+   Compiling phf_codegen v0.13.1
+   Compiling futures-channel v0.3.34
+   Compiling stable_deref_trait v1.2.1
+   Compiling deranged v0.5.8
+   Compiling powerfmt v0.2.1
+   Compiling winnow v1.0.4
+   Compiling toml_parser v1.1.3+spec-1.1.0
+   Compiling icu_locale_core v2.3.0
+   Compiling potential_utf v0.1.6
+   Compiling zerotrie v0.2.5
+   Compiling toml_writer v1.1.2+spec-1.1.0
+   Compiling icu_provider v2.3.1
+   Compiling icu_collections v2.3.0
+   Compiling anyhow v1.0.104
+   Compiling typeid v1.0.3
+   Compiling fnv v1.0.7
+   Compiling web-time v1.1.0
+   Compiling phf v0.13.1
+   Compiling parking_lot_core v0.9.12
+   Compiling string_cache_codegen v0.6.1
+   Compiling alloc-no-stdlib v3.0.0
+   Compiling alloc-stdlib v0.3.0
+   Compiling parking_lot v0.12.5
+   Compiling web_atoms v0.2.6
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling gdk-sys v0.18.2
+   Compiling quick-xml v0.42.0
+   Compiling idna_adapter v1.2.2
+   Compiling string_cache v0.9.0
+   Compiling serde_json v1.0.151
+   Compiling brotli-decompressor v6.0.1
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling same-file v1.0.6
+   Compiling dunce v1.0.5
+   Compiling toml v1.1.6+spec-1.1.0
+   Compiling walkdir v2.5.0
+   Compiling brotli v9.0.0
+   Compiling idna v1.1.0
+   Compiling selectors v0.38.0
+   Compiling uuid v1.27.0
+   Compiling ctor v1.0.13
+   Compiling cssparser v0.37.0
+   Compiling thiserror v1.0.69
+   Compiling markup5ever v0.39.0
+   Compiling url v2.5.8
+   Compiling dyn-clone v1.0.20
+   Compiling html5ever v0.39.0
+   Compiling cfb v0.14.0
+   Compiling jsonptr v0.7.1
+   Compiling erased-serde v0.4.10
+   Compiling time v0.3.55
+   Compiling num-integer v0.1.47
+   Compiling cairo-sys-rs v0.18.2
+   Compiling pango-sys v0.18.0
+   Compiling gdk-pixbuf-sys v0.18.0
+   Compiling atk-sys v0.18.2
+   Compiling proc-macro-crate v2.0.2
+   Compiling percent-encoding v2.3.2
+   Compiling glib-macros v0.18.5
+   Compiling plist v1.10.1
+   Compiling dom_query v0.28.0
+   Compiling cargo_metadata v0.19.2
+   Compiling serde-untagged v0.1.9
+   Compiling json-patch v4.2.0
+   Compiling infer v0.22.0
+   Compiling schemars v0.8.22
+   Compiling urlpattern v0.6.0
+   Compiling serde_with v3.24.0
+   Compiling futures-executor v0.3.34
+   Compiling glib v0.18.5
+   Compiling tauri-utils v2.10.1
+   Compiling gtk-sys v0.18.2
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling form_urlencoded v1.2.2
+   Compiling mio v1.2.4
+   Compiling socket2 v0.6.5
+   Compiling tokio v1.53.2
+   Compiling num-complex v0.4.6
+   Compiling option-ext v0.2.0
+   Compiling futures-io v0.3.34
+   Compiling gio v0.18.4
+   Compiling dirs-sys v0.5.0
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling strength_reduce v0.2.4
+   Compiling transpose v0.2.3
+   Compiling digest v0.10.7
+   Compiling dirs v7.0.0
+   Compiling primal-check v0.3.4
+   Compiling lazy_static v1.5.1
+   Compiling rustfft v6.4.1
+   Compiling embed-resource v3.0.12
+   Compiling bitflags v1.3.2
+   Compiling bytemuck v1.25.2
+   Compiling symphonia-core v0.6.1
+   Compiling tauri-winres v0.3.6
+   Compiling pango v0.18.3
+   Compiling gdk-pixbuf v0.18.5
+   Compiling cairo-rs v0.18.5
+   Compiling cargo_toml v1.0.1
+   Compiling toml_edit v0.19.15
+   Compiling cpufeatures v0.2.17
+   Compiling tauri-build v2.7.1
+   Compiling proc-macro-crate v1.3.1
+   Compiling gdk v0.18.2
+   Compiling memoffset v0.9.1
+   Compiling tauri-plugin v2.7.1
+   Compiling javascriptcore-rs-sys v1.1.1
+   Compiling soup3-sys v0.5.0
+   Compiling gtk v0.18.2
+   Compiling field-offset v0.3.6
+   Compiling gtk3-macros v0.18.2
+   Compiling sha2 v0.10.9
+   Compiling atk v0.18.2
+   Compiling time-macros v0.2.32
+   Compiling webkit2gtk-sys v2.0.2
+   Compiling byteorder v1.5.0
+   Compiling base64 v0.22.1
+   Compiling crc32fast v1.5.2
+   Compiling tauri v2.12.1
+   Compiling gdkx11-sys v0.18.2
+   Compiling zeroize v1.9.0
+   Compiling flate2 v1.1.10
+   Compiling x11 v2.21.0
+   Compiling crossbeam-utils v0.8.23
+   Compiling dpi v0.1.2
+   Compiling http-body v1.1.0
+   Compiling tracing-core v0.1.36
+   Compiling raw-window-handle v0.6.2
+   Compiling regex-lite v0.1.9
+   Compiling symphonia-metadata v0.6.1
+   Compiling tracing v0.1.44
+   Compiling crossbeam-channel v0.5.17
+   Compiling soup3 v0.5.0
+   Compiling javascriptcore-rs v1.1.2
+   Compiling tower-service v0.3.3
+   Compiling cookie v0.18.2
+   Compiling webkit2gtk v2.0.2
+   Compiling libdbus-sys v0.2.7
+   Compiling x11-dl v2.21.0
+   Compiling png v0.17.16
+   Compiling rustls-pki-types v1.15.1
+   Compiling getrandom v0.2.17
+   Compiling semver v1.0.28
+   Compiling mime v0.3.17
+   Compiling try-lock v0.2.5
+   Compiling untrusted v0.9.0
+   Compiling subtle v2.6.1
+   Compiling wry v0.57.0
+   Compiling ring v0.17.14
+   Compiling want v0.3.2
+   Compiling dlopen2 v0.8.2
+   Compiling ico v0.5.0
+   Compiling dbus v0.9.12
+   Compiling httparse v1.10.1
+   Compiling gdkx11 v0.18.2
+   Compiling symphonia-common v0.6.1
+   Compiling png v0.18.1
+   Compiling gdkwayland-sys v0.18.2
+   Compiling clang-sys v1.9.1
+   Compiling sync_wrapper v1.0.2
+   Compiling tower-layer v0.3.3
+   Compiling atomic-waker v1.1.2
+   Compiling httpdate v1.0.3
+   Compiling hyper v1.11.1
+   Compiling tao v0.37.1
+   Compiling tauri-codegen v2.7.1
+   Compiling tauri-runtime v2.12.1
+   Compiling rustls-webpki v0.103.15
+   Compiling keyboard-types v0.8.3
+   Compiling ipnet v2.12.2
+   Compiling hyper-util v0.1.21
+   Compiling muda v0.20.0
+   Compiling nom v7.1.3
+   Compiling serialize-to-javascript v0.1.2
+   Compiling rustls v0.23.45
+   Compiling tauri-runtime-wry v2.12.1
+   Compiling tauri-macros v2.7.1
+   Compiling getrandom v0.3.4
+   Compiling tower v0.5.3
+   Compiling http-body-util v0.1.5
+   Compiling tauri-plugin-fs v2.6.0
+   Compiling libloading v0.8.9
+   Compiling ryu v1.0.23
+   Compiling serde_urlencoded v0.7.1
+   Compiling bindgen v0.72.1
+   Compiling tokio-rustls v0.26.6
+   Compiling cexpr v0.6.0
+   Compiling webpki-roots v1.0.9
+   Compiling futures-sink v0.3.34
+   Compiling signature v2.2.0
+   Compiling ed25519 v2.2.3
+   Compiling tokio-util v0.7.19
+   Compiling curve25519-dalek v4.1.3
+   Compiling hyper-rustls v0.27.10
+   Compiling zerocopy v0.8.60
+   Compiling tower-http v0.6.11
+   Compiling tauri-plugin-device-identity v0.1.0 (/home/runner/work/ChampionVibe/ChampionVibe/crates/device-identity)
+   Compiling iana-time-zone v0.1.65
+   Compiling arrayvec v0.7.8
+   Compiling rust_decimal v1.43.0
+   Compiling ahash v0.8.12
+   Compiling chrono v0.4.45
+   Compiling whisper-rs-sys v0.15.0
+   Compiling reqwest v0.12.28
+   Compiling ed25519-dalek v2.2.0
+   Compiling bs58 v0.5.1
+   Compiling hex v0.4.3
+   Compiling hashbrown v0.14.5
+   Compiling tauri-plugin-android-fs v29.0.0
+   Compiling tauri-plugin-dialog v2.8.1
+   Compiling rawpointer v0.2.1
+   Compiling matrixmultiply v0.3.11
+   Compiling rfd v0.16.0
+   Compiling hashlink v0.9.1
+   Compiling libsqlite3-sys v0.30.1
+   Compiling championvibe-licensing-core v0.1.0 (/home/runner/work/ChampionVibe/ChampionVibe/crates/licensing-core)
+   Compiling ogg_next_sys v0.1.5
+   Compiling alsa-sys v0.4.0
+   Compiling hash32 v0.3.1
+   Compiling num-bigint v0.4.8
+   Compiling crc-catalog v2.5.0
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling extended v0.1.0
+   Compiling fallible-iterator v0.3.0
+   Compiling rusqlite v0.32.1
+   Compiling symphonia-format-riff v0.6.1
+   Compiling crc v3.4.0
+   Compiling num-rational v0.4.2
+   Compiling heapless v0.8.0
+   Compiling alsa v0.11.0
+   Compiling aotuv_lancer_vorbis_sys v0.1.6
+   Compiling opusic-sys v0.7.5
+   Compiling ort-sys v2.0.0-rc.12
+   Compiling ndarray v0.17.2
+warning: unused variable: `api`
+  --> crates/device-identity/src/lib.rs:29:22
+   |
+29 |         .setup(|app, api| {
+   |                      ^^^ help: if this is intentional, prefix it with an underscore: `_api`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `tauri-plugin-device-identity` (lib) generated 1 warning (run `cargo fix --lib -p tauri-plugin-device-identity` to apply 1 suggestion)
+   Compiling symphonia-codec-alac v0.6.1
+   Compiling symphonia-format-caf v0.6.1
+   Compiling symphonia-codec-aac v0.6.1
+   Compiling symphonia-format-isomp4 v0.6.1
+   Compiling symphonia-bundle-flac v0.6.1
+   Compiling symphonia-format-mkv v0.6.1
+   Compiling symphonia-format-ogg v0.6.1
+   Compiling symphonia-codec-vorbis v0.6.1
+   Compiling championvibe v0.1.0 (/home/runner/work/ChampionVibe/ChampionVibe/src-tauri)
+   Compiling symphonia-codec-pcm v0.6.1
+   Compiling symphonia-codec-adpcm v0.6.1
+   Compiling symphonia-bundle-mp3 v0.6.1
+   Compiling md-5 v0.10.6
+   Compiling audio_thread_priority v0.35.1
+   Compiling libloading v0.9.0
+   Compiling errno v0.3.14
+   Compiling hound v3.5.1
+   Compiling tinyvec v1.13.3
+   Compiling dasp_sample v0.11.0
+   Compiling cpal v0.18.2
+   Compiling flacenc v0.5.1
+   Compiling vorbis_rs v0.5.6
+   Compiling shine-rs v0.1.5
+   Compiling ort v2.0.0-rc.12
+   Compiling symphonia v0.6.1
+   Compiling symphonia-adapter-libopus v0.3.0
+   Compiling mp4 v0.14.0
+   Compiling arc-swap v1.9.2
+   Compiling memmap2 v0.9.11
+   Compiling rusty_aac v1.1.0
+   Compiling rtrb v0.3.5
+   Compiling axum-core v0.4.5
+   Compiling serde_path_to_error v0.1.20
+   Compiling matchit v0.7.3
+   Compiling axum v0.7.9
+   Compiling championvibe-issuer v0.1.0 (/home/runner/work/ChampionVibe/ChampionVibe/license-issuer)
+warning: unused import: `bail`
+ --> license-issuer/src/main.rs:1:14
+  |
+1 | use anyhow::{bail, Context, Result};
+  |              ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Plan`
+  --> license-issuer/src/main.rs:10:22
+   |
+10 |     PaymentVerifier, Plan, PriceOracle, Quote, SignedLicense, Treasury,
+   |                      ^^^^
+
+warning: `championvibe-issuer` (bin "championvibe-issuer" test) generated 2 warnings (run `cargo fix --bin "championvibe-issuer" -p championvibe-issuer --tests` to apply 2 suggestions)
+warning: `tauri-plugin-device-identity` (lib test) generated 1 warning (1 duplicate)
+   Compiling whisper-rs v0.16.0
+warning: unused import: `Mutex`
+  --> src-tauri/src/audio/decoder.rs:14:14
+   |
+14 |         Arc, Mutex,
+   |              ^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `CaptureFlags`
+  --> src-tauri/src/audio/mod.rs:19:19
+   |
+19 |     CaptureClock, CaptureFlags, CapturedFrame, RecordingFile, RecordingFormat, RecordingHub,
+   |                   ^^^^^^^^^^^^
+
+warning: unused import: `wsola::SharedSchedule`
+  --> src-tauri/src/audio/mod.rs:46:5
+   |
+46 | use wsola::SharedSchedule;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `SeparatorModelManifest`
+ --> src-tauri/src/import/mdx.rs:6:67
+  |
+6 |     read_manifest, validate_manifest_models, SeparatorModelEntry, SeparatorModelManifest,
+  |                                                                   ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `PathBuf` and `fs`
+ --> src-tauri/src/tts.rs:4:5
+  |
+4 |     fs,
+  |     ^^
+5 |     path::{Path, PathBuf},
+  |                  ^^^^^^^
+
+error[E0433]: cannot find type `PitchLockTransition` in this scope
+   --> src-tauri/src/audio/wsola.rs:504:30
+    |
+504 |         let mut transition = PitchLockTransition::new(1_000, false);
+    |                              ^^^^^^^^^^^^^^^^^^^ use of undeclared type `PitchLockTransition`
+    |
+help: consider importing this struct
+    |
+429 +     use crate::audio::wsola::PitchLockTransition;
+    |
+
+error[E0433]: cannot find module or crate `audio` in this scope
+    --> src-tauri/src/commands.rs:1507:13
+     |
+1507 |             audio::SampleQuantization::Bar
+     |             ^^^^^ use of unresolved module or unlinked crate `audio`
+     |
+help: to make use of source file src-tauri/src/audio/mod.rs, use `mod audio` in this file to declare the module
+    -->  src-tauri/src/lib.rs:1:1
+     |
+   1 + mod audio;
+     |
+help: consider importing this enum
+     |
+1479 +     use crate::audio::SampleQuantization;
+     |
+help: if you import `SampleQuantization`, refer to it directly
+     |
+1507 -             audio::SampleQuantization::Bar
+1507 +             SampleQuantization::Bar
+     |
+
+error[E0433]: cannot find module or crate `audio` in this scope
+    --> src-tauri/src/commands.rs:1540:13
+     |
+1540 |             audio::SampleQuantization::Beat
+     |             ^^^^^ use of unresolved module or unlinked crate `audio`
+     |
+help: to make use of source file src-tauri/src/audio/mod.rs, use `mod audio` in this file to declare the module
+    -->  src-tauri/src/lib.rs:1:1
+     |
+   1 + mod audio;
+     |
+help: consider importing this enum
+     |
+1479 +     use crate::audio::SampleQuantization;
+     |
+help: if you import `SampleQuantization`, refer to it directly
+     |
+1540 -             audio::SampleQuantization::Beat
+1540 +             SampleQuantization::Beat
+     |
+
+error[E0433]: cannot find module or crate `audio` in this scope
+    --> src-tauri/src/commands.rs:1543:13
+     |
+1543 |             audio::decode_tts_pcm_f32le(&decoded, metadata.sample_rate, metadata.channels).unwrap();
+     |             ^^^^^ use of unresolved module or unlinked crate `audio`
+     |
+help: to make use of source file src-tauri/src/audio/mod.rs, use `mod audio` in this file to declare the module
+    -->  src-tauri/src/lib.rs:1:1
+     |
+   1 + mod audio;
+     |
+help: consider importing this module
+     |
+1479 +     use crate::audio;
+     |
+
+warning: unused import: `path_sort_key`
+    --> src-tauri/src/import/mod.rs:1436:42
+     |
+1436 |     use super::{is_supported_audio_path, path_sort_key};
+     |                                          ^^^^^^^^^^^^^
+
+warning: unused import: `path::Path`
+    --> src-tauri/src/import/mod.rs:1437:15
+     |
+1437 |     use std::{path::Path, time::SystemTime};
+     |               ^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> src-tauri/src/audio/master_bus.rs:896:45
+    |
+896 |             let global_tts = aux.next_frame([deck_frame], [1, 0], [true, false], [false, false]);
+    |                                  ---------- ^^^^^^^^^^^^ expected an array with a size of 2, found one with a size of 1
+    |                                  |
+    |                                  arguments to this method are incorrect
+    |
+note: method defined here
+   --> src-tauri/src/audio/master_bus.rs:169:8
+    |
+169 |     fn next_frame(
+    |        ^^^^^^^^^^
+170 |         &mut self,
+171 |         deck_positions: [u64; 2],
+    |         ------------------------
+
+warning: unused import: `AudioDecoder`
+  --> src-tauri/src/import/media.rs:14:21
+   |
+14 |     codecs::audio::{AudioDecoder, AudioDecoderOptions},
+   |                     ^^^^^^^^^^^^
+
+warning: value assigned to `ready_sent` is never read
+   --> src-tauri/src/audio/decoder.rs:191:25
+    |
+191 |                         ready_sent = true;
+    |                         ^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> src-tauri/src/audio/decoder.rs:377:13
+    |
+377 |         let mut format = symphonia::default::get_probe()
+    |             ----^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+error[E0596]: cannot borrow `reader` as mutable, as it is not declared as mutable
+    --> src-tauri/src/audio/recording.rs:1588:33
+     |
+1588 |         let samples: Vec<i16> = reader
+     |                                 ^^^^^^ cannot borrow as mutable
+     |
+help: consider changing this to be mutable
+     |
+1587 |         let mut reader = hound::WavReader::open(&path).expect("final WAV is readable");
+     |             +++
+
+warning: unused variable: `high_ratio`
+   --> src-tauri/src/import/analysis.rs:438:5
+    |
+438 |     high_ratio: f64,
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_high_ratio`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> src-tauri/src/import/mod.rs:1044:21
+     |
+1044 |                 let mut connection = state
+     |                     ----^^^^^^^^^^
+     |                     |
+     |                     help: remove this `mut`
+
+warning: unused variable: `count`
+    --> src-tauri/src/mix_engine.rs:1875:10
+     |
+1875 |     let (count, cue_ms, matched_words) = best?;
+     |          ^^^^^ help: if this is intentional, prefix it with an underscore: `_count`
+
+warning: associated items `new`, `load`, `load_at`, `add_sample_file`, `add_tts_file`, and `add_sample_file_routed` are never used
+   --> src-tauri/src/audio/mod.rs:646:12
+    |
+645 | impl AudioEngine {
+    | ---------------- associated items in this implementation
+646 |     pub fn new() -> std::io::Result<Self> {
+    |            ^^^
+...
+722 |     pub fn load(&self, stems: StemFiles, grid: BeatGrid) -> Result<AudioStatus, String> {
+    |            ^^^^
+...
+761 |     pub fn load_at(
+    |            ^^^^^^^
+...
+905 |     pub fn add_sample_file(
+    |            ^^^^^^^^^^^^^^^
+...
+913 |     pub(crate) fn add_tts_file(
+    |                   ^^^^^^^^^^^^
+...
+921 |     fn add_sample_file_routed(
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `sample_rate` and `lookahead_frames` are never read
+  --> src-tauri/src/audio/limiter.rs:87:5
+   |
+86 | pub(super) struct LookaheadLimiter {
+   |                   ---------------- fields in this struct
+87 |     sample_rate: u32,
+   |     ^^^^^^^^^^^
+88 |     lookahead_frames: usize,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: methods `process`, `latency_frames`, and `latency_ms` are never used
+   --> src-tauri/src/audio/limiter.rs:139:19
+    |
+ 98 | impl LookaheadLimiter {
+    | --------------------- methods in this implementation
+...
+139 |     pub(super) fn process(&mut self, input: StereoFrame) -> StereoFrame {
+    |                   ^^^^^^^
+...
+180 |     pub(super) fn latency_frames(&self) -> usize {
+    |                   ^^^^^^^^^^^^^^
+...
+184 |     pub(super) fn latency_ms(&self) -> f32 {
+    |                   ^^^^^^^^^^
+
+warning: fields `n_fft` and `stem` are never read
+  --> src-tauri/src/audio/model_manager.rs:89:11
+   |
+89 |     Mdx { n_fft: usize, stem: &'static str },
+   |     ---   ^^^^^         ^^^^
+   |     |
+   |     fields in this variant
+   |
+   = note: `ArtifactKind` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `approximate_size` is never read
+   --> src-tauri/src/audio/model_manager.rs:103:5
+    |
+ 96 | struct Artifact {
+    |        -------- field in this struct
+...
+103 |     approximate_size: &'static str,
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: `Artifact` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: method `root` is never used
+   --> src-tauri/src/audio/model_manager.rs:221:12
+    |
+205 | impl ModelManager {
+    | ----------------- method in this implementation
+...
+221 |     pub fn root(&self) -> &Path {
+    |            ^^^^
+
+warning: method `nominal_bitrate_bps` is never used
+   --> src-tauri/src/audio/recording.rs:174:19
+    |
+123 | impl RecordingFormat {
+    | -------------------- method in this implementation
+...
+174 |     pub(crate) fn nominal_bitrate_bps(self, sample_rate: u32) -> u32 {
+    |                   ^^^^^^^^^^^^^^^^^^^
+
+warning: method `detach` is never used
+   --> src-tauri/src/audio/recording.rs:292:19
+    |
+247 | impl RecordingHub {
+    | ----------------- method in this implementation
+...
+292 |     pub(crate) fn detach(&self) {
+    |                   ^^^^^^
+
+warning: variant `Detach` is never constructed
+   --> src-tauri/src/audio/recording.rs:429:5
+    |
+425 | enum WorkerCommand {
+    |      ------------- variant in this enum
+...
+429 |     Detach,
+    |     ^^^^^^
+
+warning: methods `with_wav`, `with_tts_wav`, and `with_routed_wav` are never used
+   --> src-tauri/src/audio/samples.rs:129:12
+    |
+ 54 | impl SampleBank {
+    | --------------- methods in this implementation
+...
+129 |     pub fn with_wav(&self, path: &Path, display_name: Option<&str>) -> Result<Self, String> {
+    |            ^^^^^^^^
+...
+133 |     pub(super) fn with_tts_wav(
+    |                   ^^^^^^^^^^^^
+...
+141 |     fn with_routed_wav(
+    |        ^^^^^^^^^^^^^^^
+
+warning: function `stem_files_from_rows` is never used
+    --> src-tauri/src/commands.rs:1284:4
+     |
+1284 | fn stem_files_from_rows(rows: Vec<database::StemPath>) -> Result<audio::StemFiles, String> {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: field `file_path` is never read
+  --> src-tauri/src/database.rs:78:9
+   |
+76 | pub struct MixTrackRecord {
+   |            -------------- field in this struct
+77 |     pub id: i64,
+78 |     pub file_path: String,
+   |         ^^^^^^^^^
+   |
+   = note: `MixTrackRecord` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `job_id` is never read
+   --> src-tauri/src/database.rs:179:9
+    |
+177 | pub struct ImportItem {
+    |            ---------- field in this struct
+178 |     pub id: i64,
+179 |     pub job_id: i64,
+    |         ^^^^^^
+    |
+    = note: `ImportItem` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `id` is never read
+   --> src-tauri/src/database.rs:195:9
+    |
+194 | pub struct ImportJobConfig {
+    |            --------------- field in this struct
+195 |     pub id: i64,
+    |         ^^
+    |
+    = note: `ImportJobConfig` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `MAX_ANDROID_SAMPLE_FILES` is never used
+  --> src-tauri/src/import/mod.rs:31:7
+   |
+31 | const MAX_ANDROID_SAMPLE_FILES: usize = 61; // 64 total sample slots minus three built-ins.
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `finish_failed_job` is never used
+    --> src-tauri/src/import/mod.rs:1381:4
+     |
+1381 | fn finish_failed_job(state: &AppState, job_id: i64, error: &str) {
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `run_import_job_guarded` is never used
+    --> src-tauri/src/import/mod.rs:1422:4
+     |
+1422 | fn run_import_job_guarded(
+     |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `input_rate` is never read
+   --> src-tauri/src/import/media.rs:303:5
+    |
+302 | struct LinearResampler {
+    |        --------------- field in this struct
+303 |     input_rate: u32,
+    |     ^^^^^^^^^^
+
+warning: method `add_sample_file` is never used
+   --> src-tauri/src/mix_engine.rs:354:12
+    |
+207 | impl MixEngine {
+    | -------------- method in this implementation
+...
+354 |     pub fn add_sample_file(
+    |            ^^^^^^^^^^^^^^^
+
+warning: static `DUBPLATE_FILE_ID` is never used
+  --> src-tauri/src/tts.rs:10:8
+   |
+10 | static DUBPLATE_FILE_ID: AtomicU64 = AtomicU64::new(0);
+   |        ^^^^^^^^^^^^^^^^
+
+warning: constant `TARGET_PEAK` is never used
+  --> src-tauri/src/tts.rs:12:7
+   |
+12 | const TARGET_PEAK: f32 = 0.92;
+   |       ^^^^^^^^^^^
+
+warning: fields `model_path` and `config_path` are never read
+  --> src-tauri/src/tts.rs:17:9
+   |
+16 | pub struct DubplateRequest {
+   |            --------------- fields in this struct
+17 |     pub model_path: String,
+   |         ^^^^^^^^^^
+18 |     pub config_path: String,
+   |         ^^^^^^^^^^^
+   |
+   = note: `DubplateRequest` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `next_dubplate_filename` is never used
+   --> src-tauri/src/tts.rs:305:4
+    |
+305 | fn next_dubplate_filename() -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_pcm_wav` is never used
+   --> src-tauri/src/tts.rs:317:4
+    |
+317 | fn write_pcm_wav(path: &Path, sample_rate: u32, samples: &[f32]) -> Result<(), String> {
+    |    ^^^^^^^^^^^^^
+
+Some errors have detailed explanations: E0308, E0433, E0596.
+For more information about an error, try `rustc --explain E0308`.
+warning: `championvibe` (lib test) generated 13 warnings (11 duplicates)
+error: could not compile `championvibe` (lib test) due to 6 previous errors; 13 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+warning: `championvibe` (lib) generated 35 warnings (run `cargo fix --lib -p championvibe` to apply 9 suggestions)
