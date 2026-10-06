@@ -359,10 +359,8 @@ mod tests {
                 1.0
             };
             let fade_out = if frames_from_end < fade_frames {
-                0.5
-                    - 0.5
-                        * (std::f64::consts::PI * frames_from_end as f64 / fade_frames as f64)
-                            .cos()
+                0.5 - 0.5
+                    * (std::f64::consts::PI * frames_from_end as f64 / fade_frames as f64).cos()
             } else {
                 1.0
             };
