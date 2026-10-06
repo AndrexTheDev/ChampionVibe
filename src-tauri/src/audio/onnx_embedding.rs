@@ -21,7 +21,7 @@ pub(crate) struct OnnxMirEmbedder {
 impl OnnxMirEmbedder {
     pub(crate) fn load(path: &Path) -> Result<Self> {
         anyhow::ensure!(path.is_file(), "local audio embedding model does not exist");
-        let builder = Session::builder()
+        let mut builder = Session::builder()
             .map_err(|error| anyhow::anyhow!("could not initialize ONNX Runtime: {error}"))?
             .with_intra_threads(1)
             .map_err(|error| anyhow::anyhow!("could not configure ONNX Runtime: {error}"))?

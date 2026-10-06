@@ -409,14 +409,24 @@ fn create_session(
 ) -> Result<(Session, &'static str)> {
     #[cfg(windows)]
     if use_directml {
-        let directml = Session::builder()
-            .and_then(|builder| {
-                builder.with_execution_providers([ort::ep::DirectML::default().build()])
-            })
-            .and_then(|builder| builder.with_intra_threads(threads))
-            .and_then(|builder| builder.with_inter_threads(1))
-            .and_then(|builder| builder.with_parallel_execution(false))
-            .and_then(|builder| builder.commit_from_file(model_path));
+        let directml = (|| -> std::result::Result<Session, String> {
+            let builder = Session::builder().map_err(|error| error.to_string())?;
+            let builder = builder
+                .with_execution_providers([ort::ep::DirectML::default().build()])
+                .map_err(|error| error.to_string())?;
+            let builder = builder
+                .with_intra_threads(threads)
+                .map_err(|error| error.to_string())?;
+            let builder = builder
+                .with_inter_threads(1)
+                .map_err(|error| error.to_string())?;
+            let mut builder = builder
+                .with_parallel_execution(false)
+                .map_err(|error| error.to_string())?;
+            builder
+                .commit_from_file(model_path)
+                .map_err(|error| error.to_string())
+        })();
         if let Ok(session) = directml {
             return Ok((session, "DirectML"));
         }

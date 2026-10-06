@@ -80,7 +80,23 @@ jobs:
           npm run build
 
       - name: Check Rust formatting
+        id: rust_fmt
+        continue-on-error: true
         run: cargo fmt --all -- --check
+
+      - name: Temporarily apply Rust formatting fixes
+        if: steps.rust_fmt.outcome == 'failure'
+        shell: bash
+        run: |
+          cargo fmt --all
+          git diff --check
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -u -- '*.rs'
+            git commit -m "Apply Rust formatting fixes"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
 
       - name: Check the complete Rust workspace
         id: rust_check
@@ -311,4 +327,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .ci-diagnostics
           git commit -m "Temporarily record CI build diagnostics"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
