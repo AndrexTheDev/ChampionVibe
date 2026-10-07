@@ -20,6 +20,14 @@ if [[ ! -f "$path" ]]; then
   exit 1
 fi
 
+# Pull-request runs are read-only: the merge ref (`<number>/merge`) is not a branch that can be
+# pushed to, and a report from a PR must never rewrite the head branch. The jobs upload their
+# report as a workflow artifact instead.
+if [[ "${GITHUB_EVENT_NAME:-}" == "pull_request" || -n "${GITHUB_HEAD_REF:-}" ]]; then
+  echo "Pull-request context: $path is published as a workflow artifact, not committed."
+  exit 0
+fi
+
 branch="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
 if [[ -z "$branch" || "$branch" == "HEAD" ]]; then
   echo "Error: cannot determine the branch to commit to." >&2
