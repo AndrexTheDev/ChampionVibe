@@ -88,6 +88,18 @@ The KUIELab Track A reference code declares MIT, but that does not grant rights 
 
 `Cargo.lock` is checked in and regenerated only through the `Model pins and lockfile` workflow, so CI and release builds resolve the exact same dependency graph. The same workflow re-verifies every pinned model artifact against its SHA-256 and commits the machine-readable result to `reports/model-pin-verification.json`. `scripts/verify-model-pins.sh` can be run locally against `src-tauri/assets/model-registry.json` and fails any artifact whose source, size or hash does not match the cleared policy.
 
+### Cleaning a checkout
+
+`Cargo.lock` and the pinned registry keep a build reproducible; the checkout itself is kept reproducible with `scripts/clean-untracked.sh` (also available as `npm run clean:git`). It lists every untracked path Git would drop, never touches a tracked file, keeps ignored paths such as `node_modules/`, `target/` and `dist/` unless `--include-ignored` is passed, and only deletes after the explicit `--force` flag:
+
+```sh
+scripts/clean-untracked.sh                       # dry run: print what would be removed
+scripts/clean-untracked.sh --force               # remove untracked, non-ignored paths
+scripts/clean-untracked.sh --force --include-ignored
+```
+
+`src/git-clean.test.js` covers the dry run, the tracked/ignored guarantees and the refusal to run outside a work tree, so `npm test` fails if the cleaner ever turns destructive.
+
 ## Native audio engine
 
 The native output and DSP path is Rust-only: CPAL (Apache-2.0) selects WASAPI on Windows and AAudio on Android; Symphonia (MPL-2.0) streams supported formats on background workers, with bundled `libopus` used only through the Opus adapter; `rtrb` (MIT/Apache-2.0) provides bounded lock-free SPSC queues. These are open-source libraries without per-install royalties. Android uses API 26+ for AAudio. Windows Media Audio/ASF remains unsupported.

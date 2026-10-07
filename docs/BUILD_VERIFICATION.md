@@ -39,4 +39,6 @@ cargo fmt --all -- --check && cargo test --workspace   # Rust (needs the Linux a
 scripts/verify-model-pins.sh --report reports/model-pin-verification.json   # strict pin verification
 scripts/verify-model-pins.sh --allow-pending                                # discovery mode
 python3 scripts/generate-cc0-reggae-drops.py --check                        # sampleboard byte-exactness
+scripts/clean-untracked.sh                                                 # list untracked paths (dry run)
+scripts/clean-untracked.sh --force                                         # remove them; tracked and ignored paths stay
 ```

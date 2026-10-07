@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "test": "node --test",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "clean:git": "bash scripts/clean-untracked.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
