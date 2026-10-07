@@ -904,12 +904,7 @@ impl AudioEngine {
     /// position and the audio stream are left untouched; only quantization and future scheduling
     /// move to the new grid.
     pub fn set_beat_grid(&self, grid: BeatGrid) -> Result<AudioStatus, String> {
-        let response = self
-            .request(|reply| EngineCommand::SetGrid { grid, reply })
-            .map_err(|_| "native audio control thread is unavailable".to_owned())?;
-        response
-            .recv()
-            .map_err(|_| "native audio control thread stopped before adopting the grid".to_owned())?
+        self.request(|reply| EngineCommand::SetGrid { grid, reply })
     }
 
     pub fn sample_catalog(&self) -> Vec<SampleInfo> {

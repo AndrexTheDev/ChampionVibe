@@ -14,11 +14,6 @@ pub const TRUSTED_CONFIDENCE: f64 = 0.7;
 /// `>= TRUSTED_CONFIDENCE` comparison.
 pub const UNSURE_CONFIDENCE_CEILING: f64 = 0.69;
 
-/// True when a stored confidence may be presented as trusted without a manual correction.
-pub fn is_trusted(confidence: f64) -> bool {
-    confidence.is_finite() && confidence >= TRUSTED_CONFIDENCE
-}
-
 /// Clamps arbitrary input onto the stored `[0, 1]` scale; non-finite input becomes `0.0`.
 pub fn normalise(confidence: f64) -> f64 {
     if confidence.is_finite() {
@@ -55,11 +50,17 @@ mod tests {
 
     #[test]
     fn threshold_sits_exactly_on_the_trusted_boundary() {
-        assert!(is_trusted(TRUSTED_CONFIDENCE));
-        assert!(is_trusted(1.0));
-        assert!(!is_trusted(0.699_999));
-        assert!(!is_trusted(UNSURE_CONFIDENCE_CEILING));
-        assert!(!is_trusted(f64::NAN));
+        assert!(UNSURE_CONFIDENCE_CEILING < TRUSTED_CONFIDENCE);
+        // A corroborated reading at the boundary keeps its value, so the comparison in the UI and
+        // in the importer (`>= TRUSTED_CONFIDENCE`) agree with the policy.
+        assert_eq!(
+            heuristic_confidence(TRUSTED_CONFIDENCE, true),
+            TRUSTED_CONFIDENCE
+        );
+        assert!(heuristic_confidence(0.699_999, true) < TRUSTED_CONFIDENCE);
+        assert_eq!(heuristic_confidence(f64::NAN, true), 0.0);
+        assert_eq!(normalise(f64::INFINITY), 1.0);
+        assert_eq!(normalise(f64::NEG_INFINITY), 0.0);
     }
 
     #[test]

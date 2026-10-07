@@ -451,7 +451,7 @@ impl MasterBus {
                 }
                 self.glitches.log_event(
                     GlitchKind::BufferGrown,
-                    format!("backend={} device="{device_name}" bufferFrames={frames}"),
+                    format!("device="{device_name}" bufferFrames={frames}"),
                 );
                 Ok(())
             }
@@ -757,8 +757,9 @@ where
                 );
                 if error.kind() == ErrorKind::Xrun {
                     callback_glitches.record(GlitchKind::Xrun);
+                } else {
+                    callback_glitches.record(GlitchKind::DeviceError);
                 }
-                callback_glitches.record(GlitchKind::DeviceError);
                 callback_meter.device_errors.fetch_add(1, Ordering::Relaxed);
                 if !recoverable {
                     callback_meter.failed.store(1, Ordering::Release);

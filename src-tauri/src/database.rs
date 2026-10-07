@@ -1,4 +1,4 @@
-use crate::confidence::{self, TRUSTED_CONFIDENCE, UNSURE_CONFIDENCE_CEILING};
+use crate::confidence;
 use crate::localization;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
@@ -22,11 +22,8 @@ pub struct GridCorrection {
     pub grid_shift_ms: Option<f64>,
     /// Musical key in ChampionVibe spelling, e.g. `A minor` / `Bb major`.
     pub musical_key: Option<String>,
-    /// Optional Camelot code the key was selected from, e.g. `8A`; stored for the UI.
+    /// Optional Camelot code the key was selected from, e.g. `8A`; validated and echoed back.
     pub camelot_key: Option<String>,
-    /// False when the user only wanted the analysed values confirmed.
-    #[serde(default)]
-    pub reset_to_analysis: bool,
 }
 
 /// What the deck engine needs after a correction: the new grid and the verification flag.
@@ -89,7 +86,8 @@ pub struct TrackSummary {
     pub tags_json: String,
     pub bpm: Option<f64>,
     /// How much the beat-grid heuristic trusts `bpm`: 1.0 for a tagged/user-verified value and
-    /// anything below [`TRUSTED_CONFIDENCE`] when the grid is heuristic and ambiguous.
+    /// anything below [`crate::confidence::TRUSTED_CONFIDENCE`] when the grid is heuristic and
+    /// ambiguous.
     pub bpm_confidence: f64,
     /// How much the key heuristic trusts `musical_key`; same scale as [`Self::bpm_confidence`].
     pub key_confidence: f64,
@@ -130,8 +128,15 @@ pub struct MixTrackRecord {
     pub artist: String,
     pub duration_ms: Option<i64>,
     pub bpm: Option<f64>,
+    /// Mirrors `tracks.bpm_confidence`; the paged library query renders it, the mix engine uses
+    /// [`Self::beat_grid_json`] and [`Self::bpm`] for its tempo decisions.
+    #[allow(dead_code)]
     pub bpm_confidence: f64,
+    /// Mirrors `tracks.key_confidence` for the same reason as [`Self::bpm_confidence`].
+    #[allow(dead_code)]
     pub key_confidence: f64,
+    /// Mirrors `tracks.is_user_verified` for the same reason as [`Self::bpm_confidence`].
+    #[allow(dead_code)]
     pub is_user_verified: bool,
     pub beat_grid_json: Option<String>,
     pub sentiment: Option<f64>,

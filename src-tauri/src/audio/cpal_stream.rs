@@ -201,17 +201,11 @@ pub(super) fn expected_interval_ns(frames: u32, sample_rate: u32) -> u64 {
 pub(super) struct CallbackWatchdog {
     first_callback_ns: Option<u64>,
     last_callback_ns: Option<u64>,
-    observed_frames: u32,
 }
 
 impl CallbackWatchdog {
     pub(super) fn new() -> Self {
         Self::default()
-    }
-
-    /// Frames the device handed to the most recent callback.
-    pub(super) fn observed_frames(&self) -> u32 {
-        self.observed_frames
     }
 
     /// Forgets all timing state. Called after the stream is rebuilt, because a rebuild introduces a
@@ -230,7 +224,6 @@ impl CallbackWatchdog {
     ) -> Option<GlitchKind> {
         let previous_ns = self.last_callback_ns.replace(now_ns);
         let first_ns = *self.first_callback_ns.get_or_insert(now_ns);
-        self.observed_frames = frames;
         let expected_ns = expected_interval_ns(frames, sample_rate);
         let previous_ns = previous_ns?;
         if now_ns.saturating_sub(first_ns) < WATCHDOG_STARTUP_GRACE_NS
@@ -291,25 +284,8 @@ impl BufferRecoveryPolicy {
         self.frames
     }
 
-    pub(super) fn base_frames(&self) -> u32 {
-        self.base_frames
-    }
-
-    pub(super) fn max_frames(&self) -> u32 {
-        self.max_frames
-    }
-
-    pub(super) fn growths(&self) -> u32 {
-        self.growths
-    }
-
     pub(super) fn exhausted(&self) -> bool {
         self.exhausted
-    }
-
-    /// Frames the in-flight rebuild is switching to.
-    pub(super) fn pending_frames(&self) -> Option<u32> {
-        self.pending_frames
     }
 
     /// Syncs the policy with the frame count the device actually hands out. That value is the only
@@ -446,10 +422,6 @@ impl GlitchTelemetry {
             // Exhaustion is not a recurring event: it is a state flag and a single log line.
             GlitchKind::BufferExhausted => None,
         }
-    }
-
-    pub(super) fn source(&self) -> GlitchSource {
-        self.source
     }
 
     /// Monotonic milliseconds since the master bus opened; the recovery policy's clock.
@@ -648,7 +620,6 @@ mod tests {
             now += 10_666_666;
             assert_eq!(watchdog.observe(now, 512, 48_000), None);
         }
-        assert_eq!(watchdog.observed_frames(), 512);
         // Three times the expected interval: the device ran out of data.
         now += 32_000_000;
         assert_eq!(
@@ -702,22 +673,26 @@ mod tests {
         assert_eq!(policy.plan_growth(1, 20), Some(1_024));
         // A rebuild is already planned: no second plan until it reports back.
         assert_eq!(policy.plan_growth(50, 30), None);
-        assert_eq!(policy.pending_frames(), Some(1_024));
+        assert_eq!(policy.pending_frames, Some(1_024));
         policy.note_growth(true);
         assert_eq!(policy.frames(), 1_024);
-        assert_eq!(policy.growths(), 1);
+        assert_eq!(policy.growths, 1);
+        // Each further attempt has to wait out the cooldown after the previous one.
         assert_eq!(
-            policy.plan_growth(GLITCHES_BEFORE_GROWTH, 1_000),
+            policy.plan_growth(GLITCHES_BEFORE_GROWTH, GROWTH_COOLDOWN_MS + 1_000),
             Some(2_048)
         );
         policy.note_growth(true);
         assert_eq!(
-            policy.plan_growth(GLITCHES_BEFORE_GROWTH, 2_000),
+            policy.plan_growth(
+                GLITCHES_BEFORE_GROWTH,
+                GROWTH_COOLDOWN_MS * 2 + 2_000
+            ),
             Some(4_096)
         );
         policy.note_growth(true);
         // The device maximum is reached: further glitches cannot grow the buffer.
-        assert_eq!(policy.plan_growth(1_000, 10_000), None);
+        assert_eq!(policy.plan_growth(1_000, GROWTH_COOLDOWN_MS * 4), None);
         assert!(policy.exhausted());
         assert_eq!(policy.frames(), 4_096);
     }
@@ -740,12 +715,12 @@ mod tests {
     #[test]
     fn policy_rate_limits_rebuild_attempts_and_retries_after_a_failure() {
         let mut policy = BufferRecoveryPolicy::new(None, None);
-        assert_eq!(policy.base_frames(), NOMINAL_BUFFER_FRAMES);
-        assert_eq!(policy.max_frames(), MAX_RECOVERED_BUFFER_FRAMES);
+        assert_eq!(policy.base_frames, NOMINAL_BUFFER_FRAMES);
+        assert_eq!(policy.max_frames, MAX_RECOVERED_BUFFER_FRAMES);
         assert_eq!(policy.plan_growth(GLITCHES_BEFORE_GROWTH, 0), Some(2_048));
         policy.note_growth(false);
         assert_eq!(policy.frames(), NOMINAL_BUFFER_FRAMES);
-        assert_eq!(policy.growths(), 0);
+        assert_eq!(policy.growths, 0);
         // Too soon after the failed attempt.
         assert_eq!(policy.plan_growth(10, GROWTH_COOLDOWN_MS - 1), None);
         assert_eq!(
@@ -753,15 +728,15 @@ mod tests {
             Some(2_048)
         );
         policy.note_growth(true);
-        assert_eq!(policy.growths(), 1);
-        assert_eq!(policy.pending_frames(), None);
+        assert_eq!(policy.growths, 1);
+        assert_eq!(policy.pending_frames, None);
     }
 
     #[test]
     fn policy_clamps_a_device_maximum_that_is_smaller_than_the_base() {
         let mut policy = BufferRecoveryPolicy::new(Some(256), Some(64));
-        assert_eq!(policy.base_frames(), 256);
-        assert_eq!(policy.max_frames(), 256);
+        assert_eq!(policy.base_frames, 256);
+        assert_eq!(policy.max_frames, 256);
         assert_eq!(policy.plan_growth(GLITCHES_BEFORE_GROWTH, 0), None);
         assert!(policy.exhausted());
     }
