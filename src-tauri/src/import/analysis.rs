@@ -1,4 +1,5 @@
 use crate::audio::mir_analysis::{self, MirInput};
+use crate::confidence::{heuristic_confidence, trusted_confidence};
 use anyhow::{Context, Result};
 use hound::WavReader;
 use rustfft::{num_complex::Complex32, Fft, FftPlanner};
@@ -22,6 +23,14 @@ const MINOR_PROFILE: [f32; 12] = [
 const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
+/// A beat grid shorter than this many beats cannot corroborate itself; the tempo stays a guess.
+const MIN_CORROBORATED_BEATS: f64 = 16.0;
+/// Autocorrelation lags within this many frames count as the same tempo when comparing halves.
+const LAG_TOLERANCE: usize = 2;
+/// Distinct pitch classes that must carry at least this share of the peak chroma energy before a
+/// key reading is allowed to claim it was corroborated.
+const MIN_KEY_PITCH_CLASSES: usize = 3;
+const KEY_PITCH_CLASS_SHARE: f64 = 0.15;
 
 #[derive(Debug, Clone)]
 pub(crate) struct AudioAnalysis {
@@ -103,7 +112,8 @@ pub(crate) fn analyze_wav(
     let (detected_bpm, detected_bpm_confidence, beat_grid_seconds) =
         estimate_beat_grid(&accumulator.onsets, duration_seconds);
     let (bpm, bpm_confidence) = if let Some(tagged_bpm) = tagged_bpm {
-        (Some(tagged_bpm), 1.0)
+        // A tag in the file's metadata is authoritative, not a heuristic guess.
+        (Some(tagged_bpm), trusted_confidence())
     } else {
         (detected_bpm, detected_bpm_confidence)
     };
@@ -298,18 +308,8 @@ impl FeatureAccumulator {
     }
 }
 
-fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f64, Vec<f64>) {
-    if onsets.len() < 32 || duration_seconds <= 0.0 {
-        return (None, 0.0, Vec::new());
-    }
-    let mean = onsets.iter().map(|value| f64::from(*value)).sum::<f64>() / onsets.len() as f64;
-    let novelty: Vec<f64> = onsets
-        .iter()
-        .map(|value| (f64::from(*value) - mean).max(0.0))
-        .collect();
-    let frame_rate = ANALYSIS_RATE as f64 / HOP_SIZE as f64;
-    let min_lag = (frame_rate * 60.0 / 240.0).round() as usize;
-    let max_lag = (frame_rate * 60.0 / 40.0).round() as usize;
+/// Autocorrelation score of the novelty curve against itself for every plausible beat lag.
+fn lag_scores(novelty: &[f64], min_lag: usize, max_lag: usize) -> Vec<(usize, f64)> {
     let mut scores = Vec::<(usize, f64)>::new();
     for lag in min_lag.max(1)..=max_lag.min(novelty.len() / 2) {
         let mut dot = 0.0;
@@ -325,17 +325,59 @@ fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f6
         let score = dot / (left_power * right_power).sqrt().max(1.0e-12);
         scores.push((lag, score));
     }
-    let Some(max_score) = scores.iter().map(|(_, score)| *score).reduce(f64::max) else {
-        return (None, 0.0, Vec::new());
-    };
-    // Autocorrelation has equally strong peaks at multiples of a regular beat period. Prefer
-    // the shortest effectively tied lag so a 120 BPM pulse is not mistaken for 60 BPM.
-    let Some((best_lag, best_score)) = scores
+    scores
+}
+
+/// Strongest lag (shortest of an effectively tied group, so a 120 BPM pulse is not read as 60).
+fn dominant_lag(scores: &[(usize, f64)]) -> Option<(usize, f64)> {
+    let max_score = scores.iter().map(|(_, score)| *score).reduce(f64::max)?;
+    scores
         .iter()
         .copied()
         .filter(|(_, score)| max_score - *score <= 1.0e-9)
         .min_by_key(|(lag, _)| *lag)
-    else {
+}
+
+/// Two lags describe the same tempo when they are within the tie window or stand in a 2:1 / 1:2
+/// relationship, which autocorrelation cannot distinguish on its own.
+fn same_tempo(left: usize, right: usize) -> bool {
+    left.abs_diff(right) <= LAG_TOLERANCE
+        || left.abs_diff(right.saturating_mul(2)) <= LAG_TOLERANCE
+        || right.abs_diff(left.saturating_mul(2)) <= LAG_TOLERANCE
+}
+
+/// Corroborates a tempo by looking for the same beat period in the first and second half of the
+/// track. A reading only the head of a track supports stays a heuristic guess.
+fn tempo_is_corroborated(novelty: &[f64], min_lag: usize, max_lag: usize, best_lag: usize) -> bool {
+    let middle = novelty.len() / 2;
+    if middle < min_lag.saturating_mul(4) {
+        return false;
+    }
+    [&novelty[..middle], &novelty[middle..]]
+        .into_iter()
+        .all(|half| {
+            dominant_lag(&lag_scores(half, min_lag, max_lag))
+                .map(|(lag, score)| score > 0.0 && same_tempo(lag, best_lag))
+                .unwrap_or(false)
+        })
+}
+
+fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f64, Vec<f64>) {
+    if onsets.len() < 32 || duration_seconds <= 0.0 {
+        return (None, 0.0, Vec::new());
+    }
+    let mean = onsets.iter().map(|value| f64::from(*value)).sum::<f64>() / onsets.len() as f64;
+    let novelty: Vec<f64> = onsets
+        .iter()
+        .map(|value| (f64::from(*value) - mean).max(0.0))
+        .collect();
+    let frame_rate = ANALYSIS_RATE as f64 / HOP_SIZE as f64;
+    let min_lag = (frame_rate * 60.0 / 240.0).round() as usize;
+    let max_lag = (frame_rate * 60.0 / 40.0).round() as usize;
+    let scores = lag_scores(&novelty, min_lag, max_lag);
+    // Autocorrelation has equally strong peaks at multiples of a regular beat period. Prefer
+    // the shortest effectively tied lag so a 120 BPM pulse is not mistaken for 60 BPM.
+    let Some((best_lag, best_score)) = dominant_lag(&scores) else {
         return (None, 0.0, Vec::new());
     };
     if best_score < 0.03 {
@@ -344,11 +386,10 @@ fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f6
 
     let second_score = scores
         .iter()
-        .filter(|(lag, _)| lag.abs_diff(best_lag) > 2 && lag.abs_diff(best_lag * 2) > 2)
+        .filter(|(lag, _)| !same_tempo(**lag, best_lag))
         .map(|(_, score)| *score)
         .fold(0.0, f64::max);
-    let confidence =
-        ((best_score - second_score).max(0.0) / best_score.max(1.0e-12) * 2.0).clamp(0.0, 1.0);
+    let margin = (best_score - second_score).max(0.0) / best_score.max(1.0e-12) * 2.0;
     let period_seconds = best_lag as f64 / frame_rate;
     let bpm = 60.0 / period_seconds;
 
@@ -373,7 +414,16 @@ fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f6
         grid.push(beat);
         beat += period_seconds;
     }
-    (Some(bpm), confidence, grid)
+    // The grid must span enough beats and both halves of the track must agree on the period before
+    // the heuristic is allowed to report a trusted confidence.
+    let spans_enough_beats = grid.len() as f64 >= MIN_CORROBORATED_BEATS;
+    let corroborated = spans_enough_beats
+        && tempo_is_corroborated(&novelty, min_lag, max_lag, best_lag);
+    (
+        Some(bpm),
+        heuristic_confidence(margin, corroborated),
+        grid,
+    )
 }
 
 fn estimate_key(chroma: &[f64; 12]) -> (Option<String>, f64) {
@@ -397,9 +447,24 @@ fn estimate_key(chroma: &[f64; 12]) -> (Option<String>, f64) {
     candidates.sort_by(|a, b| b.0.total_cmp(&a.0));
     let best = candidates[0];
     let next = candidates[1].0;
-    let confidence = ((best.0 - next).max(0.0) * 2.0).clamp(0.0, 1.0);
+    let margin = (best.0 - next).max(0.0) * 2.0;
+    // A profile fit only means something when several pitch classes carry the chroma energy; a
+    // single ringing note is not a key signature.
+    let peak = chroma.iter().copied().fold(0.0, f64::max);
+    let carried_pitch_classes = if peak > 0.0 {
+        chroma
+            .iter()
+            .filter(|value| **value >= peak * KEY_PITCH_CLASS_SHARE)
+            .count()
+    } else {
+        0
+    };
+    let corroborated = carried_pitch_classes >= MIN_KEY_PITCH_CLASSES;
     let mode = if best.2 { "major" } else { "minor" };
-    (Some(format!("{} {mode}", NOTE_NAMES[best.1])), confidence)
+    (
+        Some(format!("{} {mode}", NOTE_NAMES[best.1])),
+        heuristic_confidence(margin, corroborated),
+    )
 }
 
 fn profile_correlation(chroma: &[f64; 12], profile: &[f32; 12], tonic: usize) -> f64 {
@@ -492,6 +557,16 @@ fn classify_acoustic(
 #[cfg(test)]
 mod tests {
     use super::{estimate_beat_grid, estimate_key};
+    use crate::confidence::TRUSTED_CONFIDENCE;
+
+    /// Onsets at `period` frames across `frames`, optionally only inside `[from, to)`.
+    fn onset_train(frames: usize, period: usize, from: usize, to: usize) -> Vec<f32> {
+        let mut onsets = vec![0.0f32; frames];
+        for index in (from..to).step_by(period) {
+            onsets[index] = 1.0;
+        }
+        onsets
+    }
 
     #[test]
     fn periodic_onsets_produce_a_120_bpm_grid() {
@@ -514,5 +589,63 @@ mod tests {
         chroma[7] = 6.0;
         let (key, _) = estimate_key(&chroma);
         assert!(key.unwrap().starts_with("C "));
+    }
+
+    #[test]
+    fn unsupported_tempo_stays_below_the_trusted_threshold() {
+        // The pulse only exists in the first half of the track, so the two halves cannot agree on
+        // a period and the heuristic must not claim the reading is trusted.
+        let onsets = onset_train(43 * 24, 22, 8, 43 * 12);
+        let (bpm, confidence, _) = estimate_beat_grid(&onsets, 24.0);
+        assert!(bpm.is_some(), "the head of the track still yields a tempo");
+        assert!(
+            confidence < TRUSTED_CONFIDENCE,
+            "unsure tempo reported {confidence}"
+        );
+    }
+
+    #[test]
+    fn tempo_without_enough_beats_stays_below_the_trusted_threshold() {
+        let onsets = onset_train(43 * 2, 22, 8, 43 * 2);
+        let (_, confidence, grid) = estimate_beat_grid(&onsets, 1.0);
+        assert!(grid.len() < 16, "test fixture must stay short");
+        assert!(confidence < TRUSTED_CONFIDENCE);
+    }
+
+    #[test]
+    fn degenerate_chroma_stays_below_the_trusted_threshold() {
+        let mut chroma = [0.0f64; 12];
+        chroma[3] = 5.0;
+        let (key, confidence) = estimate_key(&chroma);
+        assert!(key.is_some(), "a single pitch class still names a key");
+        assert!(
+            confidence < TRUSTED_CONFIDENCE,
+            "unsure key reported {confidence}"
+        );
+    }
+
+    #[test]
+    fn distinct_pitch_classes_can_corroborate_a_key() {
+        // C major triad plus its seventh: several pitch classes carry the energy.
+        let mut chroma = [0.0f64; 12];
+        chroma[0] = 8.0;
+        chroma[2] = 4.0;
+        chroma[4] = 6.0;
+        chroma[7] = 6.0;
+        chroma[11] = 5.0;
+        let (key, confidence) = estimate_key(&chroma);
+        assert_eq!(key.as_deref(), Some("C major"));
+        assert!(confidence >= 0.0 && confidence <= 1.0);
+    }
+
+    #[test]
+    fn silent_audio_reports_no_tempo_and_no_key() {
+        let (bpm, confidence, grid) = estimate_beat_grid(&[0.0f32; 43 * 24], 24.0);
+        assert!(bpm.is_none());
+        assert_eq!(confidence, 0.0);
+        assert!(grid.is_empty());
+        let (key, confidence) = estimate_key(&[0.0f64; 12]);
+        assert!(key.is_none());
+        assert_eq!(confidence, 0.0);
     }
 }

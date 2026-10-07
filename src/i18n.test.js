@@ -42,17 +42,21 @@ test('covers every static HTML text node and translatable attribute in all local
 });
 
 test('all literal runtime translation and toast keys exist in every dictionary', () => {
-  const source = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
+  const sources = ['./main.js', './ui/grid_editor.js'].map((path) =>
+    readFileSync(new URL(path, import.meta.url), 'utf8'),
+  );
   const keys = new Set();
-  for (const [, , key] of source.matchAll(/\bt\(\s*(['"])(.*?)\1/gu)) if (key.length > 1) keys.add(key);
-  for (const [, , key] of source.matchAll(/\btoast\(\s*(['"])(.*?)\1/gu)) if (key.length > 1) keys.add(key);
+  for (const source of sources) {
+    for (const [, , key] of source.matchAll(/\bt\(\s*(['"])(.*?)\1/gu)) if (key.length > 1) keys.add(key);
+    for (const [, , key] of source.matchAll(/\btoast\(\s*(['"])(.*?)\1/gu)) if (key.length > 1) keys.add(key);
+  }
   for (const locale of SUPPORTED_LOCALES) {
     const missing = [...keys].filter((key) => !Object.hasOwn(dictionaries[locale], key));
     assert.deepEqual(missing, [], `${locale} runtime translation coverage`);
   }
 });
 
-test('keeps the new Auto-Gain, search, analysis-badge, and Pitch-Lock copy available in all four locales', () => {
+test('keeps the Auto-Gain, search, analysis-badge, Pitch-Lock and grid-editor copy in all four locales', () => {
   const required = [
     'Auto-Gain',
     'R128 target',
@@ -70,6 +74,20 @@ test('keeps the new Auto-Gain, search, analysis-badge, and Pitch-Lock copy avail
     'One Drop',
     'Clave',
     'Boom Bap',
+    'Grid gespeichert: {bpm} BPM · {key}',
+    'Grid gespeichert · live übernommen',
+    'Grid-Korrektur fehlgeschlagen: {error}',
+    'Grid-Editor ist nur in der Tauri-App verfügbar.',
+    'Grid & Tonart korrigieren: {title}',
+    'Konfidenz {percent} %',
+    'Verifiziert',
+    'Nicht analysiert',
+    'Keine Tonart analysiert',
+    'Kompatibel: {key}',
+    'Grid um {ms} ms verschieben',
+    'Einen Halbton höher',
+    'Einen Halbton tiefer',
+    'Heuristik unsicher · BPM {bpm} % · Tonart {key} % · bitte prüfen',
   ];
   for (const locale of SUPPORTED_LOCALES) {
     const missing = required.filter((key) => !Object.hasOwn(dictionaries[locale], key));

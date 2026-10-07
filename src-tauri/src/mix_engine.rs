@@ -191,6 +191,12 @@ struct ActiveMix {
 
 enum MixCommand {
     Start { track_id: i64, preset: MixPreset },
+    /// Re-reads one track after a manual grid/key correction and adopts the corrected values on the
+    /// deck that holds it, without interrupting playback.
+    RefreshTrack {
+        track_id: i64,
+        reply: mpsc::SyncSender<Result<bool, String>>,
+    },
     Stop(mpsc::SyncSender<MixStatus>),
     ForceNext(mpsc::SyncSender<Result<MixStatus, String>>),
     SetPreset(MixPreset),
@@ -268,6 +274,25 @@ impl MixEngine {
         response
             .recv_timeout(Duration::from_secs(30))
             .map_err(|error| format!("the mix worker did not force the next track: {error}"))?
+    }
+
+    /// Adopts a manual grid/key correction on the running mix: the corrected record replaces the
+    /// one held in memory, the live deck switches to the corrected grid in place and the prepared
+    /// transition is rebuilt against the corrected tempo.
+    ///
+    /// Returns `Ok(true)` when a running mix held the track, `Ok(false)` when nothing was running
+    /// (or the track was not part of the mix) and `Err` when the correction could not be adopted.
+    pub fn refresh_track(&self, track_id: i64) -> Result<bool, String> {
+        if track_id <= 0 {
+            return Err("track id must be positive".to_owned());
+        }
+        let (reply, response) = mpsc::sync_channel(1);
+        self.commands
+            .send(MixCommand::RefreshTrack { track_id, reply })
+            .map_err(|_| "the local mix worker is unavailable".to_owned())?;
+        response
+            .recv_timeout(Duration::from_secs(30))
+            .map_err(|error| format!("the mix worker did not adopt the correction: {error}"))?
     }
 
     pub fn set_intensity(&self, intensity: Option<u8>) -> Result<MixStatus, String> {
@@ -400,6 +425,16 @@ fn mix_worker(
                         );
                     }
                 }
+            }
+            Ok(MixCommand::RefreshTrack { track_id, reply }) => {
+                let result = refresh_active_track(
+                    active_mix.as_mut(),
+                    track_id,
+                    &database,
+                    &decks,
+                    &shared_status,
+                );
+                let _ = reply.send(result);
             }
             Ok(MixCommand::Stop(reply)) => {
                 stop_decks(&decks);
@@ -664,6 +699,76 @@ fn prepare_next(
         )
         .map_err(|error| format!("could not prebuffer next local track: {error}"))?;
     Ok(PreparedTransition { next, decision })
+}
+
+/// Applies a corrected track record to a running mix. The deck keeps decoding the same stems and
+/// only its quantization grid changes, so the correction is audible as a re-aligned beat grid
+/// rather than as a gap.
+fn refresh_active_track(
+    active_mix: Option<&mut ActiveMix>,
+    track_id: i64,
+    database: &Arc<Mutex<Connection>>,
+    decks: &[audio::AudioEngine; 2],
+    shared_status: &Arc<Mutex<MixStatus>>,
+) -> Result<bool, String> {
+    let Some(run) = active_mix else {
+        return Ok(false);
+    };
+    let holds_current = run.current.id == track_id;
+    let holds_prepared = run.prepared.next.id == track_id;
+    if !holds_current && !holds_prepared {
+        return Ok(false);
+    }
+    let corrected = {
+        let connection = database
+            .lock()
+            .map_err(|_| "application database lock is poisoned".to_owned())?;
+        database::load_mix_track(&connection, track_id)
+            .map_err(|error| format!("could not re-read the corrected track: {error:#}"))?
+            .ok_or_else(|| format!("track {track_id} is no longer in the local library"))?
+    };
+    if holds_current {
+        let grid = track_beat_grid(&corrected);
+        let adopt = decks[run.active_deck].set_beat_grid(grid);
+        adopt.map_err(|error| format!("could not adopt the corrected grid: {error}"))?;
+        run.current = corrected;
+    } else {
+        // The prepared record is replaced together with the transition it belongs to, because the
+        // tempo match, cue points and crossfade length were all derived from the old values.
+        run.prepared.next = corrected;
+    }
+    if matches!(run.phase, RunnerPhase::Transitioning { .. }) {
+        // A transition is already running: the corrected values are picked up by the preparation
+        // that follows the fade instead of being forced into the audio mid-transition.
+        return Ok(true);
+    }
+    if let Err(error) = reprepare_next_transition(run, database, decks, shared_status) {
+        // The corrected track keeps playing; only the *next* transition could not be prepared, so
+        // report the reason without stopping the audible deck.
+        if let Ok(mut status) = shared_status.lock() {
+            status.error = Some(error);
+        }
+    }
+    Ok(true)
+}
+
+/// Re-prepares the next transition of a running mix from the values it currently holds.
+fn reprepare_next_transition(
+    run: &mut ActiveMix,
+    database: &Arc<Mutex<Connection>>,
+    decks: &[audio::AudioEngine; 2],
+    shared_status: &Arc<Mutex<MixStatus>>,
+) -> Result<(), String> {
+    let preset = run.preset;
+    let intensity_override = run.intensity_override;
+    replace_prepared_transition(
+        run,
+        preset,
+        intensity_override,
+        database,
+        decks,
+        shared_status,
+    )
 }
 
 fn replace_prepared_transition(
@@ -2059,6 +2164,9 @@ mod tests {
             artist: "Artist".to_owned(),
             duration_ms: Some(180_000),
             bpm: Some(120.0),
+            bpm_confidence: 0.0,
+            key_confidence: 0.0,
+            is_user_verified: false,
             beat_grid_json: None,
             sentiment: None,
             sentiment_label: None,

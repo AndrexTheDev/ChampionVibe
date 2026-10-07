@@ -1,5 +1,7 @@
 mod audio;
+mod camelot;
 mod commands;
+mod confidence;
 mod database;
 mod device_binding;
 mod import;
@@ -50,6 +52,7 @@ pub fn run() {
             commands::upsert_track,
             commands::search_tracks,
             commands::search_tracks_page,
+            commands::correct_track_grid,
             commands::get_track_waveform_packet,
             commands::get_track_manual_tags,
             commands::set_track_manual_tags,

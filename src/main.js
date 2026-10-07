@@ -8,6 +8,13 @@ import { getAudioFormat } from './audio-format.js';
 import { applyStaticTranslations, getLocale, setLocale, t } from './i18n.js';
 import { parseSemanticTrackQuery } from './search.js';
 import { createKokoroWasmService, pushWasmTtsAudioBuffer } from './services/tts_wasm.js';
+import {
+  applyCorrectionToTrack,
+  confidenceBadge,
+  confidenceTooltip,
+  initGridEditor,
+  replaceTrackInPages,
+} from './ui/grid_editor.js';
 
 applyStaticTranslations(document);
 const $ = (selector) => document.querySelector(selector);
@@ -27,6 +34,8 @@ const BUSY_BUTTON_IDLE_LABELS = Object.freeze({
   'start-import': 'Importieren & analysieren',
 });
 const SESSION_CACHE_KEY = 'championvibe.proSession.v1';
+/** Grid-editor instance, created once the module wiring below runs. */
+let gridEditor = null;
 const storedWaveformMode = localStorage.getItem('championvibe.waveformMode');
 const initialWaveformMode = isAndroid
   ? (storedWaveformMode === 'off' ? 'off' : 'progress')
@@ -440,6 +449,56 @@ function openLicenseModal() {
 function closeLicenseModal() {
   const dialog = $('#license-modal');
   if (dialog.open) dialog.close();
+}
+
+/** Opens the beat-grid editor for one library row. */
+function openGridEditor(track) {
+  if (!track) return;
+  if (!isTauri) return toast(t('Grid-Editor ist nur in der Tauri-App verfügbar.'), true);
+  if (!gridEditor) return;
+  gridEditor.open(track);
+}
+
+/**
+ * Persists a correction from the grid editor. The command writes SQLite, re-aligns the live deck in
+ * place and refreshes the mix engine, so the row, the badge and the playing audio all agree without
+ * reloading any audio.
+ */
+async function saveGridCorrection(track, correction) {
+  if (!isTauri) {
+    toast(t('Grid-Editor ist nur in der Tauri-App verfügbar.'), true);
+    throw new Error('the grid editor needs the Tauri shell');
+  }
+  let response;
+  try {
+    response = await invoke('correct_track_grid', { trackId: track.id, correction });
+  } catch (error) {
+    toast(t('Grid-Korrektur fehlgeschlagen: {error}', { error: String(error) }), true);
+    throw error;
+  }
+  const patched = applyCorrectionToTrack(track, response);
+  replaceTrackInPages(state.tracks, track.id, patched);
+  if (state.selectedTrack?.id === track.id) {
+    state.selectedTrack = patched;
+    updateCurrentTrackUI(patched);
+    renderSelectedTrackContext(patched);
+  }
+  renderVirtualTracks();
+  const bpmLabel = Number.isFinite(Number(patched.bpm)) ? Number(patched.bpm).toFixed(1) : '—';
+  const keyLabel = patched.musicalKey || patched.musical_key || t('Keine Tonart analysiert');
+  toast(t('Grid gespeichert: {bpm} BPM · {key}', { bpm: bpmLabel, key: keyLabel }));
+  if (response.liveDeckUpdated || response.mixEngineUpdated) {
+    toast(t('Grid gespeichert · live übernommen'));
+  }
+  if (response.adoptionWarning) toast(String(response.adoptionWarning), true);
+  if (state.waveformMode === 'canvas' && !isAndroid && state.waveformTrackId === track.id) {
+    // The cached packet embedded the old beat grid; pull the corrected markers back in.
+    state.waveformTrackId = null;
+    state.waveformPeaks = null;
+    state.waveformBeatGrid = null;
+    void loadWaveformOnPlay(patched);
+  }
+  return patched;
 }
 
 function openInfoModal(tab = 'help') {
@@ -1832,17 +1891,23 @@ function createVirtualTrackRow() {
   mood.className = 'track-mood-badge';
   const rhythm = document.createElement('span');
   rhythm.className = 'track-rhythm-badge';
-  badges.append(mood, rhythm);
+  const confidence = document.createElement('span');
+  confidence.className = 'track-confidence-badge';
+  badges.append(mood, rhythm, confidence);
   select.append(title, artist, badges);
   const bpm = document.createElement('span');
   bpm.className = 'track-bpm';
   const format = document.createElement('span');
   format.className = 'track-format-badge';
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'track-grid-edit';
+  edit.textContent = '✎';
   const play = document.createElement('button');
   play.type = 'button';
   play.className = 'track-play';
   play.textContent = '▶';
-  row.append(cover, select, format, bpm, play);
+  row.append(cover, select, format, bpm, edit, play);
   return row;
 }
 
@@ -1895,6 +1960,8 @@ function renderVirtualTracks() {
     const rhythmBadge = select.querySelector('.track-rhythm-badge');
     const bpm = row.querySelector('.track-bpm');
     const format = row.querySelector('.track-format-badge');
+    const confidenceBadgeElement = select.querySelector('.track-confidence-badge');
+    const edit = row.querySelector('.track-grid-edit');
     const play = row.querySelector('.track-play');
     row.classList.toggle('selected', Boolean(track && state.selectedTrack?.id === track.id));
     if (!track) {
@@ -1909,6 +1976,13 @@ function renderVirtualTracks() {
       format.textContent = '';
       format.title = '';
       bpm.textContent = '';
+      confidenceBadgeElement.textContent = '';
+      confidenceBadgeElement.hidden = true;
+      confidenceBadgeElement.removeAttribute('data-tone');
+      confidenceBadgeElement.title = '';
+      confidenceBadgeElement.removeAttribute('aria-label');
+      edit.hidden = true;
+      edit.dataset.trackId = '';
       select.disabled = true;
       play.disabled = true;
       continue;
@@ -1949,6 +2023,18 @@ function renderVirtualTracks() {
     format.title = t('{format}-Audiodatei', { format: audioFormat });
     format.setAttribute('aria-label', t('Dateiformat {format}', { format: audioFormat }));
     bpm.textContent = track.bpm == null ? '' : `${Number(track.bpm).toFixed(0)} BPM`;
+    const badge = confidenceBadge(track);
+    const badgeTooltip = confidenceTooltip(track);
+    const badgeTitle = t(badgeTooltip.key, badgeTooltip.values);
+    confidenceBadgeElement.hidden = false;
+    confidenceBadgeElement.dataset.tone = badge.tone;
+    confidenceBadgeElement.textContent = t(badge.key, badge.values);
+    confidenceBadgeElement.title = badgeTitle;
+    confidenceBadgeElement.setAttribute('aria-label', badgeTitle);
+    edit.dataset.trackId = String(track.id);
+    edit.hidden = !isTauri;
+    edit.title = t('Grid & Tonart korrigieren: {title}', { title: track.title });
+    edit.setAttribute('aria-label', t('Grid & Tonart korrigieren: {title}', { title: track.title }));
     select.disabled = false;
     play.dataset.trackId = String(track.id);
     play.title = t('Lokale Wiedergabe starten');
@@ -2781,6 +2867,7 @@ $('#chain-select').addEventListener('change', () => {
 $('#create-quote').addEventListener('click', createQuote);
 $('#activate-license').addEventListener('click', activate);
 $('#connect-wallet').addEventListener('click', connectWallet);
+gridEditor = initGridEditor({ save: saveGridCorrection });
 $('#open-license-modal').addEventListener('click', openLicenseModal);
 $('#close-license-modal').addEventListener('click', closeLicenseModal);
 $('#license-modal').addEventListener('click', (event) => {
@@ -2854,6 +2941,7 @@ $('#track-list').addEventListener('click', (event) => {
   const track = virtualTrackAt(Number(row.dataset.index));
   if (!track || row.dataset.trackId !== String(track.id)) return;
   if (event.target.closest('.track-play')) loadAndPlayTrack(track, row.querySelector('.track-play'));
+  else if (event.target.closest('.track-grid-edit')) openGridEditor(track);
   else if (event.target.closest('.track-select')) void selectTrack(track);
 });
 $('#pick-audio-files').addEventListener('click', () => pickAudioFiles(false));

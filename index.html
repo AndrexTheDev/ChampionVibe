@@ -390,6 +390,48 @@
         <p class="license-key-note">Nach bestätigter Zahlung ruft Rust <code>activate_license</code> auf, prüft die ED25519-signierte Geräte-Lizenz und speichert sie lokal. Der private Signierschlüssel bleibt beim Issuer.</p>
       </div>
     </dialog>
+    <dialog class="grid-editor-modal" id="grid-editor-modal" aria-labelledby="grid-editor-title">
+      <div class="grid-editor-shell">
+        <header class="license-modal-heading">
+          <div><span class="panel-kicker">MIR CONFIDENCE · MANUAL OVERRIDE</span><h2 id="grid-editor-title">Beat-Grid &amp; Tonart korrigieren</h2><p>±0,1 BPM, Grid-Verschiebung in Millisekunden und Camelot-Rad. Speichern markiert den Track als manuell verifiziert.</p></div>
+          <button class="modal-close" id="close-grid-editor" type="button" aria-label="Grid-Editor schließen">×</button>
+        </header>
+        <p class="grid-editor-context" id="grid-editor-context"></p>
+        <section class="grid-editor-field">
+          <span class="field-label">BPM</span>
+          <div class="grid-editor-row">
+            <button class="grid-editor-nudge" id="grid-editor-bpm-down" type="button" aria-label="BPM um 0,1 senken">−0,1</button>
+            <output class="grid-editor-value" id="grid-editor-bpm-value"></output>
+            <button class="grid-editor-nudge" id="grid-editor-bpm-up" type="button" aria-label="BPM um 0,1 erhöhen">+0,1</button>
+          </div>
+          <input id="grid-editor-bpm-range" type="range" min="30" max="300" step="0.1" aria-label="BPM feinjustieren" />
+        </section>
+        <section class="grid-editor-field">
+          <span class="field-label">GRID-VERSCHIEBUNG (MS)</span>
+          <div class="grid-editor-row">
+            <output class="grid-editor-value" id="grid-editor-shift-value"></output>
+          </div>
+          <input id="grid-editor-shift-range" type="range" min="-2000" max="2000" step="1" value="0" aria-label="Grid-Verschiebung in Millisekunden" />
+          <div class="grid-editor-shift-steps" id="grid-editor-shift-steps"></div>
+        </section>
+        <section class="grid-editor-field">
+          <span class="field-label">TONART (CAMELOT-RAD)</span>
+          <div class="grid-editor-row">
+            <output class="grid-editor-value" id="grid-editor-key-value"></output>
+            <div class="grid-editor-transposition" id="grid-editor-transposition"></div>
+            <label class="grid-editor-key-select" for="grid-editor-key-select"><span class="field-label">TONART WÄHLEN</span><select id="grid-editor-key-select" aria-label="Tonart auf dem Camelot-Rad wählen"></select></label>
+          </div>
+          <div class="camelot-wheel" id="grid-editor-wheel" role="group" aria-label="Camelot-Rad"></div>
+          <span class="field-label">KOMPATIBLE POSITIONEN</span>
+          <div class="camelot-wheel compatible" id="grid-editor-compatible"></div>
+        </section>
+        <p class="grid-editor-legend">Grün = verifiziert oder hohe Konfidenz · gelb-orange = Heuristik, bitte prüfen.</p>
+        <footer class="grid-editor-actions">
+          <button class="button button-outline" id="grid-editor-reset" type="button">Zurücksetzen</button>
+          <button class="button button-primary" id="grid-editor-save" type="button">Speichern &amp; verifizieren</button>
+        </footer>
+      </div>
+    </dialog>
     <dialog class="info-modal" id="info-modal" aria-labelledby="info-modal-title">
       <div class="info-modal-shell">
         <header class="license-modal-heading">

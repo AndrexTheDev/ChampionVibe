@@ -5,18 +5,23 @@
 //! clock, applies the live master limiter, and taps the post-limiter signal for recording. The
 //! CPAL data callback performs no disk I/O, heap allocation, or mutex locking.
 
+use super::cpal_stream::{
+    BufferRecoveryPolicy, CallbackWatchdog, GlitchKind, GlitchSnapshot, GlitchSource,
+    GlitchTelemetry, NOMINAL_BUFFER_FRAMES,
+};
 use super::{
     limiter::LookaheadLimiter, wsola::PitchLockTransition, CaptureClock, CapturedFrame, DeckFrame,
     EngineStatus, RecordingHub, StereoFrame,
 };
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    FromSample, SampleFormat, SizedSample, Stream, StreamConfig,
+    BufferSize, ErrorKind, FromSample, SampleFormat, SizedSample, Stream, StreamConfig,
+    SupportedBufferSize,
 };
 use rtrb::{Consumer, Producer, PushError, RingBuffer};
 use std::sync::{
     atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering},
-    Arc, Mutex,
+    Arc, Mutex, TryLockError,
 };
 
 const MASTER_DECK_RING_FRAMES: usize = 2_048;
@@ -291,16 +296,28 @@ pub(super) struct MasterBus {
     flush_requested: [Arc<AtomicBool>; 2],
     tts_producer: Mutex<Producer<MasterTtsEvent>>,
     retained_tts_buffers: Mutex<Vec<Arc<[StereoFrame]>>>,
+    glitches: Arc<GlitchTelemetry>,
+    recovery: Mutex<BufferRecoveryPolicy>,
     state: Mutex<MasterBusState>,
 }
 
 struct MasterBusState {
     stream: Option<Stream>,
+    /// Everything needed to rebuild the same stream with a larger hardware buffer.
+    setup: Option<StreamSetup>,
     config: Option<AudioOutputConfig>,
     deck_consumers: Option<[Consumer<DeckFrame>; 2]>,
     recording_producer: Option<Producer<CapturedFrame>>,
     recording_consumer: Option<Consumer<CapturedFrame>>,
     tts_consumer: Option<Consumer<MasterTtsEvent>>,
+}
+
+struct StreamSetup {
+    device: cpal::Device,
+    device_name: String,
+    sample_format: SampleFormat,
+    config: StreamConfig,
+    graph: Arc<Mutex<MasterOutputGraph>>,
 }
 
 impl MasterBus {
@@ -313,11 +330,14 @@ impl MasterBus {
         let (deck_b_producer, deck_b_consumer) = RingBuffer::new(MASTER_DECK_RING_FRAMES);
         let (recording_producer, recording_consumer) = recording.new_capture_ring();
         let (tts_producer, tts_consumer) = RingBuffer::new(MASTER_TTS_EVENT_CAPACITY);
+        let glitches = GlitchTelemetry::new(GlitchSource::detect(), NOMINAL_BUFFER_FRAMES);
         let bus = Arc::new(Self {
             recording,
             meter: MasterMeter::new(),
             statuses,
             pitch_lock_enabled,
+            recovery: Mutex::new(BufferRecoveryPolicy::new(None, None)),
+            glitches,
             tts_producer: Mutex::new(tts_producer),
             retained_tts_buffers: Mutex::new(Vec::new()),
             flush_requested: [
@@ -326,6 +346,7 @@ impl MasterBus {
             ],
             state: Mutex::new(MasterBusState {
                 stream: None,
+                setup: None,
                 config: None,
                 deck_consumers: Some([deck_a_consumer, deck_b_consumer]),
                 recording_producer: Some(recording_producer),
@@ -334,6 +355,115 @@ impl MasterBus {
             }),
         });
         (bus, [deck_a_producer, deck_b_producer])
+    }
+
+    /// Internal glitch telemetry for the status command.
+    pub(super) fn glitch_snapshot(&self) -> GlitchSnapshot {
+        self.drain_glitch_telemetry();
+        self.glitches.snapshot()
+    }
+
+    /// Turns callback-side counters into log lines and grows the hardware buffer when the driver
+    /// keeps glitching. Cheap enough to sit on the status path: it only inspects atomics while no
+    /// glitch is pending.
+    fn drain_glitch_telemetry(&self) {
+        let glitches = self.glitches.drain_recoverable_glitches();
+        let now_ms = self.glitches.now_ms();
+        let plan = {
+            let mut policy = match self.recovery.lock() {
+                Ok(policy) => policy,
+                Err(_) => return,
+            };
+            policy.note_observed_frames(self.glitches.observed_callback_frames());
+            policy.plan_growth(glitches, now_ms)
+        };
+        let Some(frames) = plan else {
+            if glitches > 0 && self.recovery.lock().is_ok_and(|policy| policy.exhausted()) {
+                self.glitches.note_buffer_exhausted();
+            }
+            return;
+        };
+        let outcome = self.rebuild_output_stream(frames);
+        let succeeded = outcome.is_ok();
+        if let Ok(mut policy) = self.recovery.lock() {
+            policy.note_growth(succeeded);
+        }
+        match outcome {
+            Ok(()) => self.glitches.note_buffer_frames(frames),
+            // A failed rebuild is a device-level problem, not an exhausted device.
+            Err(error) => self.glitches.log_event(GlitchKind::DeviceError, error),
+        }
+    }
+
+    /// Rebuilds the single output stream with a larger hardware buffer around the existing render
+    /// graph. The deck rings, the limiter state and the recording tap are untouched, so playback
+    /// resumes on the new buffer with at most one buffer of silence in between.
+    fn rebuild_output_stream(&self, frames: u32) -> Result<(), String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "master audio bus state lock is poisoned".to_owned())?;
+        let (device, device_name, sample_format, base_config, graph) = match state.setup.as_ref() {
+            Some(setup) => (
+                setup.device.clone(),
+                setup.device_name.clone(),
+                setup.sample_format,
+                setup.config,
+                Arc::clone(&setup.graph),
+            ),
+            None => return Err("no native output stream is open to rebuild".to_owned()),
+        };
+        let config = StreamConfig {
+            buffer_size: BufferSize::Fixed(frames),
+            ..base_config
+        };
+        if let Some(stream) = state.stream.as_ref() {
+            // Stop pulling frames from the graph before a second stream would consume them too.
+            let _ = stream.pause();
+        }
+        let rebuilt = build_stream_for_format(
+            sample_format,
+            &device,
+            &config,
+            usize::from(config.channels),
+            config.sample_rate,
+            Arc::clone(&graph),
+            Arc::clone(&self.meter),
+            self.statuses.clone(),
+            Arc::clone(&self.glitches),
+        );
+        let rebuilt = match rebuilt {
+            Ok(stream) => match stream.play() {
+                Ok(()) => Ok(stream),
+                Err(error) => Err(format!(
+                    "could not start the rebuilt master output stream: {error}"
+                )),
+            },
+            Err(error) => Err(error),
+        };
+        match rebuilt {
+            Ok(stream) => {
+                let previous = state.stream.replace(stream);
+                drop(previous);
+                // A rebuild introduces a deliberate gap that is not a glitch.
+                if let Ok(mut graph) = graph.lock() {
+                    graph.watchdog.reset();
+                }
+                self.glitches.log_event(
+                    GlitchKind::BufferGrown,
+                    format!("backend={} device="{device_name}" bufferFrames={frames}"),
+                );
+                Ok(())
+            }
+            Err(error) => {
+                if let Some(stream) = state.stream.as_ref() {
+                    let _ = stream.play();
+                }
+                Err(format!(
+                    "could not rebuild the master output with a {frames}-frame buffer: {error}"
+                ))
+            }
+        }
     }
 
     pub(super) fn meter(&self) -> Arc<MasterMeter> {
@@ -415,11 +545,13 @@ impl MasterBus {
         }
     }
 
-    /// Frees completed clips away from the CPAL callback after its final Arc has been released.
+    /// Frees completed clips away from the CPAL callback after its final Arc has been released and
+    /// lets the buffer recovery act on the glitches the callback recorded.
     pub(super) fn collect_finished_tts_audio(&self) {
         if let Ok(mut retained) = self.retained_tts_buffers.lock() {
             retained.retain(|buffer| Arc::strong_count(buffer) > 1);
         }
+        self.drain_glitch_telemetry();
     }
 
     fn ensure_started(&self) -> Result<AudioOutputConfig, String> {
@@ -435,10 +567,14 @@ impl MasterBus {
         let device = host
             .default_output_device()
             .ok_or_else(|| "no default audio output device is available".to_owned())?;
+        let device_name = device
+            .name()
+            .unwrap_or_else(|_| "unknown output device".to_owned());
         let supported = device
             .default_output_config()
             .map_err(|error| format!("could not query output device format: {error}"))?;
         let sample_format = supported.sample_format();
+        let (default_buffer_frames, max_buffer_frames) = buffer_size_range(supported.buffer_size());
         let config: StreamConfig = supported.into();
         let channels = config.channels as usize;
         let sample_rate = config.sample_rate;
@@ -464,61 +600,57 @@ impl MasterBus {
             .ok_or_else(|| "master TTS aux reader was already consumed".to_owned())?;
         self.recording.attach(capture_consumer, sample_rate)?;
 
-        let flush_requested = self.flush_requested.clone();
-        let pitch_lock_enabled = self.pitch_lock_enabled.clone();
-        let stream = match sample_format {
-            SampleFormat::F32 => build_stream::<f32>(
-                &device,
-                &config,
-                channels,
-                sample_rate,
-                consumers,
-                capture_producer,
-                tts_consumer,
-                Arc::clone(&self.recording),
-                Arc::clone(&self.meter),
-                self.statuses.clone(),
-                flush_requested,
-                pitch_lock_enabled,
-            ),
-            SampleFormat::I16 => build_stream::<i16>(
-                &device,
-                &config,
-                channels,
-                sample_rate,
-                consumers,
-                capture_producer,
-                tts_consumer,
-                Arc::clone(&self.recording),
-                Arc::clone(&self.meter),
-                self.statuses.clone(),
-                flush_requested,
-                pitch_lock_enabled,
-            ),
-            SampleFormat::U16 => build_stream::<u16>(
-                &device,
-                &config,
-                channels,
-                sample_rate,
-                consumers,
-                capture_producer,
-                tts_consumer,
-                Arc::clone(&self.recording),
-                Arc::clone(&self.meter),
-                self.statuses.clone(),
-                flush_requested,
-                pitch_lock_enabled,
-            ),
-            format => Err(format!(
-                "unsupported native output sample format: {format:?}"
-            )),
-        }?;
+        let [deck_a, deck_b] = consumers;
+        let clock = Arc::clone(&self.recording.clock);
+        let graph = Arc::new(Mutex::new(MasterOutputGraph {
+            mixer: MasterMixer::new(sample_rate, Arc::clone(&self.meter)),
+            deck_a,
+            deck_b,
+            tts_aux: MasterTtsAux::new(tts_consumer, sample_rate),
+            recording_producer: capture_producer,
+            recording: Arc::clone(&self.recording),
+            clock,
+            pitch_transitions: std::array::from_fn(|index| {
+                PitchLockTransition::new(
+                    sample_rate,
+                    self.pitch_lock_enabled[index].load(Ordering::Acquire),
+                )
+            }),
+            statuses: self.statuses.clone(),
+            pitch_lock_enabled: self.pitch_lock_enabled.clone(),
+            flush_requested: self.flush_requested.clone(),
+            sample_rate,
+            watchdog: CallbackWatchdog::new(),
+            glitches: Arc::clone(&self.glitches),
+        }));
+        if let Ok(mut policy) = self.recovery.lock() {
+            *policy = BufferRecoveryPolicy::new(default_buffer_frames, max_buffer_frames);
+            self.glitches.note_buffer_frames(policy.frames());
+        }
+        let stream = build_stream_for_format(
+            sample_format,
+            &device,
+            &config,
+            channels,
+            sample_rate,
+            Arc::clone(&graph),
+            Arc::clone(&self.meter),
+            self.statuses.clone(),
+            Arc::clone(&self.glitches),
+        )?;
         stream
             .play()
             .map_err(|error| format!("could not start the native master output stream: {error}"))?;
 
         let output = AudioOutputConfig { sample_rate };
         state.config = Some(output);
+        state.setup = Some(StreamSetup {
+            device,
+            device_name,
+            sample_format,
+            config,
+            graph,
+        });
         state.stream = Some(stream);
         Ok(output)
     }
@@ -537,6 +669,51 @@ struct MasterOutputGraph {
     pitch_transitions: [PitchLockTransition; 2],
     flush_requested: [Arc<AtomicBool>; 2],
     sample_rate: u32,
+    watchdog: CallbackWatchdog,
+    glitches: Arc<GlitchTelemetry>,
+}
+
+/// Buffer sizes the device advertises. Both are optional because some hosts, notably AAudio,
+/// report `SupportedBufferSize::Unknown`.
+fn buffer_size_range(supported: &SupportedBufferSize) -> (Option<u32>, Option<u32>) {
+    match supported {
+        SupportedBufferSize::Range { min, max } => (Some(*min), Some(*max)),
+        SupportedBufferSize::Unknown => (None, None),
+    }
+}
+
+/// Builds one output stream for whichever sample format the device wants.
+fn build_stream_for_format(
+    sample_format: SampleFormat,
+    device: &cpal::Device,
+    config: &StreamConfig,
+    channels: usize,
+    sample_rate: u32,
+    graph: Arc<Mutex<MasterOutputGraph>>,
+    meter: Arc<MasterMeter>,
+    statuses: [Arc<EngineStatus>; 2],
+    glitches: Arc<GlitchTelemetry>,
+) -> Result<Stream, String> {
+    match sample_format {
+        SampleFormat::F32 => build_stream::<f32>(
+            device, config, channels, sample_rate, graph, meter, statuses, glitches,
+        ),
+        SampleFormat::I16 => build_stream::<i16>(
+            device, config, channels, sample_rate, graph, meter, statuses, glitches,
+        ),
+        SampleFormat::U16 => build_stream::<u16>(
+            device, config, channels, sample_rate, graph, meter, statuses, glitches,
+        ),
+        format => Err(format!("unsupported native output sample format: {format:?}")),
+    }
+}
+
+/// Overwrites a callback buffer with silence. Used when the render graph is unavailable, so a
+/// rebuild can never leave uninitialised samples on the device.
+fn silent_output<T: FromSample<f32>>(output: &mut [T]) {
+    for sample in output.iter_mut() {
+        *sample = T::from_sample_(0.0_f32);
+    }
 }
 
 fn build_stream<T>(
@@ -544,54 +721,59 @@ fn build_stream<T>(
     config: &StreamConfig,
     channels: usize,
     sample_rate: u32,
-    deck_consumers: [Consumer<DeckFrame>; 2],
-    recording_producer: Producer<CapturedFrame>,
-    tts_consumer: Consumer<MasterTtsEvent>,
-    recording: Arc<RecordingHub>,
+    graph: Arc<Mutex<MasterOutputGraph>>,
     meter: Arc<MasterMeter>,
     statuses: [Arc<EngineStatus>; 2],
-    flush_requested: [Arc<AtomicBool>; 2],
-    pitch_lock_enabled: [Arc<AtomicBool>; 2],
+    glitches: Arc<GlitchTelemetry>,
 ) -> Result<Stream, String>
 where
     T: SizedSample + FromSample<f32>,
 {
-    let [deck_a, deck_b] = deck_consumers;
-    let clock = Arc::clone(&recording.clock);
     let callback_meter = Arc::clone(&meter);
     let error_statuses = statuses.clone();
-    let mut graph = MasterOutputGraph {
-        mixer: MasterMixer::new(sample_rate, meter),
-        deck_a,
-        deck_b,
-        tts_aux: MasterTtsAux::new(tts_consumer, sample_rate),
-        recording_producer,
-        recording,
-        clock,
-        pitch_transitions: std::array::from_fn(|index| {
-            PitchLockTransition::new(
-                sample_rate,
-                pitch_lock_enabled[index].load(Ordering::Acquire),
-            )
-        }),
-        statuses,
-        pitch_lock_enabled,
-        flush_requested,
-        sample_rate,
-    };
+    let callback_glitches = Arc::clone(&glitches);
     device
         .build_output_stream::<T, _, _>(
             *config,
-            move |output: &mut [T], info| graph.render(output, channels, info),
+            move |output: &mut [T], info| match graph.try_lock() {
+                Ok(mut graph) => graph.render(output, channels, info),
+                Err(TryLockError::Poisoned(_)) => {
+                    callback_glitches.record(GlitchKind::DeviceError);
+                    silent_output(output);
+                }
+                Err(TryLockError::WouldBlock) => {
+                    // Only a buffer rebuild holds the graph; the frames it is not rendering during
+                    // this callback are silence, and the glitch is visible in the telemetry.
+                    callback_glitches.record(GlitchKind::LockContention);
+                    silent_output(output);
+                }
+            },
             move |error| {
+                // Android's AAudio backend reports every xrun as `ErrorKind::Xrun`, and a xrun is
+                // recoverable: it must not raise the permanent device-failure flag.
+                let recoverable = matches!(
+                    error.kind(),
+                    ErrorKind::Xrun | ErrorKind::RealtimeDenied
+                );
+                if error.kind() == ErrorKind::Xrun {
+                    callback_glitches.record(GlitchKind::Xrun);
+                }
+                callback_glitches.record(GlitchKind::DeviceError);
                 callback_meter.device_errors.fetch_add(1, Ordering::Relaxed);
-                callback_meter.failed.store(1, Ordering::Release);
+                if !recoverable {
+                    callback_meter.failed.store(1, Ordering::Release);
+                }
                 if let Ok(mut last_error) = callback_meter.last_error.lock() {
-                    *last_error = Some(format!("native master audio device error: {error}"));
+                    *last_error = Some(format!(
+                        "native master audio device error ({:?}): {error}",
+                        error.kind()
+                    ));
                 }
                 for status in &error_statuses {
                     status.device_errors.fetch_add(1, Ordering::Relaxed);
-                    status.failed.store(true, Ordering::Release);
+                    if !recoverable {
+                        status.failed.store(true, Ordering::Release);
+                    }
                 }
             },
             None,
@@ -610,6 +792,12 @@ impl MasterOutputGraph {
     ) {
         if channels == 0 {
             return;
+        }
+        let callback_ns = self.clock.now_ns();
+        let frames = (output.len() / channels) as u32;
+        self.glitches.observe_callback_frames(frames);
+        if let Some(glitch) = self.watchdog.observe(callback_ns, frames, self.sample_rate) {
+            self.glitches.record(glitch);
         }
         let timestamp = info.timestamp();
         let playback_delay = timestamp.playback.duration_since(timestamp.callback);
@@ -761,6 +949,10 @@ impl MasterOutputGraph {
         }
         if deck_b_underrun {
             self.statuses[1].underruns.fetch_add(1, Ordering::Relaxed);
+        }
+        if deck_a_underrun || deck_b_underrun {
+            // One starved callback is one glitch, however many frames it swallowed.
+            self.glitches.record(GlitchKind::Underrun);
         }
     }
 }

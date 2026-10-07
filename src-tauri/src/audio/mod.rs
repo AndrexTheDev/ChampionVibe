@@ -1,6 +1,7 @@
 #[cfg(target_os = "android")]
 mod android_context;
 mod auto_gain;
+pub(crate) mod cpal_stream;
 mod decoder;
 pub(crate) mod dj_engine;
 mod dsp;
@@ -36,7 +37,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicI64, AtomicU32, AtomicU64, Ordering},
         mpsc::{self, Receiver, RecvTimeoutError, SyncSender},
         Arc, Mutex,
     },
@@ -255,6 +256,9 @@ pub struct AudioStatus {
     pub position_frames: u64,
     pub underruns: u64,
     pub device_errors: u64,
+    /// Internal audio-glitch telemetry, filled by the master bus: per-kind counters, the hardware
+    /// buffer the recovery settled on and the most recent glitch log lines.
+    pub audio_glitches: Option<cpal_stream::GlitchSnapshot>,
     pub last_error: Option<String>,
 }
 
@@ -547,6 +551,9 @@ struct EngineStatus {
     timeline_generation: AtomicU64,
     underruns: AtomicU64,
     device_errors: AtomicU64,
+    /// Library track currently loaded in this deck, or `-1` when the deck holds local files that
+    /// are not a library row. A manual grid correction uses it to update the live deck in place.
+    track_id: AtomicI64,
     last_error: Mutex<Option<String>>,
 }
 
@@ -563,6 +570,7 @@ impl EngineStatus {
             timeline_generation: AtomicU64::new(0),
             underruns: AtomicU64::new(0),
             device_errors: AtomicU64::new(0),
+            track_id: AtomicI64::new(-1),
             last_error: Mutex::new(None),
         }
     }
@@ -599,6 +607,7 @@ impl EngineStatus {
             position_frames: self.position_frames.load(Ordering::Relaxed),
             underruns: self.underruns.load(Ordering::Relaxed),
             device_errors: self.device_errors.load(Ordering::Relaxed),
+            audio_glitches: None,
             last_error: self.last_error.lock().ok().and_then(|error| error.clone()),
         }
     }
@@ -876,6 +885,33 @@ impl AudioEngine {
         self.status()
     }
 
+    /// Records which library track the deck is holding. `None` clears the binding for local stem
+    /// files that have no library row.
+    pub fn set_loaded_track_id(&self, track_id: Option<i64>) {
+        self.status
+            .track_id
+            .store(track_id.unwrap_or(-1), Ordering::Release);
+    }
+
+    pub fn loaded_track_id(&self) -> Option<i64> {
+        match self.status.track_id.load(Ordering::Acquire) {
+            -1 => None,
+            track_id => Some(track_id),
+        }
+    }
+
+    /// Adopts a corrected beat grid on the loaded track. Beats already decoded, the playback
+    /// position and the audio stream are left untouched; only quantization and future scheduling
+    /// move to the new grid.
+    pub fn set_beat_grid(&self, grid: BeatGrid) -> Result<AudioStatus, String> {
+        let response = self
+            .request(|reply| EngineCommand::SetGrid { grid, reply })
+            .map_err(|_| "native audio control thread is unavailable".to_owned())?;
+        response
+            .recv()
+            .map_err(|_| "native audio control thread stopped before adopting the grid".to_owned())?
+    }
+
     pub fn sample_catalog(&self) -> Vec<SampleInfo> {
         self.controls.collect_retired_sample_frames();
         self.controls.sample_bank.load().infos()
@@ -935,6 +971,8 @@ impl AudioEngine {
 
     fn with_master_status(&self, mut status: AudioStatus) -> AudioStatus {
         status.active_stems = self.active_stem_count();
+        // Also drains pending glitches, which is what triggers hardware-buffer recovery.
+        status.audio_glitches = Some(self.master_bus.glitch_snapshot());
         let meter = self.master_bus.meter();
         status.limiter_latency_ms = meter.limiter_latency_ms();
         status.master_gain_reduction_db = meter.gain_reduction_db();
@@ -1012,6 +1050,12 @@ enum EngineCommand {
         start_at_ms: u64,
         active_stems: usize,
         integrated_lufs: Option<f64>,
+        reply: SyncSender<Result<AudioStatus, String>>,
+    },
+    /// Swaps the beat grid of the loaded track without touching the decoder, so a manual grid
+    /// correction takes effect on the live deck without dropping a single audio frame.
+    SetGrid {
+        grid: BeatGrid,
         reply: SyncSender<Result<AudioStatus, String>>,
     },
     TriggerSample {
@@ -1239,6 +1283,21 @@ fn audio_control_loop(
                     }
                 }
             }
+            Ok(EngineCommand::SetGrid { grid, reply }) => {
+                let result = match session.as_mut() {
+                    Some(active) => {
+                        let sample_rate = active.quantization_grid.sample_rate;
+                        active.grid = grid;
+                        active.quantization_grid = QuantizationGrid::from_grid(
+                            &active.grid,
+                            sample_rate,
+                        );
+                        Ok(status.snapshot())
+                    }
+                    None => Err("no stem set is loaded".to_owned()),
+                };
+                let _ = reply.send(result);
+            }
             Ok(EngineCommand::TriggerSample {
                 clip,
                 quantization,
@@ -1361,6 +1420,9 @@ fn audio_control_loop(
                     dispose_session(old, &controls, &deck_output);
                 }
                 master_bus.flush_deck(deck_id);
+                // The deck no longer holds a library row, so a later grid correction must not be
+                // applied to whatever track happens to be loaded next.
+                status.track_id.store(-1, Ordering::Release);
                 status.reset();
                 let _ = reply.send(Ok(status.snapshot()));
             }

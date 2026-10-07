@@ -706,6 +706,97 @@ pub async fn get_track_waveform_packet(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GridCorrectionResponse {
+    #[serde(flatten)]
+    pub outcome: database::GridCorrectionOutcome,
+    /// The track is loaded in the single deck and its live beat grid was re-aligned in place.
+    pub live_deck_updated: bool,
+    /// A running mix engine held the track and adopted the corrected record.
+    pub mix_engine_updated: bool,
+    /// Camelot neighbours of the stored key, for the transposition selector.
+    pub compatible_camelot: Vec<String>,
+    /// Set when the correction was stored but a live deck could not adopt it immediately.
+    pub adoption_warning: Option<String>,
+}
+
+/// Stores a manual BPM / grid-shift / key correction from the grid editor and pushes it into every
+/// live consumer at once: the SQLite library, the deck that currently holds the track and the mix
+/// engine's in-memory records. The correction is durable, so it also survives a re-import.
+#[tauri::command]
+pub async fn correct_track_grid(
+    state: State<'_, AppState>,
+    track_id: i64,
+    correction: database::GridCorrection,
+) -> Result<GridCorrectionResponse, String> {
+    if let Some(key) = correction.musical_key.as_deref() {
+        if key.trim().is_empty() || key.len() > 24 {
+            return Err("musical key is empty or too long".to_owned());
+        }
+    }
+    if let Some(camelot) = correction.camelot_key.as_deref() {
+        if camelot.trim().len() > 4 {
+            return Err("camelot key is too long".to_owned());
+        }
+    }
+    let outcome = {
+        let mut connection = state
+            .database
+            .lock()
+            .map_err(|_| "application database lock poisoned".to_owned())?;
+        database::apply_grid_correction(&mut connection, track_id, &correction)
+            .map_err(|error| format!("{error:#}"))?
+    };
+    let compatible_camelot = outcome
+        .camelot_key
+        .as_deref()
+        .map(crate::camelot::compatible_camelot)
+        .unwrap_or_default();
+    let grid = audio::BeatGrid {
+        beat_times_seconds: outcome.beats.clone(),
+        bpm: outcome.bpm,
+    };
+    let deck = state.audio.clone();
+    let deck_holds_track = deck.loaded_track_id() == Some(track_id);
+    let mix_engine = state.mix_engine.clone();
+    let (live_deck_updated, mix_engine_updated, adoption_warning) =
+        tauri::async_runtime::spawn_blocking(move || {
+            let mut warning = None;
+            let mut live_deck_updated = false;
+            if deck_holds_track {
+                match deck.set_beat_grid(grid) {
+                    Ok(_) => live_deck_updated = true,
+                    Err(error) => {
+                        warning = Some(format!("the live deck kept its previous grid: {error}"));
+                    }
+                }
+            }
+            let mix_engine_updated = match mix_engine.refresh_track(track_id) {
+                Ok(updated) => updated,
+                Err(error) => {
+                    if warning.is_none() {
+                        warning = Some(format!(
+                            "the mix engine kept its previous values for this track: {error}"
+                        ));
+                    }
+                    false
+                }
+            };
+            (live_deck_updated, mix_engine_updated, warning)
+        })
+        .await
+        .map_err(|error| format!("grid adoption task failed: {error}"))?;
+    Ok(GridCorrectionResponse {
+        outcome,
+        live_deck_updated,
+        mix_engine_updated,
+        compatible_camelot,
+        adoption_warning,
+    })
+}
+
 #[tauri::command]
 pub fn get_track_manual_tags(
     state: State<'_, AppState>,
@@ -1201,7 +1292,10 @@ pub async fn load_track_audio(
 
     let engine = state.audio.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        engine.load_with_loudness(stems, grid, integrated_lufs)
+        let status = engine.load_with_loudness(stems, grid, integrated_lufs)?;
+        // Remember the library row on the deck so a later grid correction can reach it in place.
+        engine.set_loaded_track_id(Some(track_id));
+        status
     })
     .await
     .map_err(|error| format!("audio preparation task failed: {error}"))?

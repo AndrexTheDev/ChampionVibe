@@ -1,8 +1,49 @@
+use crate::confidence::{self, TRUSTED_CONFIDENCE, UNSURE_CONFIDENCE_CEILING};
 use crate::localization;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use std::{path::Path, time::SystemTime};
+
+/// Largest grid shift a single manual nudge may apply, in milliseconds.
+pub const MAX_GRID_SHIFT_MS: f64 = 2_000.0;
+/// Accepted BPM window for manual corrections; wider than the DJ range so a half/double-time
+/// correction is always representable.
+pub const CORRECTION_BPM_RANGE: (f64, f64) = (30.0, 300.0);
+
+/// A manual grid/key correction coming from the grid editor. Every field is optional so the UI can
+/// send only what the user touched; the untouched values stay exactly as analysed.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GridCorrection {
+    /// Absolute BPM after applying the ±0.1 nudges.
+    pub bpm: Option<f64>,
+    /// Shift applied to every beat of the grid, in milliseconds (positive moves beats later).
+    pub grid_shift_ms: Option<f64>,
+    /// Musical key in ChampionVibe spelling, e.g. `A minor` / `Bb major`.
+    pub musical_key: Option<String>,
+    /// Optional Camelot code the key was selected from, e.g. `8A`; stored for the UI.
+    pub camelot_key: Option<String>,
+    /// False when the user only wanted the analysed values confirmed.
+    #[serde(default)]
+    pub reset_to_analysis: bool,
+}
+
+/// What the deck engine needs after a correction: the new grid and the verification flag.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GridCorrectionOutcome {
+    pub track_id: i64,
+    pub title: String,
+    pub bpm: Option<f64>,
+    pub bpm_confidence: f64,
+    pub key_confidence: f64,
+    pub is_user_verified: bool,
+    pub musical_key: Option<String>,
+    pub camelot_key: Option<String>,
+    pub beats: Vec<f64>,
+    pub grid_shift_ms: f64,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct StemPath {
@@ -47,6 +88,13 @@ pub struct TrackSummary {
     pub channel_count: Option<u32>,
     pub tags_json: String,
     pub bpm: Option<f64>,
+    /// How much the beat-grid heuristic trusts `bpm`: 1.0 for a tagged/user-verified value and
+    /// anything below [`TRUSTED_CONFIDENCE`] when the grid is heuristic and ambiguous.
+    pub bpm_confidence: f64,
+    /// How much the key heuristic trusts `musical_key`; same scale as [`Self::bpm_confidence`].
+    pub key_confidence: f64,
+    /// Set once a human confirmed or corrected the grid/key in the grid editor.
+    pub is_user_verified: bool,
     pub sentiment: Option<f64>,
     pub musical_key: Option<String>,
     pub acoustic_tag: Option<String>,
@@ -82,6 +130,9 @@ pub struct MixTrackRecord {
     pub artist: String,
     pub duration_ms: Option<i64>,
     pub bpm: Option<f64>,
+    pub bpm_confidence: f64,
+    pub key_confidence: f64,
+    pub is_user_verified: bool,
     pub beat_grid_json: Option<String>,
     pub sentiment: Option<f64>,
     pub sentiment_label: Option<String>,
@@ -554,6 +605,11 @@ fn ensure_track_metadata_columns(connection: &Connection) -> Result<()> {
         ("sample_rate", "INTEGER"),
         ("channel_count", "INTEGER"),
         ("tags_json", "TEXT NOT NULL DEFAULT '{}'"),
+        // Manual grid/key corrections live on `tracks` so the virtualised track list can render a
+        // confidence badge straight from the paged row, without joining the analysis relations.
+        ("bpm_confidence", "REAL NOT NULL DEFAULT 0.0"),
+        ("key_confidence", "REAL NOT NULL DEFAULT 0.0"),
+        ("is_user_verified", "INTEGER NOT NULL DEFAULT 0"),
     ] {
         if !columns.iter().any(|column| column == name) {
             connection.execute_batch(&format!(
@@ -836,6 +892,217 @@ pub fn save_waveform_peak_blob(
     Ok(())
 }
 
+/// The stored beat grid of one track, as the grid editor needs it.
+struct StoredGrid {
+    bpm: Option<f64>,
+    beats: Vec<f64>,
+}
+
+fn decode_beat_grid(grid_json: Option<&str>) -> Vec<f64> {
+    let Some(grid_json) = grid_json else {
+        return Vec::new();
+    };
+    serde_json::from_str::<Vec<f64>>(grid_json)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|beat| beat.is_finite() && *beat >= 0.0)
+        .collect()
+}
+
+fn encode_beat_grid(beats: &[f64]) -> Result<String> {
+    Ok(serde_json::to_string(beats)?)
+}
+
+fn load_stored_grid(connection: &Connection, track_id: i64) -> Result<StoredGrid> {
+    let stored = connection
+        .query_row(
+            "SELECT bpm, grid_json FROM beat_grids WHERE track_id = ?1",
+            [track_id],
+            |row| Ok((row.get::<_, Option<f64>>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
+        .optional()
+        .context("could not read the stored beat grid")?;
+    match stored {
+        Some((bpm, grid_json)) => Ok(StoredGrid {
+            bpm,
+            beats: decode_beat_grid(grid_json.as_deref()),
+        }),
+        None => Ok(StoredGrid {
+            bpm: None,
+            beats: Vec::new(),
+        }),
+    }
+}
+
+/// Re-spaces a beat grid for a new tempo while keeping its downbeat in place, so nudging the BPM by
+/// a tenth never makes the grid drift away from the music.
+fn respace_beats(beats: &[f64], bpm: f64, duration_seconds: f64) -> Vec<f64> {
+    let period = 60.0 / bpm;
+    let phase = beats.first().copied().unwrap_or(0.0).max(0.0);
+    if beats.is_empty() {
+        let mut regenerated = Vec::new();
+        let mut beat = phase;
+        while beat < duration_seconds && regenerated.len() < 200_000 {
+            regenerated.push(beat);
+            beat += period;
+        }
+        return regenerated;
+    }
+    beats
+        .iter()
+        .enumerate()
+        .map(|(index, _)| phase + index as f64 * period)
+        .collect()
+}
+
+/// Applies a manual grid/key correction and marks the track as user verified.
+///
+/// The corrected values are written to the tables the deck engine already reads (`beat_grids` and
+/// `audio_analysis`) and mirrored onto `tracks` with a confidence of 1.0, so the virtual track list
+/// and the mix engine both see the human's reading immediately. Everything the user did not touch
+/// keeps its analysed value, and `is_user_verified` stays set until a future correction.
+pub fn apply_grid_correction(
+    connection: &mut Connection,
+    track_id: i64,
+    correction: &GridCorrection,
+) -> Result<GridCorrectionOutcome> {
+    if track_id <= 0 {
+        anyhow::bail!("track id must be positive");
+    }
+    if let Some(bpm) = correction.bpm {
+        anyhow::ensure!(
+            bpm.is_finite() && (CORRECTION_BPM_RANGE.0..=CORRECTION_BPM_RANGE.1).contains(&bpm),
+            "corrected BPM must be finite and within {}..={}",
+            CORRECTION_BPM_RANGE.0,
+            CORRECTION_BPM_RANGE.1
+        );
+    }
+    let shift_ms = correction.grid_shift_ms.unwrap_or(0.0);
+    anyhow::ensure!(
+        shift_ms.is_finite() && shift_ms.abs() <= MAX_GRID_SHIFT_MS,
+        "grid shift must be finite and within ±{MAX_GRID_SHIFT_MS} ms"
+    );
+    let corrected_key = match correction.musical_key.as_deref() {
+        Some(value) => {
+            let (tonic, major) = crate::camelot::parse_musical_key(value)
+                .ok_or_else(|| anyhow::anyhow!("musical key \"{value}\" is not a valid key"))?;
+            Some(format!(
+                "{tonic} {}",
+                if major { "major" } else { "minor" }
+            ))
+        }
+        None => None,
+    };
+    if let Some(camelot) = correction.camelot_key.as_deref() {
+        anyhow::ensure!(
+            crate::camelot::musical_key_for_camelot(camelot).is_some(),
+            "camelot key \"{camelot}\" is not a wheel position"
+        );
+    }
+
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let (title, duration_ms, stored_key, stored_bpm_confidence, stored_key_confidence) = transaction
+        .query_row(
+            "SELECT t.title, t.duration_ms, a.musical_key, t.bpm_confidence, t.key_confidence
+             FROM tracks AS t
+             LEFT JOIN audio_analysis AS a ON a.track_id = t.id
+             WHERE t.id = ?1",
+            [track_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<i64>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, f64>(3)?,
+                    row.get::<_, f64>(4)?,
+                ))
+            },
+        )
+            .optional()
+            .context("could not load the track to correct")?
+            .ok_or_else(|| anyhow::anyhow!("track {track_id} does not exist"))?;
+
+    let stored = load_stored_grid(&transaction, track_id)?;
+    let duration_seconds = duration_ms.unwrap_or(0).max(0) as f64 / 1_000.0;
+    let bpm = correction.bpm.or(stored.bpm);
+    let mut beats = stored.beats;
+    if let Some(bpm) = correction.bpm {
+        beats = respace_beats(&beats, bpm, duration_seconds);
+    }
+    if shift_ms != 0.0 {
+        let shift_seconds = shift_ms / 1_000.0;
+        beats = beats
+            .into_iter()
+            .map(|beat| beat + shift_seconds)
+            .filter(|beat| *beat >= 0.0)
+            .collect();
+    }
+    let bpm_confidence = if correction.bpm.is_some() {
+        confidence::trusted_confidence()
+    } else {
+        confidence::normalise(stored_bpm_confidence)
+    };
+    let key_confidence = if corrected_key.is_some() {
+        confidence::trusted_confidence()
+    } else {
+        confidence::normalise(stored_key_confidence)
+    };
+    let musical_key = corrected_key.or(stored_key);
+
+    transaction.execute(
+        "INSERT INTO beat_grids (track_id, bpm, grid_json) VALUES (?1, ?2, ?3)
+         ON CONFLICT(track_id) DO UPDATE SET bpm = excluded.bpm, grid_json = excluded.grid_json",
+        params![track_id, bpm, encode_beat_grid(&beats)?],
+    )?;
+    // The cached waveform packet embeds the beat grid, so it has to be regenerated.
+    transaction.execute(
+        "DELETE FROM waveform_peak_cache WHERE track_id = ?1",
+        [track_id],
+    )?;
+    transaction.execute(
+        "UPDATE tracks
+            SET bpm_confidence = ?2, key_confidence = ?3, is_user_verified = 1, updated_at = ?4
+          WHERE id = ?1",
+        params![track_id, bpm_confidence, key_confidence, unix_time()],
+    )?;
+    let analysis_rows = transaction.execute(
+        "UPDATE audio_analysis SET key_confidence = ?2, bpm_confidence = ?3 WHERE track_id = ?1",
+        params![track_id, key_confidence, bpm_confidence],
+    )?;
+    if let Some(key) = musical_key.as_deref() {
+        anyhow::ensure!(
+            analysis_rows > 0,
+            "track {track_id} has no stored analysis, so only its beat grid can be corrected"
+        );
+        transaction.execute(
+            "UPDATE audio_analysis SET musical_key = ?2 WHERE track_id = ?1",
+            params![track_id, key],
+        )?;
+    }
+    let (camelot_key, title) = transaction.commit().map(|()| {
+        (
+            musical_key
+                .as_deref()
+                .and_then(crate::camelot::camelot_for_musical_key)
+                .map(str::to_owned),
+            title,
+        )
+    })?;
+
+    Ok(GridCorrectionOutcome {
+        track_id,
+        title,
+        bpm,
+        bpm_confidence,
+        key_confidence,
+        is_user_verified: true,
+        camelot_key,
+        musical_key,
+        beats,
+        grid_shift_ms: shift_ms,
+    })
+}
+
 pub fn load_mix_track(connection: &Connection, track_id: i64) -> Result<Option<MixTrackRecord>> {
     let mut track = connection
         .query_row(
@@ -843,7 +1110,8 @@ pub fn load_mix_track(connection: &Connection, track_id: i64) -> Result<Option<M
                     COALESCE(s.score, l.sentiment_score), COALESCE(s.label, l.sentiment_label),
                     a.acoustic_tag, a.energy_density, a.musical_key, r.family_id,
                     ta.lufs_integrated, ta.mood_valence, ta.mood_arousal, ta.mood_label,
-                    ta.rhythm_pattern, ta.rhythm_confidence
+                    ta.rhythm_pattern, ta.rhythm_confidence, t.bpm_confidence, t.key_confidence,
+                    t.is_user_verified
              FROM tracks AS t
              LEFT JOIN beat_grids AS b ON b.track_id = t.id
              LEFT JOIN sentiment_values AS s ON s.track_id = t.id
@@ -861,6 +1129,9 @@ pub fn load_mix_track(connection: &Connection, track_id: i64) -> Result<Option<M
                     artist: row.get(3)?,
                     duration_ms: row.get(4)?,
                     bpm: row.get(5)?,
+                    bpm_confidence: row.get(19).unwrap_or_default(),
+                    key_confidence: row.get(20).unwrap_or_default(),
+                    is_user_verified: row.get::<_, i64>(21).unwrap_or(0) != 0,
                     beat_grid_json: row.get(6)?,
                     sentiment: row.get(7)?,
                     sentiment_label: row.get(8)?,
@@ -1112,7 +1383,8 @@ pub fn search_tracks_page_with_filters(
                 a.musical_key, a.acoustic_tag, t.codec, t.bitrate_bps, t.sample_rate,
                 t.channel_count, t.tags_json, ta.lufs_integrated, ta.true_peak_dbtp,
                 ta.gain_offset_db, ta.mood_valence, ta.mood_arousal, ta.mood_label,
-                ta.rhythm_pattern, ta.style_genre
+                ta.rhythm_pattern, ta.style_genre, t.bpm_confidence, t.key_confidence,
+                t.is_user_verified
          FROM tracks AS t
          LEFT JOIN beat_grids AS b ON b.track_id = t.id
          LEFT JOIN sentiment_values AS s ON s.track_id = t.id
@@ -1145,6 +1417,9 @@ pub fn search_tracks_page_with_filters(
                 artist: row.get(3)?,
                 duration_ms: row.get(4)?,
                 bpm: row.get(5)?,
+                bpm_confidence: row.get(22)?,
+                key_confidence: row.get(23)?,
+                is_user_verified: row.get::<_, i64>(24)? != 0,
                 sentiment: row.get(6)?,
                 musical_key: row.get(7)?,
                 acoustic_tag: row.get(8)?,
@@ -1549,16 +1824,27 @@ pub fn commit_import_result(
         "import was cancelled or item is no longer active"
     );
     let now = unix_time();
+    // A grid or key the user corrected in the grid editor is authoritative: re-analysing the file
+    // refreshes the heuristic values only while the row is still unverified.
+    let already_verified: bool = transaction.query_row(
+        "SELECT COALESCE((SELECT is_user_verified FROM tracks WHERE file_path = ?1), 0)",
+        [&result.source_path],
+        |row| row.get::<_, i64>(0),
+    )? != 0;
     transaction.execute(
         "INSERT INTO tracks (
             file_path, title, artist, duration_ms, codec, bitrate_bps, sample_rate,
-            channel_count, tags_json, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)
+            channel_count, tags_json, bpm_confidence, key_confidence, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?11, ?12, ?10, ?10)
          ON CONFLICT(file_path) DO UPDATE SET
             title = excluded.title, artist = excluded.artist,
             duration_ms = excluded.duration_ms, codec = excluded.codec,
             bitrate_bps = excluded.bitrate_bps, sample_rate = excluded.sample_rate,
             channel_count = excluded.channel_count, tags_json = excluded.tags_json,
+            bpm_confidence = CASE WHEN ?13 THEN tracks.bpm_confidence
+                                  ELSE excluded.bpm_confidence END,
+            key_confidence = CASE WHEN ?13 THEN tracks.key_confidence
+                                  ELSE excluded.key_confidence END,
             updated_at = excluded.updated_at",
         params![
             result.source_path,
@@ -1571,6 +1857,9 @@ pub fn commit_import_result(
             result.source_channels,
             result.tags_json,
             now,
+            confidence::normalise(result.bpm_confidence),
+            confidence::normalise(result.key_confidence),
+            already_verified,
         ],
     )?;
     let track_id: i64 = transaction.query_row(
@@ -1590,8 +1879,10 @@ pub fn commit_import_result(
 
     transaction.execute(
         "INSERT INTO beat_grids (track_id, bpm, grid_json) VALUES (?1, ?2, ?3)
-         ON CONFLICT(track_id) DO UPDATE SET bpm = excluded.bpm, grid_json = excluded.grid_json",
-        params![track_id, result.bpm, result.beat_grid_json],
+         ON CONFLICT(track_id) DO UPDATE SET
+            bpm = CASE WHEN ?4 THEN beat_grids.bpm ELSE excluded.bpm END,
+            grid_json = CASE WHEN ?4 THEN beat_grids.grid_json ELSE excluded.grid_json END",
+        params![track_id, result.bpm, result.beat_grid_json, already_verified],
     )?;
     transaction.execute(
         "INSERT INTO audio_analysis (
@@ -1603,8 +1894,12 @@ pub fn commit_import_result(
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 'championvibe-dsp-1', ?17
          )
          ON CONFLICT(track_id) DO UPDATE SET
-            musical_key = excluded.musical_key, key_confidence = excluded.key_confidence,
-            bpm_confidence = excluded.bpm_confidence, source_sample_rate = excluded.source_sample_rate,
+            musical_key = CASE WHEN ?18 THEN audio_analysis.musical_key ELSE excluded.musical_key END,
+            key_confidence = CASE WHEN ?18 THEN audio_analysis.key_confidence
+                                  ELSE excluded.key_confidence END,
+            bpm_confidence = CASE WHEN ?18 THEN audio_analysis.bpm_confidence
+                                  ELSE excluded.bpm_confidence END,
+            source_sample_rate = excluded.source_sample_rate,
             source_channels = excluded.source_channels, energy_density = excluded.energy_density,
             energy_dbfs = excluded.energy_dbfs, dynamic_range_db = excluded.dynamic_range_db,
             onset_density = excluded.onset_density, spectral_centroid_hz = excluded.spectral_centroid_hz,
@@ -1630,6 +1925,7 @@ pub fn commit_import_result(
             result.acoustic_tag,
             result.acoustic_scores_json,
             now,
+            already_verified,
         ],
     )?;
     transaction.execute(
@@ -1796,14 +2092,15 @@ fn unix_time() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        cancel_queued_import_items, claim_next_import_item, claim_next_import_job,
-        commit_import_result, create_import_job, ensure_recording_columns,
-        finish_import_item_failed, finish_import_job, import_jobs, load_mix_track,
-        load_waveform_peak_blob, mix_candidate_ids, open, save_recording_metadata,
-        save_waveform_peak_blob, search_tracks, search_tracks_page,
-        search_tracks_page_with_filters, upsert_track, ImportResult, RecordingMetadata, TrackInput,
-        TrackSearchFilters,
+        apply_grid_correction, cancel_queued_import_items, claim_next_import_item,
+        claim_next_import_job, commit_import_result, create_import_job, ensure_recording_columns,
+        ensure_track_metadata_columns, finish_import_item_failed, finish_import_job, import_jobs,
+        load_mix_track, load_waveform_peak_blob, mix_candidate_ids, open, save_recording_metadata,
+        save_waveform_peak_blob, search_tracks, search_tracks_page, search_tracks_page_with_filters,
+        upsert_track, GridCorrection, ImportResult, RecordingMetadata, TrackInput,
+        TrackSearchFilters, MAX_GRID_SHIFT_MS,
     };
+    use crate::confidence::{TRUSTED_CONFIDENCE, UNSURE_CONFIDENCE_CEILING};
     use std::path::Path;
 
     #[test]
@@ -2220,5 +2517,272 @@ mod tests {
         assert_eq!(finished.running_items, 0);
         assert_eq!(finished.failed_items, 1);
         assert_eq!(finished.cancelled_items, 1);
+    }
+
+    #[test]
+    fn legacy_tracks_table_gains_the_confidence_columns() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE tracks (
+                    id INTEGER PRIMARY KEY,
+                    file_path TEXT NOT NULL UNIQUE,
+                    title TEXT NOT NULL,
+                    artist TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                INSERT INTO tracks (file_path, title, artist, created_at, updated_at)
+                    VALUES ('old.wav', 'Old track', 'Old artist', 1, 1);",
+            )
+            .unwrap();
+
+        ensure_track_metadata_columns(&connection).unwrap();
+        let (bpm_confidence, key_confidence, verified) = connection
+            .query_row(
+                "SELECT bpm_confidence, key_confidence, is_user_verified FROM tracks WHERE id = 1",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, f64>(0)?,
+                        row.get::<_, f64>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(bpm_confidence, 0.0);
+        assert_eq!(key_confidence, 0.0);
+        assert_eq!(verified, 0, "legacy rows must not claim to be verified");
+
+        // Running the migration twice is a no-op, not an error.
+        ensure_track_metadata_columns(&connection).unwrap();
+    }
+
+    /// Inserts a fully analysed track through the normal import path and returns its id.
+    fn import_analysed_track(connection: &mut rusqlite::Connection, bpm_confidence: f64) -> i64 {
+        let source_path = "C:/Music/grid-editor.wav".to_owned();
+        let job_id = create_import_job(
+            connection,
+            std::slice::from_ref(&source_path),
+            "separator.onnx",
+            "whisper.bin",
+            false,
+            2,
+        )
+        .unwrap();
+        assert_eq!(
+            claim_next_import_job(connection).unwrap(),
+            Some(job_id)
+        );
+        let item = claim_next_import_item(connection, job_id)
+            .unwrap()
+            .unwrap();
+        let result = ImportResult {
+            source_path,
+            title: "Grid Track".to_owned(),
+            artist: "Local Artist".to_owned(),
+            duration_ms: 60_000,
+            source_sample_rate: 44_100,
+            source_channels: 2,
+            source_bitrate_bps: Some(900_000),
+            codec: "wav".to_owned(),
+            tags_json: "{}".to_owned(),
+            bpm: Some(120.0),
+            bpm_confidence,
+            beat_grid_json: "[0.0,0.5,1.0,1.5]".to_owned(),
+            musical_key: Some("A minor".to_owned()),
+            key_confidence: 0.55,
+            energy_density: 0.1,
+            energy_dbfs: -10.0,
+            dynamic_range_db: 8.0,
+            onset_density: 2.0,
+            spectral_centroid_hz: 2_000.0,
+            low_band_ratio: 0.4,
+            mid_band_ratio: 0.4,
+            high_band_ratio: 0.2,
+            acoustic_tag: "Hype".to_owned(),
+            acoustic_scores_json: "{}".to_owned(),
+            lufs_integrated: Some(-14.5),
+            true_peak_dbtp: Some(-0.4),
+            gain_offset_db: Some(0.5),
+            mood_valence: 0.62,
+            mood_arousal: 0.71,
+            mood_label: "Euphoric".to_owned(),
+            rhythm_pattern: "One Drop".to_owned(),
+            rhythm_confidence: 0.88,
+            style_genre: "Roots / Reggae (heuristic)".to_owned(),
+            vector_blob: vec![0x7f; 64],
+            vector_kind: "mir-dsp-int8-v1".to_owned(),
+            transcript: "local words".to_owned(),
+            transcript_language: Some("en".to_owned()),
+            lyric_sentiment: 0.2,
+            lyric_sentiment_label: "positive".to_owned(),
+            lyric_sentiment_confidence: 0.7,
+            words: vec![],
+            stems: vec![],
+        };
+        commit_import_result(connection, job_id, item.id, &result).unwrap();
+        connection
+            .query_row(
+                "SELECT id FROM tracks WHERE file_path = ?1",
+                [&result.source_path],
+                |row| row.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn analysed_confidences_land_on_the_track_row() {
+        let mut connection = open(Path::new(":memory:")).unwrap();
+        let track_id = import_analysed_track(&mut connection, UNSURE_CONFIDENCE_CEILING);
+        let (bpm_confidence, key_confidence, verified) = connection
+            .query_row(
+                "SELECT bpm_confidence, key_confidence, is_user_verified FROM tracks WHERE id = ?1",
+                [track_id],
+                |row| {
+                    Ok((
+                        row.get::<_, f64>(0)?,
+                        row.get::<_, f64>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(bpm_confidence, UNSURE_CONFIDENCE_CEILING);
+        assert_eq!(key_confidence, 0.55);
+        assert_eq!(verified, 0, "an import is never a user verification");
+
+        let (tracks, total) =
+            search_tracks_page_with_filters(&connection, "", &TrackSearchFilters::default(), 20, 0)
+                .unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(tracks[0].bpm_confidence, UNSURE_CONFIDENCE_CEILING);
+        assert_eq!(tracks[0].key_confidence, 0.55);
+        assert!(!tracks[0].is_user_verified);
+        assert!(
+            tracks[0].bpm_confidence < TRUSTED_CONFIDENCE,
+            "a heuristic guess must read as uncertain"
+        );
+    }
+
+    #[test]
+    fn manual_correction_verifies_the_grid_and_survives_re_import() {
+        let mut connection = open(Path::new(":memory:")).unwrap();
+        let track_id = import_analysed_track(&mut connection, 0.4);
+
+        let outcome = apply_grid_correction(
+            &mut connection,
+            track_id,
+            &GridCorrection {
+                bpm: Some(122.0),
+                grid_shift_ms: Some(25.0),
+                musical_key: None,
+                camelot_key: None,
+                ..GridCorrection::default()
+            },
+        )
+        .unwrap();
+        assert!(outcome.is_user_verified);
+        assert_eq!(outcome.bpm, Some(122.0));
+        assert_eq!(outcome.bpm_confidence, 1.0);
+        assert_eq!(outcome.grid_shift_ms, 25.0);
+        assert!(outcome.beats.len() >= 4);
+        // Re-spaced for 122 BPM from the same downbeat, then shifted by 25 ms.
+        assert!((outcome.beats[0] - 0.025).abs() < 1e-9);
+        assert!((outcome.beats[1] - (60.0 / 122.0 + 0.025)).abs() < 1e-9);
+
+        let stored = load_mix_track(&connection, track_id).unwrap().unwrap();
+        assert_eq!(stored.bpm, Some(122.0));
+        assert!(stored.is_user_verified);
+        assert_eq!(stored.bpm_confidence, 1.0);
+
+        // A key correction moves the stored key and the confidence, and keeps beat/tempo edits.
+        let keyed = apply_grid_correction(
+            &mut connection,
+            track_id,
+            &GridCorrection {
+                musical_key: Some("C# minor".to_owned()),
+                camelot_key: Some("12A".to_owned()),
+                ..GridCorrection::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(keyed.musical_key.as_deref(), Some("C# minor"));
+        assert_eq!(keyed.camelot_key.as_deref(), Some("12A"));
+        assert_eq!(keyed.key_confidence, 1.0);
+        assert_eq!(keyed.bpm, Some(122.0), "the untouched tempo is preserved");
+
+        let (tracks, _) =
+            search_tracks_page_with_filters(&connection, "", &TrackSearchFilters::default(), 20, 0)
+                .unwrap();
+        assert!(tracks[0].is_user_verified);
+        assert_eq!(tracks[0].musical_key.as_deref(), Some("C# minor"));
+
+        // Re-importing the same file must not throw the human's grid away.
+        let reimported_id = import_analysed_track(&mut connection, 0.4);
+        assert_eq!(reimported_id, track_id);
+        let stored = load_mix_track(&connection, track_id).unwrap().unwrap();
+        assert_eq!(stored.bpm, Some(122.0));
+        assert!(stored.is_user_verified);
+        assert_eq!(stored.bpm_confidence, 1.0);
+        assert_eq!(stored.musical_key.as_deref(), Some("C# minor"));
+    }
+
+    #[test]
+    fn corrections_reject_impossible_values() {
+        let mut connection = open(Path::new(":memory:")).unwrap();
+        let track_id = import_analysed_track(&mut connection, 0.4);
+        for correction in [
+            GridCorrection {
+                bpm: Some(0.0),
+                ..GridCorrection::default()
+            },
+            GridCorrection {
+                bpm: Some(400.0),
+                ..GridCorrection::default()
+            },
+            GridCorrection {
+                grid_shift_ms: Some(MAX_GRID_SHIFT_MS + 1.0),
+                ..GridCorrection::default()
+            },
+            GridCorrection {
+                musical_key: Some("H minor".to_owned()),
+                ..GridCorrection::default()
+            },
+            GridCorrection {
+                camelot_key: Some("13A".to_owned()),
+                ..GridCorrection::default()
+            },
+        ] {
+            assert!(
+                apply_grid_correction(&mut connection, track_id, &correction).is_err(),
+                "correction {correction:?} must be rejected"
+            );
+        }
+        assert!(
+            apply_grid_correction(&mut connection, 424_242, &GridCorrection::default()).is_err(),
+            "an unknown track is rejected"
+        );
+        let stored = load_mix_track(&connection, track_id).unwrap().unwrap();
+        assert!(!stored.is_user_verified);
+        assert_eq!(stored.bpm, Some(120.0));
+    }
+
+    #[test]
+    fn confirming_a_grid_without_changes_still_verifies_it() {
+        let mut connection = open(Path::new(":memory:")).unwrap();
+        let track_id = import_analysed_track(&mut connection, 0.42);
+        let outcome =
+            apply_grid_correction(&mut connection, track_id, &GridCorrection::default()).unwrap();
+        assert!(outcome.is_user_verified);
+        assert_eq!(outcome.bpm, Some(120.0));
+        assert_eq!(outcome.musical_key.as_deref(), Some("A minor"));
+        assert_eq!(outcome.camelot_key.as_deref(), Some("8A"));
+        // Nothing was corrected, so the analysed margins are reported back unchanged.
+        assert_eq!(outcome.bpm_confidence, 0.42);
+        assert_eq!(outcome.key_confidence, 0.55);
+        let stored = load_mix_track(&connection, track_id).unwrap().unwrap();
+        assert!(stored.is_user_verified);
     }
 }
