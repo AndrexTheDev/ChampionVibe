@@ -342,7 +342,7 @@ fn wipe(bytes: &mut [u8]) {
     for byte in bytes.iter_mut() {
         *byte = 0;
     }
-    std::hint::black_box(bytes);
+    let _ = std::hint::black_box(bytes);
 }
 
 #[cfg(test)]

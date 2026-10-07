@@ -7,8 +7,9 @@ use axum::{
     Json, Router,
 };
 use championvibe_licensing_core::{
-    ActivateRequest, ApiEndpoints, CreateQuoteRequest, LicensePayload, PaymentVerifier,
-    PriceOracle, Quote, RetrySignal, SignedLicense, TimeBudget, Treasury, VerificationError,
+    ActivateRequest, ApiEndpoints, CreateQuoteRequest, LicensePayload, LicenseSigner,
+    PaymentVerifier, PriceOracle, Quote, RetrySignal, SignedLicense, TimeBudget, Treasury,
+    VerificationError,
 };
 use chrono::{Months, TimeZone, Utc};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
@@ -154,7 +155,7 @@ async fn main() -> Result<()> {
 }
 
 /// Loads the Ed25519 signer from the encrypted issuer environment.
-fn load_signer() -> Result<championvibe_licensing_core::LicenseSigner> {
+fn load_signer() -> Result<LicenseSigner> {
     secret::load_signer()
 }
 

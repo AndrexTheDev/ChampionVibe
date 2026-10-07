@@ -263,7 +263,7 @@ impl AttemptClock {
         self.deadline
             .checked_duration_since(Instant::now())
             .filter(|left| !left.is_zero())
-            .map_err(|_| anyhow::Error::new(AttemptTimeout))
+            .ok_or_else(|| anyhow::Error::new(AttemptTimeout))
     }
 }
 
