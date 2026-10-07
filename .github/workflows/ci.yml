@@ -35,6 +35,18 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+  compliance:
+    name: Cleared-model compliance checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      # Offline gate: registry pins and tiers, forbidden sources, bundled-weight scan, BYOM
+      # acknowledgement rules, CC0 sampleboard bytes, locale transparency and the locked build.
+      - name: Verify the cleared-model policy
+        run: scripts/verify-cleared-model-policy.sh
+
   rust:
     name: Rust format, check, and workspace tests
     runs-on: ubuntu-latest
@@ -82,20 +94,21 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
-      # Every target (library, binary and test code) is checked, and a warning fails the job: the
-      # workspace is kept warning-free so that a lost integration or a stale binding stays visible.
-      # Reproduce locally with `cargo check --workspace --all-targets`.
+      # Every target (library, binary and test code) is checked and a warning fails the job, so a
+      # lost integration or a stale binding stays visible. `--locked` makes the checked-in
+      # Cargo.lock binding: the build fails instead of quietly resolving different dependency
+      # versions than the ones the release was verified with.
       - name: Check the complete Rust workspace without warnings
         run: |
           set -o pipefail
-          cargo check --workspace --all-targets --message-format=short 2>&1 | tee /tmp/rust-check.log
+          cargo check --workspace --all-targets --locked --message-format=short 2>&1 | tee /tmp/rust-check.log
           if grep -q ': warning' /tmp/rust-check.log; then
             echo "::error title=Compiler warnings::keep the workspace warning-free; the warnings are listed above"
             exit 1
           fi
 
       - name: Test the complete Rust workspace
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
   package:
     name: Package ${{ matrix.platform }} test artifact

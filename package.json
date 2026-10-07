@@ -8,7 +8,8 @@
     "build": "vite build",
     "test": "node --test",
     "tauri": "tauri",
-    "clean:git": "bash scripts/clean-untracked.sh"
+    "clean:git": "bash scripts/clean-untracked.sh",
+    "compliance:check": "bash scripts/verify-cleared-model-policy.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

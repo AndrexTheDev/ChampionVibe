@@ -86,7 +86,7 @@ The KUIELab Track A reference code declares MIT, but that does not grant rights 
 
 ## Reproducible builds
 
-`Cargo.lock` is checked in and regenerated only through the `Model pins and lockfile` workflow, so CI and release builds resolve the exact same dependency graph. The same workflow re-verifies every pinned model artifact against its SHA-256 and commits the machine-readable result to `reports/model-pin-verification.json`. `scripts/verify-model-pins.sh` can be run locally against `src-tauri/assets/model-registry.json` and fails any artifact whose source, size or hash does not match the cleared policy.
+`Cargo.lock` is checked in and regenerated only through the `Model pins and lockfile` workflow, so CI and release builds resolve the exact same dependency graph. The same workflow re-verifies every pinned model artifact against its SHA-256 and commits the machine-readable result to `reports/model-pin-verification.json`. `scripts/verify-model-pins.sh` can be run locally against `src-tauri/assets/model-registry.json` and fails any artifact whose source, size or hash does not match the cleared policy. The offline counterpart is `scripts/verify-cleared-model-policy.sh` (`npm run compliance:check`): it fails on a non-cleared or unpinned registry entry, a forbidden download source, bundled weights, a BYOM kind with an acknowledgement but no rights warning, a sampleboard that is not the committed CC0 set, a locale that lost the transparent TTS wording, or CI commands that stopped building against the checked-in `Cargo.lock` with `--locked`. It runs as the `compliance` job in `.github/workflows/ci.yml` and inside `npm test`.
 
 ### Cleaning a checkout
 
@@ -242,7 +242,7 @@ No paid API or WalletConnect project ID is required by this scaffold. It reads C
 
 ## CI builds and downloads
 
-`.github/workflows/ci.yml` starts on every push and pull request and can also be run manually. It packages Windows `.msi`/`.exe` and Android `.apk` files as GitHub Actions artifacts (14-day retention). The current workflow does not publish GitHub Release assets. Use `scripts/download-actions-builds.sh <run-id>` or see [the artifact download guide](docs/github-actions-artifacts.md) for latest-run, run-ID and Release downloads.
+`.github/workflows/ci.yml` starts on every push and pull request and can also be run manually. It packages Windows `.msi`/`.exe` and Android `.apk` files as GitHub Actions artifacts (14-day retention). The same workflow runs the offline cleared-model compliance gate and a warning-free, `--locked` Rust build, so a licensing or determinism regression fails the commit rather than the release. The current workflow does not publish GitHub Release assets. Use `scripts/download-actions-builds.sh <run-id>` or see [the artifact download guide](docs/github-actions-artifacts.md) for latest-run, run-ID and Release downloads.
 
 ## Validation
 
@@ -256,8 +256,10 @@ npm run build
 The repository also includes Rust unit tests for SQLite operations and paging, stem-profile validation, license verification, price calculations and transaction parsing. Run them with:
 
 ```sh
-cargo test --workspace
+cargo test --workspace --locked
 cargo fmt --all -- --check
+cargo check --workspace --all-targets --locked   # fails on any warning
+scripts/verify-cleared-model-policy.sh           # offline model/licence policy gate
 ```
 
 Rust build/test commands require the Rust toolchain and native platform prerequisites installed. The real-time output path must additionally be soak-tested on Windows WASAPI and Android AAudio hardware, since emulators and preview builds cannot certify underrun-free behavior.
