@@ -134,6 +134,19 @@ jobs:
             exit 1
           fi
 
+      # TEMPORARY diagnostics (remove before merge): surface the failing test output as one
+      # annotation, because raw job logs are not always retrievable in this environment.
+      - name: Diagnose Rust test failures
+        continue-on-error: true
+        run: |
+          set +e
+          cargo test --workspace --locked --no-fail-fast > /tmp/cv-rust-tests.log 2>&1
+          if grep -q '^failures:$' /tmp/cv-rust-tests.log; then
+            payload=$(awk '/^failures:$/{found=1} found' /tmp/cv-rust-tests.log | head -c 6000 \
+              | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=cv-tests::$payload"
+          fi
+
       - name: Test the complete Rust workspace
         run: cargo test --workspace --locked
 
