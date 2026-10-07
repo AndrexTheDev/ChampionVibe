@@ -16,7 +16,16 @@ impl LicenseSigner {
     /// a secret manager or an environment variable on the issuer host.
     pub fn from_seed_hex(seed_hex: &str) -> Result<Self> {
         let bytes = hex::decode(seed_hex.trim()).context("invalid signing seed hex")?;
-        let seed: [u8; 32] = bytes
+        Self::from_seed_bytes(&bytes)
+    }
+
+    /// Reads the raw 32-byte Ed25519 seed.
+    ///
+    /// Prefer this over [`Self::from_seed_hex`] when the seed arrives as bytes (for example from a
+    /// sealed environment envelope): the caller can wipe the buffer instead of leaving a hex string
+    /// of the key on the heap.
+    pub fn from_seed_bytes(seed: &[u8]) -> Result<Self> {
+        let seed: [u8; 32] = seed
             .try_into()
             .map_err(|_| anyhow::anyhow!("Ed25519 signing seed must be exactly 32 bytes"))?;
         Ok(Self {

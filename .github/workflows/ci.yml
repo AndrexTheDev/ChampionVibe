@@ -32,6 +32,12 @@ jobs:
       - name: Run frontend tests
         run: npm test
 
+      # The headless native-IPC driver asserts the command names, argument spelling and event
+      # payloads the WebView bridge carries, so a renamed command or a changed payload shape fails
+      # here instead of on a device.
+      - name: Run the headless Tauri IPC driver
+        run: npm run e2e:tauri
+
       - name: Build frontend
         run: npm run build
 

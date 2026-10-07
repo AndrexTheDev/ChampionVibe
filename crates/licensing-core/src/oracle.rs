@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use uuid::Uuid;
 
+use crate::budget::{TimeBudget, MAX_NODE_ATTEMPT_MS};
 use crate::model::{Chain, Plan, Quote};
 use crate::rpc::Treasury;
 
@@ -33,7 +34,7 @@ struct FeedPrice {
 impl PriceOracle {
     pub fn new(endpoint: impl Into<String>) -> Result<Self> {
         let client = Client::builder()
-            .timeout(Duration::from_secs(12))
+            .timeout(Duration::from_millis(MAX_NODE_ATTEMPT_MS))
             .user_agent("ChampionVibe/0.1")
             .build()
             .context("could not initialize HTTP client for Chainlink RPC")?;
@@ -53,7 +54,23 @@ impl PriceOracle {
         plan: Plan,
         treasury: &Treasury,
     ) -> Result<Quote> {
-        let chain_id = self.rpc("eth_chainId", json!([])).await?;
+        let budget = TimeBudget::quote();
+        self.create_quote_with_budget(chain, plan, treasury, &budget)
+            .await
+    }
+
+    /// Reads the on-chain feeds for one quote inside a shared time budget.
+    ///
+    /// A quote that cannot be priced inside the budget fails instead of holding an HTTP worker
+    /// open, so the issuer can answer with the same retry-later contract as payment verification.
+    pub async fn create_quote_with_budget(
+        &self,
+        chain: Chain,
+        plan: Plan,
+        treasury: &Treasury,
+        budget: &TimeBudget,
+    ) -> Result<Quote> {
+        let chain_id = self.rpc("eth_chainId", json!([]), budget).await?;
         if parse_hex_quantity(&chain_id)? != 1 {
             bail!("configured oracle RPC is not connected to Ethereum mainnet");
         }
@@ -63,8 +80,8 @@ impl PriceOracle {
             Chain::Ethereum => ETH_USD_FEED,
             Chain::Solana => SOL_USD_FEED,
         };
-        let asset_price = self.read_feed(asset_feed).await?;
-        let eur_usd = self.read_feed(EUR_USD_FEED).await?;
+        let asset_price = self.read_feed(asset_feed, budget).await?;
+        let eur_usd = self.read_feed(EUR_USD_FEED, budget).await?;
         let now = Utc::now().timestamp();
         validate_feed("asset/USD", &asset_price, now, asset_max_age(chain))?;
         validate_feed("EUR/USD", &eur_usd, now, EUR_MAX_AGE_SECONDS)?;
@@ -104,13 +121,13 @@ impl PriceOracle {
         })
     }
 
-    async fn read_feed(&self, address: &str) -> Result<FeedPrice> {
+    async fn read_feed(&self, address: &str, budget: &TimeBudget) -> Result<FeedPrice> {
         let price_data = self
-            .eth_call(address, LATEST_ROUND_DATA_SELECTOR)
+            .eth_call(address, LATEST_ROUND_DATA_SELECTOR, budget)
             .await
             .with_context(|| format!("could not read Chainlink latestRoundData for {address}"))?;
         let decimals_data = self
-            .eth_call(address, DECIMALS_SELECTOR)
+            .eth_call(address, DECIMALS_SELECTOR, budget)
             .await
             .with_context(|| format!("could not read Chainlink decimals for {address}"))?;
         if price_data.len() < 32 * 5 {
@@ -135,9 +152,13 @@ impl PriceOracle {
         Ok(FeedPrice { value, updated_at })
     }
 
-    async fn eth_call(&self, address: &str, data: &str) -> Result<Vec<u8>> {
+    async fn eth_call(&self, address: &str, data: &str, budget: &TimeBudget) -> Result<Vec<u8>> {
         let result = self
-            .rpc("eth_call", json!([{"to": address, "data": data}, "latest"]))
+            .rpc(
+                "eth_call",
+                json!([{"to": address, "data": data}, "latest"]),
+                budget,
+            )
             .await?;
         let encoded = result
             .as_str()
@@ -146,10 +167,14 @@ impl PriceOracle {
             .context("Ethereum eth_call returned malformed ABI hex")
     }
 
-    async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
+    async fn rpc(&self, method: &str, params: Value, budget: &TimeBudget) -> Result<Value> {
+        let request_timeout = budget
+            .attempt_timeout()
+            .context("price oracle verification budget is exhausted")?;
         let response: Value = self
             .client
             .post(&self.endpoint)
+            .timeout(request_timeout)
             .json(&json!({
                 "jsonrpc": "2.0",
                 "id": 91,

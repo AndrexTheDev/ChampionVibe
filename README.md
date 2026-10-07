@@ -182,21 +182,31 @@ The optional Kokoro path downloads the pinned ONNX model and `af_heart` voice on
 
 ## License and issuer setup
 
-The Tauri binary contains **only a public Ed25519 verification key**. The signing seed belongs only on the issuer host. To create a keypair seed, keep a 32-byte random hex seed in a secret manager (or generate one locally with a cryptographically secure generator). Do not commit it or paste it into the app.
-
-Print the matching public key on the issuer machine:
+The Tauri binary contains **only a public Ed25519 verification key**. The signing seed belongs only on the issuer host, and the issuer reads it from an **encrypted environment variable**: `ISSUER_SECRET_KEY` holds a sealed envelope, never the plaintext seed. Keep a 32-byte random hex seed in a secret manager (or generate one locally with a cryptographically secure generator) and seal it once:
 
 ```sh
-CHAMPIONVIBE_SIGNING_KEY_HEX='<32-byte-seed-as-hex>' \
+# reads the plaintext seed from stdin, prints the envelope for ISSUER_SECRET_KEY
+export ISSUER_SECRET_KEY_PASSPHRASE='<long random passphrase>'
+printf '%s\n' '<32-byte-seed-as-hex>' | cargo run -p championvibe-issuer -- --seal-secret-key
+```
+
+Print the matching public key on the issuer machine (needs the envelope and its passphrase, not the plaintext seed):
+
+```sh
+ISSUER_SECRET_KEY='enc:v1:pbkdf2-hmac-sha256:...' \
+ISSUER_SECRET_KEY_PASSPHRASE='<long random passphrase>' \
   cargo run -p championvibe-issuer -- --print-public-key
 ```
 
 Start the issuer (default: loopback-only on `127.0.0.1:8080`):
 
 ```sh
-CHAMPIONVIBE_SIGNING_KEY_HEX='<32-byte-seed-as-hex>' \
+ISSUER_SECRET_KEY='enc:v1:pbkdf2-hmac-sha256:...' \
+ISSUER_SECRET_KEY_PASSPHRASE='<long random passphrase>' \
   cargo run -p championvibe-issuer
 ```
+
+The envelope is ChaCha20-Poly1305 over a PBKDF2-HMAC-SHA256 key with a fresh salt and nonce, and the header is authenticated, so altered KDF parameters or a corrupted ciphertext fail to open. A plaintext seed is refused unless `CHAMPIONVIBE_ALLOW_PLAINTEXT_SECRET=1` is set for a loopback development host; the legacy `CHAMPIONVIBE_SIGNING_KEY_HEX` still works with that opt-in and prints a deprecation notice. See [docs/payment-verification-budget.md](docs/payment-verification-budget.md) for the format and the threat notes.
 
 Use that public key when building the client, so it can verify licenses:
 
@@ -204,7 +214,7 @@ Use that public key when building the client, so it can verify licenses:
 CHAMPIONVIBE_LICENSE_PUBLIC_KEY_HEX='<printed-public-key>' npm run tauri build
 ```
 
-On Windows PowerShell, set the same values with `$env:CHAMPIONVIBE_SIGNING_KEY_HEX = '...'` and `$env:CHAMPIONVIBE_LICENSE_PUBLIC_KEY_HEX = '...'` before the respective command. If no verification key was embedded at build time, the app fails closed in demo mode.
+On Windows PowerShell, set the same values with `$env:ISSUER_SECRET_KEY = '...'`, `$env:ISSUER_SECRET_KEY_PASSPHRASE = '...'` and `$env:CHAMPIONVIBE_LICENSE_PUBLIC_KEY_HEX = '...'` before the respective command. If no verification key was embedded at build time, the app fails closed in demo mode.
 
 The default issuer bind is local-only. For a remote issuer, use HTTPS at a reverse proxy and set `CHAMPIONVIBE_ISSUER_BIND` only behind appropriate TLS, firewall, rate-limit and abuse controls. The app accepts remote issuer URLs only over HTTPS; plain HTTP is allowed only for localhost. The browser UI stores the issuer URL locally and sends it to Rust, which makes the request.
 
@@ -212,7 +222,14 @@ Issuer variables:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `CHAMPIONVIBE_SIGNING_KEY_HEX` | 32-byte Ed25519 seed; issuer only | required |
+| `ISSUER_SECRET_KEY` | Sealed signing seed (`enc:v1:…`) or, with the opt-in below, a plaintext 32-byte hex seed; issuer only | required |
+| `ISSUER_SECRET_KEY_FILE` | Same value read from a file that must be mode `0600` | — |
+| `ISSUER_SECRET_KEY_PASSPHRASE` | Passphrase that opens the sealed envelope | required for an envelope |
+| `ISSUER_SECRET_KEY_PASSPHRASE_FILE` | Same passphrase read from a file | — |
+| `CHAMPIONVIBE_ALLOW_PLAINTEXT_SECRET` | `1` allows a plaintext seed on a loopback development host | disabled |
+| `CHAMPIONVIBE_SOLANA_RPC_NODES` | Comma-separated Solana node list that replaces the shipped three | three public providers |
+| `CHAMPIONVIBE_BITCOIN_API_NODES` | Comma-separated Bitcoin explorer list that replaces the shipped three | three public explorers |
+| `CHAMPIONVIBE_ETHEREUM_RPC_NODES` | Comma-separated Ethereum node list that replaces the shipped three | three public providers |
 | `CHAMPIONVIBE_ISSUER_BIND` | HTTP listen address | `127.0.0.1:8080` |
 | `CHAMPIONVIBE_ISSUER_DB` | Issuer quote/replay/subscription DB | `issuer-data/licenses.sqlite` |
 | `CHAMPIONVIBE_SOLANA_RECEIVER` | Solana treasury address | `79KsqtJJdhKFJ9woxnYgtf3nq7HxQveafWBCtC3mxWi8` |
@@ -224,6 +241,8 @@ Issuer variables:
 | `CHAMPIONVIBE_PRICE_ORACLE_RPC` | Ethereum JSON-RPC used to read on-chain Chainlink feeds | `https://cloudflare-eth.com` |
 
 A quote is issuer-stored, reads fresh on-chain Chainlink crypto/USD and EUR/USD feeds over the free Ethereum JSON-RPC endpoint, and expires for new payments after 15 minutes. The feed round timestamp and precision are checked; no Pyth/Hermes API key or paid price API is used. Payment verification accepts **native SOL, BTC, or ETH only**: finalized Solana direct System Program transfers, Bitcoin outputs after six confirmations, and finalized Ethereum native-value transfers. SPL tokens, ERC-20, Lightning and wrapped assets are not accepted. The amount must meet or exceed the quoted minimum; overpayments are not automatically refunded. Quote settlement is permitted for a limited confirmation window.
+
+Payment verification is bounded and agreed, never open-ended: one **1 500 ms budget covers the whole chain across all configured nodes**, three independent providers must agree before the issuer acts (a single lying or unreachable node can neither reject a paying customer nor mint a settlement), and a chain that reaches no consensus inside the window answers `503` with `Retry-After` and an **ordered node signal** instead of hanging. The client honours that signal with one bounded retry. Budgets, consensus rules, rejection codes and the default node lists are documented in [docs/payment-verification-budget.md](docs/payment-verification-budget.md).
 
 The issuer checks the chain and quote, prevents a transaction hash from being replayed, extends a subscription by one calendar month or year, and signs the resulting entitlement. Wallet address connection is informational only; it is never treated as proof of payment. The UI checks browser-injected wallet providers when present. Tauri WebViews do not guarantee injected wallet support, so the external-wallet + pasted-TxHash flow remains available.
 
@@ -253,13 +272,21 @@ npm test
 npm run build
 ```
 
-The repository also includes Rust unit tests for SQLite operations and paging, stem-profile validation, license verification, price calculations and transaction parsing. Run them with:
+The repository also includes Rust unit tests for SQLite operations and paging, stem-profile validation, license verification, price calculations, the verification budget/consensus contract and the sealed issuer secret. On a fresh machine the cross targets and the whole workspace test run come from one script:
+
+```sh
+scripts/bootstrap_rust.sh          # Linux/macOS: rustup, cargo, rustc, rustfmt, the Windows and Android targets, then the tests
+scripts/bootstrap_rust.ps1         # Windows PowerShell equivalent
+```
+
+Without that helper:
 
 ```sh
 cargo test --workspace --locked
 cargo fmt --all -- --check
 cargo check --workspace --all-targets --locked   # fails on any warning
 scripts/verify-cleared-model-policy.sh           # offline model/licence policy gate
+npm run e2e:tauri                                # headless native-IPC driver for import, deck, grid and recording
 ```
 
 The confidence policy, the SQLite migration, the grid-editor contract and the CPAL recovery path are documented in [docs/mir-confidence-and-recovery.md](docs/mir-confidence-and-recovery.md). Rust build/test commands require the Rust toolchain and native platform prerequisites installed. The real-time output path must additionally be soak-tested on Windows WASAPI and Android AAudio hardware, since emulators and preview builds cannot certify underrun-free behavior.

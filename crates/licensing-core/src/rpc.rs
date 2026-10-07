@@ -2,9 +2,19 @@ use anyhow::{bail, Context, Result};
 use chrono::Utc;
 use reqwest::Client;
 use serde_json::{json, Value};
-use std::{env, time::Duration};
+use std::{
+    env, fmt,
+    time::{Duration, Instant},
+};
 
-use crate::model::{Chain, Quote, VerifiedPayment};
+use crate::{
+    budget::{TimeBudget, MAX_NODE_ATTEMPT_MS},
+    consensus::{
+        AttemptState, Consensus, ConsensusTracker, NodeAttempt, NodeObservation, RejectionCode,
+        RetryReason, RetrySignal, CONSENSUS_NODES,
+    },
+    model::{Chain, Quote, VerifiedPayment},
+};
 
 const SOLANA_RPC_DEFAULT: &str = "https://api.mainnet-beta.solana.com";
 const BITCOIN_API_DEFAULT: &str = "https://blockstream.info/api";
@@ -13,6 +23,17 @@ const SOLANA_RECEIVER_DEFAULT: &str = "79KsqtJJdhKFJ9woxnYgtf3nq7HxQveafWBCtC3mx
 const BITCOIN_RECEIVER_DEFAULT: &str = "bc1qeqzrlfg3edrydk4s0hecakc82gp26n5p7hkc7f";
 const ETHEREUM_RECEIVER_DEFAULT: &str = "0xBC3fab34f69bc9f6661608C3FB36dDdC313C42F7";
 const BTC_CONFIRMATIONS_REQUIRED: u64 = 6;
+/// Independent providers asked for the same chain fact, so one lying or broken node cannot decide a
+/// payment. The matching `CHAMPIONVIBE_*_NODES` variable replaces a whole list.
+const SOLANA_RPC_MIRRORS: [&str; 2] = [
+    "https://solana-rpc.publicnode.com",
+    "https://solana-mainnet.public.blastapi.io",
+];
+const BITCOIN_API_MIRRORS: [&str; 2] = ["https://mempool.space/api", "https://mempool.emzy.de/api"];
+const ETHEREUM_RPC_MIRRORS: [&str; 2] = [
+    "https://ethereum-rpc.publicnode.com",
+    "https://eth-mainnet.public.blastapi.io",
+];
 const QUOTE_SETTLEMENT_WINDOW_SECONDS: i64 = 24 * 60 * 60;
 
 #[derive(Debug, Clone)]
@@ -45,6 +66,53 @@ impl ApiEndpoints {
             env_value("CHAMPIONVIBE_PRICE_ORACLE_RPC", endpoints.price_oracle_rpc);
         endpoints
     }
+
+    /// Ordered nodes consulted for `chain`, primary first.
+    ///
+    /// `CHAMPIONVIBE_SOLANA_RPC_NODES`, `CHAMPIONVIBE_BITCOIN_API_NODES` and
+    /// `CHAMPIONVIBE_ETHEREUM_RPC_NODES` replace a whole list when set (comma separated); the
+    /// single-endpoint variables still choose the primary node.
+    pub fn nodes(&self, chain: Chain) -> Vec<String> {
+        let (primary, mirrors, override_name) = match chain {
+            Chain::Solana => (
+                &self.solana_rpc,
+                SOLANA_RPC_MIRRORS,
+                "CHAMPIONVIBE_SOLANA_RPC_NODES",
+            ),
+            Chain::Bitcoin => (
+                &self.bitcoin_api,
+                BITCOIN_API_MIRRORS,
+                "CHAMPIONVIBE_BITCOIN_API_NODES",
+            ),
+            Chain::Ethereum => (
+                &self.ethereum_rpc,
+                ETHEREUM_RPC_MIRRORS,
+                "CHAMPIONVIBE_ETHEREUM_RPC_NODES",
+            ),
+        };
+        if let Some(configured) = env_list(override_name) {
+            return configured;
+        }
+        let mut nodes = vec![primary.clone()];
+        for mirror in mirrors {
+            if !nodes.iter().any(|node| node == mirror) {
+                nodes.push((*mirror).to_owned());
+            }
+        }
+        nodes
+    }
+}
+
+/// Comma-separated node list from the environment, ignoring blank entries.
+fn env_list(name: &str) -> Option<Vec<String>> {
+    let raw = env::var(name).ok()?;
+    let nodes: Vec<String> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|node| !node.is_empty())
+        .map(str::to_owned)
+        .collect();
+    (!nodes.is_empty()).then_some(nodes)
 }
 
 #[derive(Debug, Clone)]
@@ -113,11 +181,111 @@ pub struct PaymentVerifier {
     treasury: Treasury,
 }
 
+/// What one node attempt produced.
+enum NodeReport {
+    /// The node confirmed a settlement.
+    Settled {
+        received_units: u128,
+        confirmed_at: i64,
+    },
+    /// The node refuses the transaction for a permanent reason.
+    Invalid { code: RejectionCode },
+    /// The node does not know the transaction yet or it is not final.
+    Pending { detail: String },
+}
+
+/// Why a payment could not be accepted.
+#[derive(Debug)]
+pub enum VerificationError {
+    /// Nodes agreed that the submitted payment cannot settle this quote.
+    Rejected {
+        /// Stable machine-readable code, e.g. `below-minimum`.
+        code: &'static str,
+        /// Human-readable explanation.
+        detail: String,
+        /// Every node attempt that led to the agreement. Server logs only.
+        attempts: Vec<NodeAttempt>,
+    },
+    /// No decision inside the budget: retry later, walking the same ordered steps.
+    ///
+    /// The client is never left waiting; the error carries the ordered node signal instead.
+    RetryLater(RetrySignal),
+}
+
+impl VerificationError {
+    /// Stable machine-readable code for API responses.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Rejected { code, .. } => code,
+            Self::RetryLater(signal) => signal.reason.as_str(),
+        }
+    }
+
+    /// The ordered retry signal, when the failure is retryable.
+    pub fn retry_signal(&self) -> Option<&RetrySignal> {
+        match self {
+            Self::Rejected { .. } => None,
+            Self::RetryLater(signal) => Some(signal),
+        }
+    }
+}
+
+impl fmt::Display for VerificationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Rejected { code, detail, .. } => write!(formatter, "{code}: {detail}"),
+            Self::RetryLater(signal) => write!(
+                formatter,
+                "{}: no decision after {} ms of a {} ms budget",
+                signal.reason, signal.elapsed_ms, signal.budget_ms
+            ),
+        }
+    }
+}
+
+impl std::error::Error for VerificationError {}
+
+/// Deadline shared by every request of one node attempt, so a single node cannot stretch the chain.
+#[derive(Debug, Clone, Copy)]
+struct AttemptClock {
+    deadline: Instant,
+}
+
+impl AttemptClock {
+    fn new(slice: Duration) -> Self {
+        Self {
+            deadline: Instant::now() + slice,
+        }
+    }
+
+    /// Time left for the next request within this attempt.
+    fn request_timeout(&self) -> anyhow::Result<Duration> {
+        self.deadline
+            .checked_duration_since(Instant::now())
+            .filter(|left| !left.is_zero())
+            .map_err(|_| anyhow::Error::new(AttemptTimeout))
+    }
+}
+
+/// Marker error for a node attempt that consumed its slice of the verification budget.
+#[derive(Debug)]
+struct AttemptTimeout;
+
+impl fmt::Display for AttemptTimeout {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("node attempt consumed its slice of the verification budget")
+    }
+}
+
+impl std::error::Error for AttemptTimeout {}
+
 impl PaymentVerifier {
     pub fn new(endpoints: ApiEndpoints, treasury: Treasury) -> Result<Self> {
         treasury.validate()?;
         let client = Client::builder()
-            .timeout(Duration::from_secs(20))
+            // Backstop only: every attempt is additionally capped by the remaining part of the
+            // verification budget, so no single request can hold the chain open.
+            .timeout(Duration::from_millis(MAX_NODE_ATTEMPT_MS))
             .user_agent("ChampionVibe-License-Issuer/0.1")
             .build()
             .context("could not initialize payment RPC HTTP client")?;
@@ -128,31 +296,175 @@ impl PaymentVerifier {
         })
     }
 
+    /// Number of ordered nodes consulted for `chain`.
+    pub fn node_count(&self, chain: Chain) -> usize {
+        self.endpoints.nodes(chain).len()
+    }
+
     /// Checks a native-coin transfer against a stored, time-limited quote.
     /// This code belongs in the issuer; a client-only result is not trusted.
-    pub async fn verify(&self, quote: &Quote, transaction_hash: &str) -> Result<VerifiedPayment> {
-        let transaction_hash = canonical_transaction_hash(quote.chain, transaction_hash.trim());
-        validate_transaction_hash(quote.chain, &transaction_hash)?;
-        let minimum_units = quote
-            .minimum_units
-            .parse::<u128>()
-            .context("stored quote contains an invalid amount")?;
-        if minimum_units == 0 {
-            bail!("stored quote has a zero payment amount");
+    pub async fn verify(
+        &self,
+        quote: &Quote,
+        transaction_hash: &str,
+    ) -> anyhow::Result<VerifiedPayment> {
+        let budget = TimeBudget::verification();
+        self.verify_with_budget(quote, transaction_hash, &budget)
+            .await
+            .map_err(anyhow::Error::new)
+    }
+
+    /// Checks a native-coin transfer inside one shared time budget.
+    ///
+    /// Nodes are contacted in a fixed order; the budget is divided by the attempts that remain, so
+    /// the whole chain, across every node, stays inside `budget`. Without a consensus of
+    /// [`CONSENSUS_NODES`] the call returns [`VerificationError::RetryLater`] with the ordered
+    /// node signal instead of waiting for the slowest node.
+    pub async fn verify_with_budget(
+        &self,
+        quote: &Quote,
+        transaction_hash: &str,
+        budget: &TimeBudget,
+    ) -> Result<VerifiedPayment, VerificationError> {
+        let transaction_hash = Self::validate_submission(quote.chain, transaction_hash)?;
+        let minimum_units = match quote.minimum_units.parse::<u128>() {
+            Ok(minimum_units) if minimum_units > 0 => minimum_units,
+            _ => {
+                return Err(rejected(
+                    "invalid-quote",
+                    "stored quote contains an invalid amount".to_owned(),
+                    Vec::new(),
+                ))
+            }
+        };
+
+        let nodes = self.endpoints.nodes(quote.chain);
+        let mut tracker = ConsensusTracker::new(CONSENSUS_NODES.min(nodes.len()));
+        for (order, node) in nodes.iter().enumerate() {
+            let attempts_left = nodes.len() - order;
+            let Some(slice) = budget.node_slice(attempts_left) else {
+                tracker.record_state(order, AttemptState::Skipped, Duration::ZERO, None);
+                continue;
+            };
+            let started = Instant::now();
+            match self
+                .observe(quote.chain, node, &transaction_hash, slice)
+                .await
+            {
+                Ok(NodeReport::Settled {
+                    received_units,
+                    confirmed_at,
+                }) => {
+                    tracker.record_observation(
+                        order,
+                        NodeObservation::Settled {
+                            received_units,
+                            confirmed_at,
+                        },
+                        started.elapsed(),
+                    );
+                }
+                Ok(NodeReport::Invalid { code }) => {
+                    tracker.record_observation(
+                        order,
+                        NodeObservation::Invalid { code },
+                        started.elapsed(),
+                    );
+                }
+                Ok(NodeReport::Pending { detail }) => {
+                    tracker.record_state(
+                        order,
+                        AttemptState::Pending,
+                        started.elapsed(),
+                        Some(detail),
+                    );
+                }
+                Err(error) => {
+                    tracker.record_state(
+                        order,
+                        attempt_state(&error),
+                        started.elapsed(),
+                        Some(error.to_string()),
+                    );
+                }
+            }
+            if let Some(consensus) = tracker.consensus() {
+                return self.settle(quote, &transaction_hash, minimum_units, consensus);
+            }
         }
 
-        let (received_units, confirmed_at) = match quote.chain {
-            Chain::Solana => self.verify_solana(&transaction_hash).await?,
-            Chain::Bitcoin => self.verify_bitcoin(&transaction_hash).await?,
-            Chain::Ethereum => self.verify_ethereum(&transaction_hash).await?,
+        let reason = if tracker
+            .attempts()
+            .iter()
+            .any(|attempt| attempt.state.is_fact())
+        {
+            RetryReason::NoConsensus
+        } else {
+            RetryReason::NodesUnavailable
+        };
+        Err(VerificationError::RetryLater(tracker.retry_signal(
+            reason,
+            budget.total(),
+            budget.elapsed(),
+        )))
+    }
+
+    /// Canonicalises and validates a submitted transaction hash before any network access.
+    ///
+    /// Public so an operator can reject an obvious client error, and so the issuer can refuse it
+    /// without spending the verification budget on a hash that no node would ever know.
+    pub fn validate_submission(
+        chain: Chain,
+        transaction_hash: &str,
+    ) -> Result<String, VerificationError> {
+        let transaction_hash = canonical_transaction_hash(chain, transaction_hash.trim());
+        if validate_transaction_hash(chain, &transaction_hash).is_err() {
+            return Err(rejected(
+                "invalid-transaction-hash",
+                format!("submitted {} transaction hash is malformed", chain.as_str()),
+                Vec::new(),
+            ));
+        }
+        Ok(transaction_hash)
+    }
+
+    /// Applies the quote policy to a fact that enough nodes agreed on.
+    fn settle(
+        &self,
+        quote: &Quote,
+        transaction_hash: &str,
+        minimum_units: u128,
+        consensus: Consensus,
+    ) -> Result<VerifiedPayment, VerificationError> {
+        let attempts = consensus.attempts;
+        let (received_units, confirmed_at) = match consensus.observation {
+            NodeObservation::Invalid { code } => {
+                return Err(rejected(
+                    code.as_str(),
+                    code.describe().to_owned(),
+                    attempts,
+                ))
+            }
+            NodeObservation::Settled {
+                received_units,
+                confirmed_at,
+            } => (received_units, confirmed_at),
         };
         if received_units < minimum_units {
-            bail!("confirmed transfer is below the quoted minimum amount");
+            return Err(rejected(
+                RejectionCode::BelowMinimum.as_str(),
+                RejectionCode::BelowMinimum.describe().to_owned(),
+                attempts,
+            ));
         }
         if confirmed_at < quote.created_at.saturating_sub(30)
             || confirmed_at > quote.expires_at.saturating_add(30)
         {
-            bail!("payment was not made during the quote validity window");
+            return Err(rejected(
+                "outside-quote-window",
+                "payment was not made during the quote validity window".to_owned(),
+                attempts,
+            ));
         }
         let now = Utc::now().timestamp();
         if now
@@ -160,7 +472,11 @@ impl PaymentVerifier {
                 .expires_at
                 .saturating_add(QUOTE_SETTLEMENT_WINDOW_SECONDS)
         {
-            bail!("quote is too old to settle");
+            return Err(rejected(
+                "quote-expired",
+                "quote is too old to settle".to_owned(),
+                attempts,
+            ));
         }
 
         Ok(VerifiedPayment {
@@ -174,10 +490,38 @@ impl PaymentVerifier {
         })
     }
 
-    async fn verify_solana(&self, signature: &str) -> Result<(u128, i64)> {
+    /// Asks one node about the submitted transfer, inside the attempt's slice of the budget.
+    async fn observe(
+        &self,
+        chain: Chain,
+        node: &str,
+        transaction_hash: &str,
+        slice: Duration,
+    ) -> anyhow::Result<NodeReport> {
+        let clock = AttemptClock::new(slice);
+        match chain {
+            Chain::Solana => self.solana_observation(node, transaction_hash, clock).await,
+            Chain::Bitcoin => {
+                self.bitcoin_observation(node, transaction_hash, clock)
+                    .await
+            }
+            Chain::Ethereum => {
+                self.ethereum_observation(node, transaction_hash, clock)
+                    .await
+            }
+        }
+    }
+
+    async fn solana_observation(
+        &self,
+        node: &str,
+        signature: &str,
+        clock: AttemptClock,
+    ) -> anyhow::Result<NodeReport> {
         let body = self
             .client
-            .post(&self.endpoints.solana_rpc)
+            .post(node)
+            .timeout(clock.request_timeout()?)
             .json(&json!({
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -190,7 +534,7 @@ impl PaymentVerifier {
             }))
             .send()
             .await
-            .context("could not reach the public Solana RPC")?
+            .context("could not reach the configured Solana RPC")?
             .error_for_status()
             .context("Solana RPC returned an unsuccessful HTTP status")?
             .json::<Value>()
@@ -199,15 +543,18 @@ impl PaymentVerifier {
         if let Some(error) = body.get("error") {
             bail!("Solana RPC error: {error}");
         }
-        let result = body
-            .get("result")
-            .filter(|value| !value.is_null())
-            .context("Solana transaction is not finalized or does not exist")?;
+        let Some(result) = body.get("result").filter(|value| !value.is_null()) else {
+            return Ok(NodeReport::Pending {
+                detail: "transaction is not finalized or does not exist on this node".to_owned(),
+            });
+        };
         let meta = result
             .get("meta")
             .context("Solana transaction has no metadata")?;
         if !meta.get("err").unwrap_or(&Value::Null).is_null() {
-            bail!("Solana transaction failed on chain");
+            return Ok(NodeReport::Invalid {
+                code: RejectionCode::FailedOnChain,
+            });
         }
         let returned_signature = result
             .pointer("/transaction/signatures/0")
@@ -257,19 +604,36 @@ impl PaymentVerifier {
                 .context("Solana transfer amount overflow")?;
         }
         if received == 0 {
-            bail!("Solana transaction contains no direct SOL transfer to the configured receiver");
+            return Ok(NodeReport::Invalid {
+                code: RejectionCode::NoTransfer,
+            });
         }
-        Ok((received, confirmed_at))
+        Ok(NodeReport::Settled {
+            received_units: received,
+            confirmed_at,
+        })
     }
 
-    async fn verify_bitcoin(&self, txid: &str) -> Result<(u128, i64)> {
-        let base = self.endpoints.bitcoin_api.trim_end_matches('/');
-        let transaction: Value = self
+    async fn bitcoin_observation(
+        &self,
+        node: &str,
+        txid: &str,
+        clock: AttemptClock,
+    ) -> anyhow::Result<NodeReport> {
+        let base = node.trim_end_matches('/');
+        let response = self
             .client
             .get(format!("{base}/tx/{txid}"))
+            .timeout(clock.request_timeout()?)
             .send()
             .await
-            .context("could not reach the public Bitcoin explorer API")?
+            .context("could not reach the configured Bitcoin explorer API")?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(NodeReport::Pending {
+                detail: "transaction is unknown to this explorer".to_owned(),
+            });
+        }
+        let transaction: Value = response
             .error_for_status()
             .context("Bitcoin explorer returned an unsuccessful HTTP status")?
             .json()
@@ -282,7 +646,9 @@ impl PaymentVerifier {
             .get("status")
             .context("Bitcoin transaction has no confirmation status")?;
         if status.get("confirmed").and_then(Value::as_bool) != Some(true) {
-            bail!("Bitcoin transaction is not confirmed");
+            return Ok(NodeReport::Pending {
+                detail: "transaction is not confirmed".to_owned(),
+            });
         }
         let height = status
             .get("block_height")
@@ -295,6 +661,7 @@ impl PaymentVerifier {
         let tip_text = self
             .client
             .get(format!("{base}/blocks/tip/height"))
+            .timeout(clock.request_timeout()?)
             .send()
             .await
             .context("could not read Bitcoin chain tip")?
@@ -309,7 +676,11 @@ impl PaymentVerifier {
             .context("invalid Bitcoin tip height")?;
         let confirmations = tip.saturating_sub(height).saturating_add(1);
         if confirmations < BTC_CONFIRMATIONS_REQUIRED {
-            bail!("Bitcoin transaction needs at least six confirmations");
+            return Ok(NodeReport::Pending {
+                detail: format!(
+                    "transaction has {confirmations} of {BTC_CONFIRMATIONS_REQUIRED} confirmations"
+                ),
+            });
         }
         let outputs = transaction
             .get("vout")
@@ -331,21 +702,35 @@ impl PaymentVerifier {
                 .context("Bitcoin transfer amount overflow")?;
         }
         if received == 0 {
-            bail!("Bitcoin transaction contains no output to the configured receiver");
+            return Ok(NodeReport::Invalid {
+                code: RejectionCode::NoTransfer,
+            });
         }
-        Ok((received, confirmed_at))
+        Ok(NodeReport::Settled {
+            received_units: received,
+            confirmed_at,
+        })
     }
 
-    async fn verify_ethereum(&self, tx_hash: &str) -> Result<(u128, i64)> {
-        let chain_id = self.ethereum_rpc("eth_chainId", json!([])).await?;
+    async fn ethereum_observation(
+        &self,
+        node: &str,
+        tx_hash: &str,
+        clock: AttemptClock,
+    ) -> anyhow::Result<NodeReport> {
+        let chain_id = self
+            .ethereum_rpc(node, "eth_chainId", json!([]), clock)
+            .await?;
         if parse_hex_quantity(&chain_id)? != 1 {
             bail!("configured Ethereum RPC is not connected to Ethereum mainnet");
         }
         let transaction = self
-            .ethereum_rpc("eth_getTransactionByHash", json!([tx_hash]))
+            .ethereum_rpc(node, "eth_getTransactionByHash", json!([tx_hash]), clock)
             .await?;
         if transaction.is_null() {
-            bail!("Ethereum transaction was not found");
+            return Ok(NodeReport::Pending {
+                detail: "transaction is unknown to this node".to_owned(),
+            });
         }
         let returned_hash = transaction
             .get("hash")
@@ -359,7 +744,9 @@ impl PaymentVerifier {
             .and_then(Value::as_str)
             .is_some_and(|address| address.eq_ignore_ascii_case(&self.treasury.ethereum))
         {
-            bail!("Ethereum transaction recipient does not match the configured receiver");
+            return Ok(NodeReport::Invalid {
+                code: RejectionCode::WrongRecipient,
+            });
         }
         let received = parse_hex_quantity(
             transaction
@@ -367,10 +754,12 @@ impl PaymentVerifier {
                 .context("Ethereum transaction has no value")?,
         )?;
         let receipt = self
-            .ethereum_rpc("eth_getTransactionReceipt", json!([tx_hash]))
+            .ethereum_rpc(node, "eth_getTransactionReceipt", json!([tx_hash]), clock)
             .await?;
         if receipt.is_null() {
-            bail!("Ethereum transaction does not have a receipt");
+            return Ok(NodeReport::Pending {
+                detail: "transaction has no receipt yet".to_owned(),
+            });
         }
         if parse_hex_quantity(
             receipt
@@ -378,7 +767,9 @@ impl PaymentVerifier {
                 .context("Ethereum receipt has no status")?,
         )? != 1
         {
-            bail!("Ethereum transaction failed on chain");
+            return Ok(NodeReport::Invalid {
+                code: RejectionCode::FailedOnChain,
+            });
         }
         let tx_block = parse_hex_quantity(
             receipt
@@ -386,7 +777,12 @@ impl PaymentVerifier {
                 .context("Ethereum receipt has no block number")?,
         )?;
         let finalized_block = self
-            .ethereum_rpc("eth_getBlockByNumber", json!(["finalized", false]))
+            .ethereum_rpc(
+                node,
+                "eth_getBlockByNumber",
+                json!(["finalized", false]),
+                clock,
+            )
             .await?;
         let finalized_number = parse_hex_quantity(
             finalized_block
@@ -394,11 +790,18 @@ impl PaymentVerifier {
                 .context("Ethereum RPC did not return a finalized block")?,
         )?;
         if tx_block > finalized_number {
-            bail!("Ethereum transaction is not finalized yet");
+            return Ok(NodeReport::Pending {
+                detail: "transaction is not finalized yet".to_owned(),
+            });
         }
         let block_tag = format!("0x{tx_block:x}");
         let block = self
-            .ethereum_rpc("eth_getBlockByNumber", json!([block_tag, false]))
+            .ethereum_rpc(
+                node,
+                "eth_getBlockByNumber",
+                json!([block_tag, false]),
+                clock,
+            )
             .await?;
         let confirmed_at = parse_hex_quantity(
             block
@@ -408,13 +811,23 @@ impl PaymentVerifier {
         let confirmed_at: i64 = confirmed_at
             .try_into()
             .context("Ethereum block timestamp is out of range")?;
-        Ok((received, confirmed_at))
+        Ok(NodeReport::Settled {
+            received_units: received,
+            confirmed_at,
+        })
     }
 
-    async fn ethereum_rpc(&self, method: &str, params: Value) -> Result<Value> {
+    async fn ethereum_rpc(
+        &self,
+        node: &str,
+        method: &str,
+        params: Value,
+        clock: AttemptClock,
+    ) -> anyhow::Result<Value> {
         let response: Value = self
             .client
-            .post(&self.endpoints.ethereum_rpc)
+            .post(node)
+            .timeout(clock.request_timeout()?)
             .json(&json!({
                 "jsonrpc": "2.0",
                 "id": 17,
@@ -436,6 +849,27 @@ impl PaymentVerifier {
             .get("result")
             .cloned()
             .with_context(|| format!("Ethereum RPC response for {method} has no result"))
+    }
+}
+
+/// Classifies a failed attempt for the consensus log without string matching.
+fn attempt_state(error: &anyhow::Error) -> AttemptState {
+    let timed_out = error.downcast_ref::<AttemptTimeout>().is_some()
+        || error
+            .downcast_ref::<reqwest::Error>()
+            .is_some_and(reqwest::Error::is_timeout);
+    if timed_out {
+        AttemptState::TimedOut
+    } else {
+        AttemptState::Unreachable
+    }
+}
+
+fn rejected(code: &'static str, detail: String, attempts: Vec<NodeAttempt>) -> VerificationError {
+    VerificationError::Rejected {
+        code,
+        detail,
+        attempts,
     }
 }
 

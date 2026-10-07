@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "test": "node --test",
+    "e2e:tauri": "node tests/tauri_e2e.spec.mjs",
     "tauri": "tauri",
     "clean:git": "bash scripts/clean-untracked.sh",
     "compliance:check": "bash scripts/verify-cleared-model-policy.sh"

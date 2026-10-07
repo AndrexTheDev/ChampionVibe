@@ -1,13 +1,14 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{header, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use championvibe_licensing_core::{
-    ActivateRequest, ApiEndpoints, CreateQuoteRequest, LicensePayload, LicenseSigner,
-    PaymentVerifier, PriceOracle, Quote, SignedLicense, Treasury,
+    ActivateRequest, ApiEndpoints, CreateQuoteRequest, LicensePayload, PaymentVerifier,
+    PriceOracle, Quote, RetrySignal, SignedLicense, TimeBudget, Treasury, VerificationError,
 };
 use chrono::{Months, TimeZone, Utc};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
@@ -20,6 +21,8 @@ use std::{
 };
 use tokio::net::TcpListener;
 use uuid::Uuid;
+
+mod secret;
 
 const DB_DEFAULT: &str = "issuer-data/licenses.sqlite";
 
@@ -34,12 +37,84 @@ struct AppState {
 
 type ApiError = (StatusCode, String);
 
+/// Handler failure: either a terminal status and message, or an ordered retry-later signal.
+///
+/// A client that receives the retry-later variant is never left waiting: it gets a bounded delay,
+/// the budget that applied and the node order to walk on the next attempt.
+enum IssuerError {
+    /// The request cannot succeed as sent.
+    Terminal(StatusCode, String),
+    /// The chain did not reach a decision inside the verification budget.
+    RetryLater(RetrySignal),
+}
+
+impl From<ApiError> for IssuerError {
+    fn from((status, message): ApiError) -> Self {
+        Self::Terminal(status, message)
+    }
+}
+
+impl IntoResponse for IssuerError {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Terminal(status, message) => (status, message).into_response(),
+            Self::RetryLater(signal) => {
+                // Node URLs and transport errors stay in the issuer log; the client only receives
+                // opaque, ordered labels.
+                for line in &signal.details {
+                    eprintln!("verification retry-later: {line}");
+                }
+                let body = json!({
+                    "error": "payment verification reached no consensus inside the budget; retry the same request",
+                    "code": signal.reason.as_str(),
+                    "retryAfterMs": signal.retry_after_ms,
+                    "budgetMs": signal.budget_ms,
+                    "elapsedMs": signal.elapsed_ms,
+                    "orderedNodes": signal
+                        .steps
+                        .iter()
+                        .map(|step| json!({
+                            "order": step.order,
+                            "label": step.label,
+                            "state": step.state,
+                            "elapsedMs": step.elapsed_ms,
+                        }))
+                        .collect::<Vec<_>>(),
+                });
+                let mut response = (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response();
+                if let Ok(value) = HeaderValue::from_str(&signal.retry_after_seconds().to_string())
+                {
+                    response.headers_mut().insert(header::RETRY_AFTER, value);
+                }
+                response
+            }
+        }
+    }
+}
+
+fn terminal(status: StatusCode, message: impl Into<String>) -> IssuerError {
+    IssuerError::Terminal(status, message.into())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    if env::args().any(|argument| argument == "--print-public-key") {
+    let arguments: Vec<String> = env::args().skip(1).collect();
+    if arguments
+        .iter()
+        .any(|argument| argument == "--print-public-key")
+    {
         let signer = load_signer()?;
         println!("{}", signer.public_key_hex());
         return Ok(());
+    }
+    if arguments
+        .iter()
+        .any(|argument| argument == "--seal-secret-key")
+    {
+        return secret::seal_command();
+    }
+    if let Some(unknown) = arguments.first() {
+        bail!("unknown argument {unknown}; supported: --print-public-key, --seal-secret-key");
     }
 
     let signer = Arc::new(load_signer()?);
@@ -78,10 +153,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn load_signer() -> Result<LicenseSigner> {
-    let seed = env::var("CHAMPIONVIBE_SIGNING_KEY_HEX")
-        .context("set CHAMPIONVIBE_SIGNING_KEY_HEX on the issuer host")?;
-    LicenseSigner::from_seed_hex(&seed)
+/// Loads the Ed25519 signer from the encrypted issuer environment.
+fn load_signer() -> Result<championvibe_licensing_core::LicenseSigner> {
+    secret::load_signer()
 }
 
 fn open_database(path: PathBuf) -> Result<Connection> {
@@ -131,12 +205,36 @@ async fn health() -> Json<serde_json::Value> {
 async fn create_quote(
     State(state): State<AppState>,
     Json(request): Json<CreateQuoteRequest>,
-) -> Result<Json<Quote>, ApiError> {
-    let quote = state
-        .oracle
-        .create_quote(request.chain, request.plan, &state.treasury)
-        .await
-        .map_err(|error| internal_error("could not create a price quote", error))?;
+) -> Result<Json<Quote>, IssuerError> {
+    let budget = TimeBudget::quote();
+    let quote = match tokio::time::timeout(
+        budget.total(),
+        state.oracle.create_quote_with_budget(
+            request.chain,
+            request.plan,
+            &state.treasury,
+            &budget,
+        ),
+    )
+    .await
+    {
+        Ok(Ok(quote)) => quote,
+        Ok(Err(error)) => {
+            if budget.expired() {
+                return Err(IssuerError::RetryLater(RetrySignal::watchdog(
+                    &budget,
+                    state.verifier.node_count(request.chain),
+                )));
+            }
+            return Err(internal_error("could not create a price quote", error).into());
+        }
+        Err(_elapsed) => {
+            return Err(IssuerError::RetryLater(RetrySignal::watchdog(
+                &budget,
+                state.verifier.node_count(request.chain),
+            )))
+        }
+    };
     let payload = serde_json::to_string(&quote)
         .map_err(|error| internal_error("could not serialize price quote", error))?;
     let database = state.database.lock().map_err(|_| {
@@ -157,10 +255,10 @@ async fn create_quote(
 async fn activate(
     State(state): State<AppState>,
     Json(request): Json<ActivateRequest>,
-) -> Result<Json<SignedLicense>, ApiError> {
+) -> Result<Json<SignedLicense>, IssuerError> {
     let binding = normalize_device_binding(&request.device_binding)?;
     if request.quote_id.len() > 80 || request.quote_id.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "invalid quote id".to_owned()));
+        return Err(terminal(StatusCode::BAD_REQUEST, "invalid quote id"));
     }
 
     let quote_json: Option<String> = {
@@ -202,9 +300,9 @@ async fn activate(
         {
             return Ok(Json(existing.license));
         }
-        return Err((
+        return Err(terminal(
             StatusCode::CONFLICT,
-            "transaction has already been used".to_owned(),
+            "transaction has already been used",
         ));
     }
 
@@ -212,22 +310,47 @@ async fn activate(
         if existing.device_binding == binding && existing.transaction_hash == transaction_hash {
             return Ok(Json(existing.license));
         }
-        return Err((
+        return Err(terminal(
             StatusCode::CONFLICT,
-            "quote has already been used".to_owned(),
+            "quote has already been used",
         ));
     }
 
-    state
-        .verifier
-        .verify(&quote, &transaction_hash)
-        .await
-        .map_err(|error| {
-            (
+    // One budget for the whole chain, across every configured node, plus a hard watchdog so the
+    // handler answers inside the same window even if a socket ignores its request timeout.
+    let budget = TimeBudget::verification();
+    match tokio::time::timeout(
+        budget.total(),
+        state
+            .verifier
+            .verify_with_budget(&quote, &transaction_hash, &budget),
+    )
+    .await
+    {
+        Ok(Ok(_payment)) => {}
+        Ok(Err(VerificationError::Rejected {
+            code,
+            detail,
+            attempts,
+        })) => {
+            for attempt in &attempts {
+                eprintln!("payment rejection {code}: {}", attempt.log_line());
+            }
+            return Err(terminal(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                format!("payment verification failed: {error:#}"),
-            )
-        })?;
+                format!("payment verification failed: {code}: {detail}"),
+            ));
+        }
+        Ok(Err(VerificationError::RetryLater(signal))) => {
+            return Err(IssuerError::RetryLater(signal))
+        }
+        Err(_elapsed) => {
+            return Err(IssuerError::RetryLater(RetrySignal::watchdog(
+                &budget,
+                state.verifier.node_count(quote.chain),
+            )))
+        }
+    }
 
     let issued_at = Utc::now().timestamp();
     let mut database = state.database.lock().map_err(|_| {
@@ -251,18 +374,18 @@ async fn activate(
         {
             return Ok(Json(existing.license));
         }
-        return Err((
+        return Err(terminal(
             StatusCode::CONFLICT,
-            "transaction has already been used".to_owned(),
+            "transaction has already been used",
         ));
     }
     if lookup_quote_activation_in(&transaction, &quote.id)?.is_some() {
         transaction
             .rollback()
             .map_err(|error| internal_error("could not close activation transaction", error))?;
-        return Err((
+        return Err(terminal(
             StatusCode::CONFLICT,
-            "quote has already been used".to_owned(),
+            "quote has already been used",
         ));
     }
 

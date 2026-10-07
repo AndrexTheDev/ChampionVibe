@@ -16,6 +16,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex, RwLock,
     },
+    time::Duration,
 };
 use tauri::{AppHandle, Manager, State};
 #[cfg(target_os = "android")]
@@ -1620,26 +1621,60 @@ fn validate_track(input: &database::TrackInput) -> Result<(), String> {
     Ok(())
 }
 
+/// How often the issuer's retry-later signal is honored before the client gives up.
+const ISSUER_RETRY_ATTEMPTS: usize = 2;
+/// Upper bound for one wait, so a misconfigured issuer cannot stall the interface.
+const ISSUER_RETRY_MAX_WAIT_MS: u64 = 2_000;
+
+/// Posts JSON to the issuer, honoring a bounded retry-later answer once.
+///
+/// The issuer answers `503` with `Retry-After` when its payment chain reached no consensus inside
+/// its verification budget. Waiting for the advertised delay turns that transient answer into a
+/// completed activation instead of an error the listener has to retry by hand.
 async fn post_json<TRequest, TResponse>(url: &str, request: &TRequest) -> Result<TResponse, String>
 where
     TRequest: Serialize + ?Sized,
     TResponse: DeserializeOwned,
 {
-    let response = reqwest::Client::new()
-        .post(url)
-        .json(request)
-        .send()
-        .await
-        .map_err(|error| format!("issuer request failed: {error}"))?;
-    let status = response.status();
-    if !status.is_success() {
+    let client = reqwest::Client::new();
+    let mut attempt = 1;
+    loop {
+        let response = client
+            .post(url)
+            .json(request)
+            .send()
+            .await
+            .map_err(|error| format!("issuer request failed: {error}"))?;
+        let status = response.status();
+        if status.is_success() {
+            return response
+                .json::<TResponse>()
+                .await
+                .map_err(|error| format!("issuer response was invalid: {error}"));
+        }
+        if status == reqwest::StatusCode::SERVICE_UNAVAILABLE && attempt < ISSUER_RETRY_ATTEMPTS {
+            let wait = issuer_retry_wait_ms(&response);
+            let body = response.text().await.unwrap_or_default();
+            eprintln!("issuer asked to retry in {wait} ms: {body}");
+            tokio::time::sleep(Duration::from_millis(wait)).await;
+            attempt += 1;
+            continue;
+        }
         let body = response.text().await.unwrap_or_default();
         return Err(format!("issuer returned {status}: {body}"));
     }
+}
+
+/// Delay from a `Retry-After` header, clamped so a hostile issuer cannot stall the interface.
+fn issuer_retry_wait_ms(response: &reqwest::Response) -> u64 {
     response
-        .json::<TResponse>()
-        .await
-        .map_err(|error| format!("issuer response was invalid: {error}"))
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|seconds| seconds.saturating_mul(1_000))
+        .unwrap_or(1_000)
+        .clamp(250, ISSUER_RETRY_MAX_WAIT_MS)
 }
 
 fn issuer_endpoint(base: &str, path: &str) -> Result<String, String> {
