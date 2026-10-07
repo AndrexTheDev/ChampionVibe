@@ -1290,11 +1290,11 @@ pub async fn load_track_audio(
     app.device_identity().initialize_audio_context()?;
 
     let engine = state.audio.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || -> Result<audio::AudioStatus, String> {
         let status = engine.load_with_loudness(stems, grid, integrated_lufs)?;
         // Remember the library row on the deck so a later grid correction can reach it in place.
         engine.set_loaded_track_id(Some(track_id));
-        status
+        Ok(status)
     })
     .await
     .map_err(|error| format!("audio preparation task failed: {error}"))?

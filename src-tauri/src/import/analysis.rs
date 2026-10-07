@@ -386,7 +386,7 @@ fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f6
 
     let second_score = scores
         .iter()
-        .filter(|(lag, _)| !same_tempo(**lag, best_lag))
+        .filter(|(lag, _)| !same_tempo(*lag, best_lag))
         .map(|(_, score)| *score)
         .fold(0.0, f64::max);
     let margin = (best_score - second_score).max(0.0) / best_score.max(1.0e-12) * 2.0;

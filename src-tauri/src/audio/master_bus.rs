@@ -426,7 +426,6 @@ impl MasterBus {
             &device,
             &config,
             usize::from(config.channels),
-            config.sample_rate,
             Arc::clone(&graph),
             Arc::clone(&self.meter),
             self.statuses.clone(),
@@ -451,7 +450,7 @@ impl MasterBus {
                 }
                 self.glitches.log_event(
                     GlitchKind::BufferGrown,
-                    format!("device="{device_name}" bufferFrames={frames}"),
+                    format!("device=\"{device_name}\" bufferFrames={frames}"),
                 );
                 Ok(())
             }
@@ -633,7 +632,6 @@ impl MasterBus {
             &device,
             &config,
             channels,
-            sample_rate,
             Arc::clone(&graph),
             Arc::clone(&self.meter),
             self.statuses.clone(),
@@ -689,7 +687,6 @@ fn build_stream_for_format(
     device: &cpal::Device,
     config: &StreamConfig,
     channels: usize,
-    sample_rate: u32,
     graph: Arc<Mutex<MasterOutputGraph>>,
     meter: Arc<MasterMeter>,
     statuses: [Arc<EngineStatus>; 2],
@@ -700,7 +697,6 @@ fn build_stream_for_format(
             device,
             config,
             channels,
-            sample_rate,
             graph,
             meter,
             statuses,
@@ -710,7 +706,6 @@ fn build_stream_for_format(
             device,
             config,
             channels,
-            sample_rate,
             graph,
             meter,
             statuses,
@@ -720,7 +715,6 @@ fn build_stream_for_format(
             device,
             config,
             channels,
-            sample_rate,
             graph,
             meter,
             statuses,
@@ -744,7 +738,6 @@ fn build_stream<T>(
     device: &cpal::Device,
     config: &StreamConfig,
     channels: usize,
-    sample_rate: u32,
     graph: Arc<Mutex<MasterOutputGraph>>,
     meter: Arc<MasterMeter>,
     statuses: [Arc<EngineStatus>; 2],
