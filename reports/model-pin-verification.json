@@ -1,26 +1,26 @@
 {
   "format": "championvibe-model-pin-verification-v1",
-  "generatedAt": "2026-10-07T11:04:53Z",
+  "generatedAt": "2026-10-07T11:18:26Z",
   "registry": "championvibe-model-registry-v2",
   "artifacts": [
     {
       "id": "spleeter-2stems-onnx",
       "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/sherpa-onnx-spleeter-2stems.tar.bz2",
-      "registrySha256": "PENDING_VERIFICATION",
+      "registrySha256": "e26401d9c1801f43c0229731d78d32c2e80085e3aceedeb25f29d2de5fa68ca2",
       "actualSha256": "e26401d9c1801f43c0229731d78d32c2e80085e3aceedeb25f29d2de5fa68ca2",
       "actualSizeBytes": 74682545,
       "sizeStatus": "ok",
-      "status": "pending",
+      "status": "verified",
       "upstreamChecksum": "not-listed"
     },
     {
       "id": "spleeter-2stems-onnx-fp16",
       "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/sherpa-onnx-spleeter-2stems-fp16.tar.bz2",
-      "registrySha256": "PENDING_VERIFICATION",
+      "registrySha256": "d54561979bd2e08a51e7dbd99ac36bb47564e089eefd403636dbca93e811bba2",
       "actualSha256": "d54561979bd2e08a51e7dbd99ac36bb47564e089eefd403636dbca93e811bba2",
       "actualSizeBytes": 35271738,
       "sizeStatus": "ok",
-      "status": "pending",
+      "status": "verified",
       "upstreamChecksum": "not-listed"
     }
   ]
