@@ -209,7 +209,7 @@
                 </div>
               </section>
               <section class="dubplate-block" aria-label="Lokaler Patois-Dubplate-Generator">
-                <div class="sound-block-heading"><span>PATOIS DUBPLATE · LOKAL</span><span class="tts-state" id="tts-state">CPU</span></div>
+                <div class="sound-block-heading"><span>US-Englische KI-Stimme mit Patois-Aussprache-Annäherung</span><span class="tts-state" id="tts-state">CPU</span></div>
                 <label class="dubplate-label" for="dubplate-text">Textblock
                   <textarea id="dubplate-text" maxlength="1000" rows="3" placeholder="Schreib deinen Patois-/Sound-System-Text …"></textarea>
                 </label>
@@ -257,8 +257,8 @@
                 </div>
                 <div class="import-selection-count" id="import-selection-count">Keine Audio-Dateien ausgewählt</div>
                 <div class="import-model-row">
-                  <span class="import-model-label">HT-Demucs .onnx ODER MDX-Net .cvmodel.json</span>
-                  <div class="import-model-control"><input id="separator-model-path" type="text" readonly placeholder="Lokales .onnx-Modell oder MDX-Manifest auswählen" /><button id="pick-separator-model" type="button">Modell …</button></div>
+                  <span class="import-model-label">Lokale Modelldatei (.onnx)</span>
+                  <div class="import-model-control"><input id="separator-model-path" type="text" readonly placeholder="BYOM: lokale .onnx-Datei oder .cvmodel.json auswählen" /><button id="pick-separator-model" type="button">Modell …</button></div>
                 </div>
                 <div class="import-model-row">
                   <span class="import-model-label">Whisper Tiny</span>
@@ -269,6 +269,32 @@
                   <div class="model-library-content">
                     <div class="model-library-heading"><span>Downloads bleiben auf diesem Gerät</span><button id="refresh-model-catalog" type="button">Aktualisieren</button></div>
                     <div id="managed-model-catalog" class="managed-model-catalog" aria-live="polite"><span class="model-library-empty">Modellkatalog wird geladen …</span></div>
+                    <div class="separator-default" id="separator-default">
+                      <strong>Standard-Separator · Spleeter 2-Stem (MIT)</strong>
+                      <p>Der Standard-Download ist das kommerziell freie Spleeter-2-Stem-Modell (Vocals + Begleitung) mit fest hinterlegter SHA-256-Prüfsumme. Es gibt keine unklaren HT-Demucs-, MDX- oder Open-Unmix-Downloadpfade mehr.</p>
+                      <div class="separator-default-actions">
+                        <button id="download-default-separator" type="button">Spleeter-2-Stem-Modell herunterladen &amp; prüfen</button>
+                        <span id="separator-default-status" class="model-library-empty">Separator-Status wird geladen …</span>
+                      </div>
+                    </div>
+                    <div class="byom-import" id="byom-import">
+                      <strong>BYOM · eigene Modelldatei ablegen (.onnx)</strong>
+                      <p>Datei hier ablegen oder auswählen. Sie bleibt auf diesem Gerät, wird niemals hochgeladen und nicht weitergegeben; geprüft werden nur Tensorform, Datentyp und Datei-Hash. Für HT-Demucs- und MDX-Net-Gewichte liegt die Lizenzverantwortung bei dir.</p>
+                      <div class="byom-dropzone" id="byom-dropzone" tabindex="0" role="button" aria-label="Lokale Modelldatei (.onnx) ablegen">
+                        <span>Lokale Modelldatei (.onnx) hier ablegen oder klicken</span>
+                        <code id="byom-dropzone-hint">BYOM · htdemucs · mdx-net · spleeter-2stems</code>
+                      </div>
+                      <label class="byom-kind" for="byom-model-kind">Zweck
+                        <select id="byom-model-kind">
+                          <option value="htdemucs">HT-Demucs (BYOM, Rechte-Bestätigung nötig)</option>
+                          <option value="mdx-net">MDX-Net-Manifest (BYOM, Rechte-Bestätigung nötig)</option>
+                          <option value="spleeter-2stems">Spleeter 2-Stem-Manifest (MIT, keine Bestätigung nötig)</option>
+                        </select>
+                      </label>
+                      <label class="byom-ack" for="byom-rights-ack"><input id="byom-rights-ack" type="checkbox" /> <span>Ich bestätige, dass ich die Rechte an diesen Gewichten geprüft habe (HT-Demucs/MDX-Net erforderlich).</span></label>
+                      <button id="byom-import" type="button">Datei prüfen &amp; lokal eintragen</button>
+                      <div id="byom-model-list" class="byom-model-list" aria-live="polite"></div>
+                    </div>
                     <div class="custom-mdx-import">
                       <strong>Eigenes MDX-Net-ONNX importieren</strong>
                       <p>Dateien werden vor dem Kopieren auf ONNX-Tensorform, Datentyp und Zielkonfiguration geprüft.</p>

@@ -1,4 +1,5 @@
 use super::mdx::MdxSeparator;
+use super::spleeter::SpleeterSeparator;
 use anyhow::{Context, Result};
 use flacenc::{
     bitsink::ByteSink,
@@ -28,33 +29,61 @@ const CHAMPION_STEM_NAMES: [&str; 4] = ["acapella", "instrumental", "bass", "dru
 const SOURCE_INDEX_FOR_CHAMPION_STEM: [usize; 4] = [3, 2, 1, 0];
 
 pub(crate) enum SeparationEngine {
+    /// Cleared default: pinned Spleeter 2-stem ONNX (acapella + instrumental).
+    Spleeter(SpleeterSeparator),
+    /// BYOM: user-supplied HT-Demucs weights; ChampionVibe never downloads or redistributes them.
     HtDemucs(LocalSeparator),
+    /// BYOM: user-supplied MDX-Net target set behind a ChampionVibe manifest.
     Mdx(MdxSeparator),
+}
+
+/// True for any ChampionVibe separator manifest (MDX-Net target sets and the installed Spleeter
+/// descriptor both use the `.cvmodel.json` suffix).
+pub(crate) fn is_championvibe_manifest(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|name| name.to_ascii_lowercase().ends_with(".cvmodel.json"))
+}
+
+fn manifest_format(path: &Path) -> Result<Option<String>> {
+    let bytes =
+        fs::read(path).with_context(|| format!("cannot read model manifest {}", path.display()))?;
+    anyhow::ensure!(bytes.len() <= 64 * 1024, "model manifest is too large");
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .with_context(|| format!("invalid model manifest {}", path.display()))?;
+    Ok(value
+        .get("format")
+        .and_then(|format| format.as_str())
+        .map(|format| format.to_owned()))
 }
 
 impl SeparationEngine {
     pub(crate) fn load(model_path: &Path, threads: usize, use_directml: bool) -> Result<Self> {
-        let is_mdx_manifest = model_path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .is_some_and(|name| name.to_ascii_lowercase().ends_with(".cvmodel.json"));
-        if is_mdx_manifest {
-            Ok(Self::Mdx(MdxSeparator::load(
+        if is_championvibe_manifest(model_path) {
+            let format = manifest_format(model_path)?;
+            if format.as_deref() == Some(crate::audio::model_loader::SPLEETER_DESCRIPTOR_FORMAT) {
+                return Ok(Self::Spleeter(SpleeterSeparator::load(
+                    model_path,
+                    threads,
+                    use_directml,
+                )?));
+            }
+            return Ok(Self::Mdx(MdxSeparator::load(
                 model_path,
                 threads,
                 use_directml,
-            )?))
-        } else {
-            Ok(Self::HtDemucs(LocalSeparator::load(
-                model_path,
-                threads,
-                use_directml,
-            )?))
+            )?));
         }
+        Ok(Self::HtDemucs(LocalSeparator::load(
+            model_path,
+            threads,
+            use_directml,
+        )?))
     }
 
     pub(crate) fn backend(&self) -> &'static str {
         match self {
+            Self::Spleeter(separator) => separator.backend(),
             Self::HtDemucs(separator) => separator.backend(),
             Self::Mdx(separator) => separator.backend(),
         }
@@ -62,6 +91,7 @@ impl SeparationEngine {
 
     pub(crate) fn stem_count(&self) -> usize {
         match self {
+            Self::Spleeter(separator) => separator.stem_count(),
             Self::HtDemucs(_) => 4,
             Self::Mdx(separator) => separator.stem_count(),
         }
@@ -76,6 +106,9 @@ impl SeparationEngine {
         progress: impl FnMut(f64),
     ) -> Result<Vec<PathBuf>> {
         match self {
+            Self::Spleeter(separator) => {
+                separator.separate(input_path, output_dir, total_frames, cancel, progress)
+            }
             Self::HtDemucs(separator) => {
                 separator.separate(input_path, output_dir, total_frames, cancel, progress)
             }
@@ -402,7 +435,7 @@ fn shape_axis_matches(actual: i64, expected: i64) -> bool {
     actual == expected || actual == -1
 }
 
-fn create_session(
+pub(super) fn create_session(
     model_path: &Path,
     threads: usize,
     use_directml: bool,
@@ -499,11 +532,11 @@ fn fill_window_tail(
     Ok(())
 }
 
-fn i16_to_f32(sample: i16) -> f32 {
+pub(super) fn i16_to_f32(sample: i16) -> f32 {
     (sample as f32 / i16::MAX as f32).clamp(-1.0, 1.0)
 }
 
-fn float_to_i16(sample: f32) -> i16 {
+pub(super) fn float_to_i16(sample: f32) -> i16 {
     let finite_sample = if sample.is_finite() { sample } else { 0.0 };
     (finite_sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
 }

@@ -1,27 +1,83 @@
-# Local model registry and separator contracts
+# Model registry, cleared separator default, and BYOM policy
 
-ChampionVibe stores optional weights under the app-data `models/` directory. Nothing in this registry is bundled with the app. A download is an explicit user action over HTTPS; the Rust manager limits its size, follows only a final HTTPS Hugging Face/Xet URL, computes SHA-256 while the bytes are on disk, validates the artifact contract, and only then installs it. Model inference and audio processing remain local.
+ChampionVibe ships **no** model weights. There are exactly two ways a separator can reach the app:
 
-## Pinned registry
+1. **Cleared default (managed download).** `src-tauri/assets/model-registry.json` lists only artifacts
+   whose code *and* weights are usable commercially. The standard separator is the **Spleeter 2-stem
+   ONNX** export (MIT Spleeter weights by Deezer Research; Apache-2.0 ONNX conversion by
+   [`k2-fsa/sherpa-onnx`](https://github.com/k2-fsa/sherpa-onnx)). A download is an explicit user
+   action over HTTPS, is size-limited, hashed while on disk, checked against the registry byte size,
+   and only then installed atomically. A pin that has not been verified against the upstream bytes
+   (`PENDING_VERIFICATION`) makes the artifact **non-installable** instead of silently trusted.
+2. **BYOM (Bring Your Own Model).** The user drops a local `.onnx`/`.cvmodel.json` file. ChampionVibe
+   never downloads, copies, bundles or redistributes those weights; it validates tensor shapes,
+   stores the local path plus the file hash in `byom-models.json`, and requires an explicit rights
+   acknowledgement for kinds whose provenance is unclear.
 
-All revisions below are immutable repository commits. The SHA-256 pins are content hashes, not license grants.
+Every unclear-rights separator source (HT-Demucs/Demucs mirrors, KUIELab/UVR MDX mirrors, Open-Unmix)
+is listed in `policy.forbiddenDownloadSources`; `scripts/verify-model-pins.sh` and the Rust unit tests
+fail if any registry URL resolves to one of them.
 
-| Registry ID / file | Repository revision and path | SHA-256 | Use |
+## The standard separator: Spleeter 2-stem ONNX
+
+| Registry ID | Asset | SHA-256 | Bytes |
 | --- | --- | --- | --- |
-| `separator-android` · `kuielab_a_vocals.onnx` | `Politrees/UVR_resources@491e44cfaf909b73ce14f6185298de9c82867de3` · `MDXNet_models/kuielab_a_vocals.onnx` | `daba83c2ee1afee9139766ad64c9b6808d6b6f092fff04bed3338be50baac721` | Two-stem manifest; predicts vocals, then writes instrumental as input minus vocals |
-| `separator-four-stem` · `kuielab_a_vocals.onnx` | Same revision · `MDXNet_models/kuielab_a_vocals.onnx` | `daba83c2ee1afee9139766ad64c9b6808d6b6f092fff04bed3338be50baac721` | Four-stem vocals target |
-| `separator-four-stem` · `kuielab_a_other.onnx` | Same revision · `MDXNet_models/kuielab_a_other.onnx` | `7b67a1dcb5f232153528c59960b4c7bf8dc736b8114de360af0e719633f53358` | Four-stem `Other` / instrumental target |
-| `separator-four-stem` · `kuielab_a_bass.onnx` | Same revision · `MDXNet_models/kuielab_a_bass.onnx` | `0c3e77b9963185b1ea6bb46a4b8924137d9370fc1ccdefec7b1b416ef550dcaa` | Four-stem bass target |
-| `separator-four-stem` · `kuielab_a_drums.onnx` | Same revision · `MDXNet_models/kuielab_a_drums.onnx` | `40f586b7091934dd6f5563f0cba8f14bad57ce88440da1098bf388ea716c2901` | Four-stem drums target |
-| `whisper-tiny` · `ggml-tiny.bin` | `ggerganov/whisper.cpp@80da2d8bfee42b0e836fc3a9890373e5defc00a6` · `ggml-tiny.bin` | `be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21` | Local Whisper Tiny transcription |
-| `kokoro-model` · `model_quantized.onnx` | `onnx-community/Kokoro-82M-v1.0-ONNX@468588286ebb2dd77c25b9771e5d165896538cce` · `onnx/model_quantized.onnx` | `fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478` | Optional, user-selected local Kokoro WebAssembly TTS model; English G2P plus lightweight spelling cues are not a complete Patois model |
-| `kokoro-voice-af-heart` · `af_heart.bin` | Same Kokoro revision · `voices/af_heart.bin` | `d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b` | Optional voice/style vector for US-English synthesis; not Jamaican Patois |
+| `spleeter-2stems-onnx` | `sherpa-onnx-spleeter-2stems.tar.bz2` | `e26401d9c1801f43c0229731d78d32c2e80085e3aceedeb25f29d2de5fa68ca2` | 74,682,545 |
+| `spleeter-2stems-onnx-fp16` | `sherpa-onnx-spleeter-2stems-fp16.tar.bz2` | `d54561979bd2e08a51e7dbd99ac36bb47564e089eefd403636dbca93e811bba2` | 35,271,738 |
 
-The four KUIELab files are each about 29.7 MB. Whisper Tiny is about 77.7 MB; the quantized Kokoro ONNX is about 92.4 MB and its selected voice pack about 522 kB. Sizes are informational; the downloader enforces hard byte limits and trusts hashes, not advertised lengths.
+Base URL: `https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/`.
+Each archive contains `vocals.onnx` and `accompaniment.onnx`. Both pins were produced by a byte-exact
+download in the `Model pins and lockfile` GitHub Actions workflow and are recorded, with timestamp and
+job reference, in `pinVerifiedAt`/`pinVerification` inside the registry plus
+`reports/model-pin-verification.json`.
 
-## MDX-Net manifest contract
+### Spleeter 2-stem runtime contract
 
-MDX-Net is selected through a ChampionVibe `.cvmodel.json` manifest. The manifest pins every file and declares the target stem, FFT size, 1024-sample hop, 2048 retained frequency bins, 512 STFT frames, and amplitude compensation. The verified KUIELab Track A configuration is:
+The Rust backend (`src-tauri/src/import/spleeter.rs`) mirrors the reference implementation in
+sherpa-onnx's `offline-source-separation-spleeter-impl.h`:
+
+| Parameter | Value |
+| --- | ---: |
+| Sample rate | 44,100 Hz (stereo) |
+| FFT size / window | 4,096 samples, periodic Hann |
+| Hop length | 1,024 samples |
+| `center` | `false` |
+| Bins fed to the model | 1,024 of 2,049 |
+| Model input / output | float32 `[2, splits, 512, 1024]`, ONNX names `x` → `y`, dynamic axis 1 |
+| Mask | `(stem² + ε/2) / (vocals² + accompaniment² + ε)`, `ε = 1e-10` |
+| Stems | stem 0 → `acapella`, stem 1 → `instrumental` |
+
+Processing streams in 512-frame chunks with weighted overlap-add; the `center = false` framing cannot
+cover the final `n_fft - hop` samples, so that tail is padded with silence to keep the stem timeline
+identical to the source. Note that the exporter's ONNX metadata contains `sample_rate: 41000` (a typo
+in the upstream export script); the real contract is 44.1 kHz and the app ignores that metadata field.
+
+## Cleared managed artifacts (non-separator)
+
+| Registry ID / file | Source revision | SHA-256 | Use |
+| --- | --- | --- | --- |
+| `whisper-tiny` · `ggml-tiny.bin` | `ggerganov/whisper.cpp@80da2d8bfee42b0e836fc3a9890373e5defc00a6` | `be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21` | Local Whisper Tiny transcription (MIT) |
+| `kokoro-model` · `model_quantized.onnx` | `onnx-community/Kokoro-82M-v1.0-ONNX@468588286ebb2dd77c25b9771e5d165896538cce` | `fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478` | Optional local Kokoro WebAssembly TTS (Apache-2.0 declared) |
+| `kokoro-voice-af-heart` · `af_heart.bin` | Same revision · `voices/af_heart.bin` | `d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b` | Optional voice vector for **US English** synthesis; not Jamaican Patois |
+
+## BYOM kinds
+
+| Kind | Accepted file | Contract | Acknowledgement |
+| --- | --- | --- | --- |
+| `spleeter-2stems` | `.cvmodel.json` Spleeter descriptor (two graph paths + hashes) | float32 `[2, splits, 512, 1024]` | not required (MIT) |
+| `htdemucs` | `.onnx` | float32 `[1, 2, 343980] → [1, 4, 2, 343980]` | required; Demucs maintainers state the pretrained weights are not MIT |
+| `mdx-net` | `.cvmodel.json` MDX manifest | float32 `[1, 4, 2048, 512]` per target | required; KUIELab/UVR mirrors have unclear model and training-data provenance |
+
+Records live in `<app data>/models/byom-models.json` and contain the absolute local path, file name,
+byte size, SHA-256, the validated contract, and the acknowledgement flag — never a copy of the weights.
+The UI shows file name, size, SHA-256 and licence context, and states that the file stays local and is
+never uploaded.
+
+### MDX-Net manifest contract (BYOM detail)
+
+A ChampionVibe `.cvmodel.json` manifest pins every file and declares the target stem, FFT size,
+1,024-sample hop, 2,048 retained frequency bins, 512 STFT frames, and amplitude compensation. The
+KUIELab Track A configuration is:
 
 | Target | `n_fft` | ChampionVibe lane |
 | --- | ---: | --- |
@@ -30,25 +86,52 @@ MDX-Net is selected through a ChampionVibe `.cvmodel.json` manifest. The manifes
 | bass | 16,384 | bass |
 | drums | 4,096 | drums |
 
-The ONNX graph must accept and emit float32 `[1, 4, 2048, 512]`. The four input channels are left-real, left-imaginary, right-real, right-imaginary. The Rust path reproduces the periodic Hann, centered STFT/iSTFT, source-specific frequency cut, and overlapping chunks from the KUIELab reference. Each file is inferred independently. The two-stem profile uses only the vocals predictor and builds the aligned instrumental as mixture minus predicted vocals. The four-stem profile predicts vocals, Other, bass and drums independently; `Other` maps to the app's instrumental lane.
+The ONNX graph must accept and emit float32 `[1, 4, 2048, 512]` (left-real, left-imag, right-real,
+right-imag). Two-stem profiles predict vocals and build the instrumental as mixture minus vocals;
+four-stem profiles predict all four targets, and `Other` maps to the instrumental lane. Two-stem
+Spleeter and MDX tracks are stored with only their actual output paths, and `stem_paths[0]` is always
+the vocals stem so Whisper always transcribes an acapella.
 
-The existing `.onnx` HT-Demucs path is retained. A plain `.onnx` selection uses the HT-Demucs tensor contract; user MDX files must first be imported into a managed manifest. Two- and four-stem tracks are stored with only their actual output paths. Playback chooses the matching active two/four-stem profile, including when a Pro desktop or Android player loads a two-stem track.
+## Pin verification
 
-The app runs MDX on CPU by default. On Windows only, the existing opt-in DirectML control may request DirectML; it is never silently enabled. CPU inference holds at most one MDX target session at a time so the four-stem set does not require four resident inference sessions on Android.
-
-User-selected MDX files are checked for ONNX validity, float32 element types, rank/channel/frequency/frame dimensions, exact target names (for four-stem sets), and valid local paths before copying. Their source hashes are stored in the managed manifest and checked again before inference. A user-provided hash establishes post-import integrity, not trusted provenance or rights.
+- `scripts/verify-model-pins.sh` is the strict verifier. It rejects forbidden sources, checks byte
+  size and SHA-256, cross-checks the upstream `checksumSource` when it lists the artifact, and writes
+  the `championvibe-model-pin-verification-v1` report. `--allow-pending` downgrades unverified pins to
+  warnings for discovery runs.
+- `.github/workflows/model-pins.yml` runs it on every push, commits the report back to the branch, and
+  generates/commits `Cargo.lock` so releases build from a locked dependency graph.
+- `reports/model-pin-verification.json` is the machine-readable evidence for the current pins.
 
 ## Licensing gates
 
-- The KUIELab reference code repository declares MIT. Its Track A material references MUSDB18-HQ and uses a mirrored weights repository; the source-code license does **not** establish commercial permission for those weight files, the underlying training data, or the mirror. The KUIELab model set remains an explicit rights-review item; do not advertise commercial clearance.
-- OpenAI Whisper / `whisper.cpp` source repositories declare MIT. Retain their notices if redistributing code or the pinned weights; the model pin does not independently resolve every upstream-data question.
-- The pinned Kokoro model repository declares Apache-2.0, but runtime, ONNX conversion, voice pack, tokenizer, phonemizer, G2P and any pronunciation dictionary must each be reviewed separately. Misaki/CMUdict data terms and provenance are not bundled into a blanket code license. A local WebAssembly synthesis path and approximate word-level Patois spelling substitutions before US-English G2P are implemented; tests cover the transformations and a mocked model path, not an authentic Patois voice or a fully validated real-model/device workflow. The substitutions are not a complete or authoritative Jamaican Creole G2P, and `af_heart` is US English, not Jamaican Patois. Hype/aggressive prosody uses Kokoro's speed input plus local post-synthesis varispeed pitch/intonation; it is not model-native emotion control and may alter timbre. Vet the model, conversion, voice and dependencies independently before redistribution.
-- The opt-in Piper feature remains gated pending its runtime/eSpeak and per-voice redistribution review. Do not enable it for a release without completing that review.
+- **Spleeter (default separator).** The Deezer Spleeter repository declares MIT for its code, and the
+  JOSS paper (JOSS 5(50):2154, 2020) states that the *source code and pre-trained models* are
+  distributed under an MIT license. The ONNX conversion tooling in sherpa-onnx is Apache-2.0; the
+  upstream export pipeline (freeze → torch → ONNX) is traceable to `deezer/spleeter` v1.4.0
+  `2stems.tar.gz`. That traceability plus the byte-exact SHA-256 pin is why this profile is the
+  cleared default.
+- **HT-Demucs.** The maintainers state the pretrained weights are not covered by the repository's MIT
+  license and were trained on MUSDB-HQ plus additional data; MUSDB18-HQ restricts commercial use.
+  ChampionVibe therefore ships no HT-Demucs download path; the tensor contract stays supported only
+  for user-supplied BYOM files, and the UI requires an explicit rights acknowledgement.
+- **MDX-Net (KUIELab Track A / UVR mirrors).** The reference code is MIT, but that does not grant
+  rights to mirrored weights or training data. No download path exists; BYOM only, acknowledgement
+  required, and the app must not be marketed as commercially cleared for these files.
+- **Open-Unmix.** No download path, no code path, no references.
+- **Whisper.** OpenAI Whisper and `whisper.cpp` declare MIT; retain their notices when redistributing.
+- **Kokoro.** The pinned model repository declares Apache-2.0, but runtime, ONNX conversion, voice
+  pack, tokenizer, phonemizer, G2P and pronunciation-dictionary data each need separate review. The
+  `af_heart` voice is US English; the optional Patois spelling substitutions are an approximation, not
+  a dialect model. Do not claim an authentic Patois voice.
+- **Piper (optional `local-piper-tts` feature).** Gated pending runtime/eSpeak and per-voice
+  redistribution review; do not enable it in a release without completing that review.
 
 ## External references
 
-- [KUIELab MDX-Net submission and reference preprocessing](https://github.com/kuielab/mdx-net-submission/tree/leaderboard_A)
-- [Pinned KUIELab resource tree](https://huggingface.co/Politrees/UVR_resources/tree/491e44cfaf909b73ce14f6185298de9c82867de3)
+- [Spleeter (Deezer Research) — MIT code and pretrained models](https://github.com/deezer/spleeter)
+- [Spleeter JOSS paper — MIT statement for code and models](https://joss.theoj.org/papers/10.21105/joss.02154)
+- [sherpa-onnx source-separation model releases](https://github.com/k2-fsa/sherpa-onnx/releases/tag/source-separation-models)
+- [sherpa-onnx Spleeter C++ reference implementation](https://github.com/k2-fsa/sherpa-onnx/blob/master/sherpa-onnx/csrc/offline-source-separation-spleeter-impl.h)
 - [Pinned Whisper Tiny model commit](https://huggingface.co/ggerganov/whisper.cpp/commit/80da2d8bfee42b0e836fc3a9890373e5defc00a6)
 - [Pinned Kokoro model commit](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/commit/468588286ebb2dd77c25b9771e5d165896538cce)
-- [KUIELab-MDX-Net paper](https://mdx-workshop.github.io/proceedings/mkim.pdf)
+- [HT-Demucs weights/licence statement](https://github.com/facebookresearch/demucs/issues/327)

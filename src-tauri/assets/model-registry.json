@@ -27,12 +27,15 @@
       "asset": "sherpa-onnx-spleeter-2stems.tar.bz2",
       "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/sherpa-onnx-spleeter-2stems.tar.bz2",
       "checksumSource": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/checksum.txt",
-      "sha256": "PENDING_VERIFICATION",
+      "sha256": "e26401d9c1801f43c0229731d78d32c2e80085e3aceedeb25f29d2de5fa68ca2",
       "sizeBytes": 74682545,
       "maxBytes": 134217728,
       "archive": "tar.bz2",
       "archiveRoot": "sherpa-onnx-spleeter-2stems",
-      "members": ["vocals.onnx", "accompaniment.onnx"],
+      "members": [
+        "vocals.onnx",
+        "accompaniment.onnx"
+      ],
       "approximateSize": "74.7 MB",
       "sampleRate": 44100,
       "weightsLicense": "MIT",
@@ -45,7 +48,9 @@
       "notices": [
         "THIRD-PARTY-NOTICES.md#deezer-spleeter-mit",
         "THIRD-PARTY-NOTICES.md#k2-fsa-sherpa-onnx-apache-2-0"
-      ]
+      ],
+      "pinVerifiedAt": "2026-10-07T11:04:53Z (GitHub Actions, ubuntu-latest, byte-exact download)",
+      "pinVerification": "reports/model-pin-verification.json"
     },
     {
       "id": "spleeter-2stems-onnx-fp16",
@@ -58,12 +63,15 @@
       "asset": "sherpa-onnx-spleeter-2stems-fp16.tar.bz2",
       "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/sherpa-onnx-spleeter-2stems-fp16.tar.bz2",
       "checksumSource": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/checksum.txt",
-      "sha256": "PENDING_VERIFICATION",
+      "sha256": "d54561979bd2e08a51e7dbd99ac36bb47564e089eefd403636dbca93e811bba2",
       "sizeBytes": 35271738,
       "maxBytes": 134217728,
       "archive": "tar.bz2",
       "archiveRoot": "sherpa-onnx-spleeter-2stems-fp16",
-      "members": ["vocals.fp16.onnx", "accompaniment.fp16.onnx"],
+      "members": [
+        "vocals.fp16.onnx",
+        "accompaniment.fp16.onnx"
+      ],
       "approximateSize": "35.3 MB",
       "sampleRate": 44100,
       "weightsLicense": "MIT",
@@ -76,7 +84,9 @@
       "notices": [
         "THIRD-PARTY-NOTICES.md#deezer-spleeter-mit",
         "THIRD-PARTY-NOTICES.md#k2-fsa-sherpa-onnx-apache-2-0"
-      ]
+      ],
+      "pinVerifiedAt": "2026-10-07T11:04:53Z (GitHub Actions, ubuntu-latest, byte-exact download)",
+      "pinVerification": "reports/model-pin-verification.json"
     }
   ],
   "byom": {

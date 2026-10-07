@@ -8,6 +8,7 @@ mod limiter;
 pub(crate) mod loudness;
 mod master_bus;
 pub(crate) mod mir_analysis;
+pub(crate) mod model_loader;
 pub(crate) mod model_manager;
 pub(crate) mod onnx_embedding;
 mod recording;

@@ -20,7 +20,6 @@ use std::{
 };
 use whisper_rs::{WhisperContext, WhisperContextParameters};
 
-const KUIELAB_REVISION: &str = "491e44cfaf909b73ce14f6185298de9c82867de3";
 const WHISPER_REVISION: &str = "80da2d8bfee42b0e836fc3a9890373e5defc00a6";
 const KOKORO_REVISION: &str = "468588286ebb2dd77c25b9771e5d165896538cce";
 const MANIFEST_FORMAT: &str = "championvibe-mdxnet-v1";
@@ -86,7 +85,6 @@ pub(crate) struct SeparatorModelEntry {
 
 #[derive(Debug, Clone, Copy)]
 enum ArtifactKind {
-    Mdx { n_fft: usize, stem: &'static str },
     WhisperTiny,
     KokoroOnnx,
     KokoroVoice,
@@ -104,58 +102,6 @@ struct Artifact {
     validator: ArtifactKind,
 }
 
-const VOCALS: Artifact = Artifact {
-    filename: "kuielab_a_vocals.onnx",
-    repository: "Politrees/UVR_resources",
-    revision: KUIELAB_REVISION,
-    repository_path: "MDXNet_models/kuielab_a_vocals.onnx",
-    sha256: "daba83c2ee1afee9139766ad64c9b6808d6b6f092fff04bed3338be50baac721",
-    max_bytes: 128 * 1024 * 1024,
-    approximate_size: "29.7 MB",
-    validator: ArtifactKind::Mdx {
-        n_fft: 6_144,
-        stem: "vocals",
-    },
-};
-const OTHER: Artifact = Artifact {
-    filename: "kuielab_a_other.onnx",
-    repository: "Politrees/UVR_resources",
-    revision: KUIELAB_REVISION,
-    repository_path: "MDXNet_models/kuielab_a_other.onnx",
-    sha256: "7b67a1dcb5f232153528c59960b4c7bf8dc736b8114de360af0e719633f53358",
-    max_bytes: 128 * 1024 * 1024,
-    approximate_size: "29.7 MB",
-    validator: ArtifactKind::Mdx {
-        n_fft: 8_192,
-        stem: "other",
-    },
-};
-const BASS: Artifact = Artifact {
-    filename: "kuielab_a_bass.onnx",
-    repository: "Politrees/UVR_resources",
-    revision: KUIELAB_REVISION,
-    repository_path: "MDXNet_models/kuielab_a_bass.onnx",
-    sha256: "0c3e77b9963185b1ea6bb46a4b8924137d9370fc1ccdefec7b1b416ef550dcaa",
-    max_bytes: 128 * 1024 * 1024,
-    approximate_size: "29.7 MB",
-    validator: ArtifactKind::Mdx {
-        n_fft: 16_384,
-        stem: "bass",
-    },
-};
-const DRUMS: Artifact = Artifact {
-    filename: "kuielab_a_drums.onnx",
-    repository: "Politrees/UVR_resources",
-    revision: KUIELAB_REVISION,
-    repository_path: "MDXNet_models/kuielab_a_drums.onnx",
-    sha256: "40f586b7091934dd6f5563f0cba8f14bad57ce88440da1098bf388ea716c2901",
-    max_bytes: 128 * 1024 * 1024,
-    approximate_size: "29.7 MB",
-    validator: ArtifactKind::Mdx {
-        n_fft: 4_096,
-        stem: "drums",
-    },
-};
 const WHISPER_TINY: Artifact = Artifact {
     filename: "ggml-tiny.bin",
     repository: "ggerganov/whisper.cpp",
@@ -187,15 +133,10 @@ const KOKORO_VOICE: Artifact = Artifact {
     validator: ArtifactKind::KokoroVoice,
 };
 
-const ALL_ARTIFACTS: &[Artifact] = &[
-    VOCALS,
-    OTHER,
-    BASS,
-    DRUMS,
-    WHISPER_TINY,
-    KOKORO_MODEL,
-    KOKORO_VOICE,
-];
+/// Cleared, non-separator artifacts only. Separator weights are never listed here: the default
+/// separator comes from the pinned Spleeter registry in [`super::model_loader`], and every other
+/// separator is user-supplied through BYOM.
+const ALL_ARTIFACTS: &[Artifact] = &[WHISPER_TINY, KOKORO_MODEL, KOKORO_VOICE];
 
 pub struct ModelManager {
     root: PathBuf,
@@ -223,54 +164,63 @@ impl ModelManager {
     }
 
     pub fn catalog(&self) -> Vec<ManagedModelInfo> {
-        [
-            ("separator-android", "MDX-Net vocal/instrumental", "Android · two aligned stems", "29.7 MB", "MIT code; model/data provenance is not independently cleared", &VOCALS, self.root.join("separator-android.cvmodel.json"), "KUIELab MDX-Net Track A code is MIT. The original training-data/model provenance is not independently verified for commercial distribution; obtain clearance before commercial use."),
-            ("separator-four-stem", "MDX-Net four-stem set", "Windows/Android · vocals, instrumental/other, bass, drums", "~119 MB", "MIT code; model/data provenance is not independently cleared", &VOCALS, self.root.join("separator-four-stem.cvmodel.json"), "KUIELab MDX-Net Track A repository is MIT; this does not independently clear every training corpus or mirrored weight. Commercial provenance remains an open review item."),
-            ("whisper-tiny", "Whisper Tiny", "Local transcription · English/multilingual tiny", "77.7 MB", "MIT", &WHISPER_TINY, self.root.join(WHISPER_TINY.filename), "OpenAI Whisper and whisper.cpp source repositories declare MIT; retain their notices in redistributed builds."),
-            ("kokoro-model", "Kokoro v1.0 INT8/quantized", "Local CPU text-to-speech · 24 kHz", "92.4 MB", "Apache-2.0 declared by the pinned model repository", &KOKORO_MODEL, self.root.join(KOKORO_MODEL.filename), "The pinned model repository declares Apache-2.0. The app downloads on demand and does not bundle the weights."),
-            ("kokoro-voice-af-heart", "Kokoro voice af_heart", "Voice pack · female American English", "522 kB", "Apache-2.0 declared by the pinned model repository", &KOKORO_VOICE, self.root.join(KOKORO_VOICE.filename), "The repository declares Apache-2.0; speaker-data provenance should still be reviewed before commercial redistribution."),
+        vec![
+            self.managed_info(
+                "whisper-tiny",
+                "Whisper Tiny",
+                "Local transcription · English/multilingual tiny",
+                "77.7 MB",
+                "MIT",
+                &WHISPER_TINY,
+                "OpenAI Whisper and whisper.cpp source repositories declare MIT; retain their notices in redistributed builds.",
+            ),
+            self.managed_info(
+                "kokoro-model",
+                "US English AI voice with Patois pronunciation approximation (Kokoro v1.0, INT8)",
+                "Local CPU text-to-speech · 24 kHz · not an authentic Patois voice",
+                "92.4 MB",
+                "Apache-2.0 declared by the pinned model repository",
+                &KOKORO_MODEL,
+                "The pinned model repository declares Apache-2.0. The app downloads on demand and does not bundle the weights. The voice speaks US English; the Patois spelling rules only approximate pronunciation.",
+            ),
+            self.managed_info(
+                "kokoro-voice-af-heart",
+                "Kokoro voice af_heart (US English)",
+                "Voice pack · female American English · not Jamaican Patois",
+                "522 kB",
+                "Apache-2.0 declared by the pinned model repository",
+                &KOKORO_VOICE,
+                "The repository declares Apache-2.0; speaker-data provenance should still be reviewed before commercial redistribution.",
+            ),
         ]
-        .into_iter()
-        .map(|(id, title, purpose, size, license, _representative, installed_path, rights_note)| {
-            let installed = installed_path.is_file();
-            let source_url = if id == "separator-four-stem" {
-                format!("https://huggingface.co/{}/tree/{}", VOCALS.repository, VOCALS.revision)
-            } else if id == "separator-android" {
-                artifact_url(&VOCALS)
-            } else {
-                let artifact = match id {
-                    "whisper-tiny" => &WHISPER_TINY,
-                    "kokoro-model" => &KOKORO_MODEL,
-                    "kokoro-voice-af-heart" => &KOKORO_VOICE,
-                    _ => &VOCALS,
-                };
-                artifact_url(artifact)
-            };
-            let sha256 = if id == "separator-four-stem" {
-                format!("vocals {} · other {} · bass {} · drums {}", VOCALS.sha256, OTHER.sha256, BASS.sha256, DRUMS.sha256)
-            } else {
-                match id {
-                    "separator-android" => VOCALS.sha256.to_owned(),
-                    "whisper-tiny" => WHISPER_TINY.sha256.to_owned(),
-                    "kokoro-model" => KOKORO_MODEL.sha256.to_owned(),
-                    "kokoro-voice-af-heart" => KOKORO_VOICE.sha256.to_owned(),
-                    _ => String::new(),
-                }
-            };
-            ManagedModelInfo {
-                id: id.to_owned(),
-                title: title.to_owned(),
-                purpose: purpose.to_owned(),
-                approximate_size: size.to_owned(),
-                license: license.to_owned(),
-                source_url,
-                sha256,
-                installed,
-                installed_path: installed.then(|| installed_path.to_string_lossy().into_owned()),
-                rights_note: rights_note.to_owned(),
-            }
-        })
-        .collect()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn managed_info(
+        &self,
+        id: &str,
+        title: &str,
+        purpose: &str,
+        approximate_size: &str,
+        license: &str,
+        artifact: &Artifact,
+        rights_note: &str,
+    ) -> ManagedModelInfo {
+        let installed_path = self.root.join(artifact.filename);
+        let installed = installed_path.is_file();
+        let installed_text = installed.then(|| installed_path.to_string_lossy().into_owned());
+        ManagedModelInfo {
+            id: id.to_owned(),
+            title: title.to_owned(),
+            purpose: purpose.to_owned(),
+            approximate_size: approximate_size.to_owned(),
+            license: license.to_owned(),
+            source_url: artifact_url(artifact),
+            sha256: artifact.sha256.to_owned(),
+            installed,
+            installed_path: installed_text,
+            rights_note: rights_note.to_owned(),
+        }
     }
 
     /// Returns a locally installed, pinned Kokoro artifact as raw bytes for the WebView's
@@ -303,46 +253,12 @@ impl ModelManager {
 
     pub async fn download(&self, id: &str) -> Result<PathBuf> {
         match id {
-            "separator-android" => {
-                let vocals = self.download_artifact(&VOCALS).await?;
-                let manifest_path = self.root.join("separator-android.cvmodel.json");
-                let manifest = SeparatorModelManifest {
-                    format: MANIFEST_FORMAT.to_owned(),
-                    mode: "two-stem".to_owned(),
-                    models: vec![entry_for(&VOCALS, "vocals", 6_144)],
-                };
-                validate_manifest_models(&manifest, &self.root, true)?;
-                write_manifest(&manifest_path, &manifest)?;
-                let _ = vocals;
-                Ok(manifest_path)
-            }
-            "separator-four-stem" => {
-                let mut paths = Vec::with_capacity(4);
-                for artifact in [&VOCALS, &OTHER, &BASS, &DRUMS] {
-                    paths.push(self.download_artifact(artifact).await?);
-                }
-                let manifest_path = self.root.join("separator-four-stem.cvmodel.json");
-                let manifest = SeparatorModelManifest {
-                    format: MANIFEST_FORMAT.to_owned(),
-                    mode: "four-stem".to_owned(),
-                    models: vec![
-                        entry_for(&VOCALS, "vocals", 6_144),
-                        entry_for(&OTHER, "other", 8_192),
-                        entry_for(&BASS, "bass", 16_384),
-                        entry_for(&DRUMS, "drums", 4_096),
-                    ],
-                };
-                validate_manifest_models(&manifest, &self.root, true)?;
-                write_manifest(&manifest_path, &manifest)?;
-                let _ = paths;
-                Ok(manifest_path)
-            }
             "whisper-tiny" => self.download_artifact(&WHISPER_TINY).await,
             "kokoro-model" => self.download_artifact(&KOKORO_MODEL).await,
             "kokoro-voice-af-heart" => self.download_artifact(&KOKORO_VOICE).await,
-            _ => {
-                anyhow::bail!("unknown model id; only built-in pinned artifacts can be downloaded")
-            }
+            other => anyhow::bail!(
+                "unknown managed model id {other}; cleaned separator weights must be installed through the Spleeter loader and everything else through BYOM"
+            ),
         }
     }
 
@@ -455,6 +371,11 @@ impl ModelManager {
             .and_then(|value| value.to_str())
             .is_some_and(|name| name.to_ascii_lowercase().ends_with(".cvmodel.json"));
         if is_manifest {
+            // Spleeter descriptors carry per-file hashes and are verified by
+            // [`super::model_loader`]; only MDX-Net target sets have the MDX manifest contract.
+            if manifest_format_of(&canonical).as_deref() != Some(MANIFEST_FORMAT) {
+                return Ok(());
+            }
             let manifest = read_manifest(&canonical)?;
             validate_manifest_models(&manifest, canonical.parent().unwrap_or(&self.root), true)?;
             return Ok(());
@@ -618,8 +539,11 @@ impl ModelManager {
             .first()
             .map(|(_, _, signature)| signature.frames)
             .unwrap_or(MDX_FRAMES);
+        let shared_dimensions = sources.iter().all(|(_, _, signature)| {
+            signature.frames == frames && signature.dim_f == MDX_DIM_F
+        });
         anyhow::ensure!(
-            sources.iter().all(|(_, _, signature)| signature.frames == frames && signature.dim_f == MDX_DIM_F),
+            shared_dimensions,
             "all custom MDX-Net models must share float32 [1, 4, 2048, T] tensor dimensions"
         );
         let mut hashes = sources
@@ -688,6 +612,19 @@ impl ModelManager {
         write_manifest(&manifest_path, &manifest)?;
         Ok(manifest_path)
     }
+}
+
+/// Reads just the `format` field so both manifest families can share the `.cvmodel.json` suffix.
+pub(crate) fn manifest_format_of(path: &Path) -> Option<String> {
+    let bytes = fs::read(path).ok()?;
+    if bytes.len() > 64 * 1024 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    value
+        .get("format")
+        .and_then(|format| format.as_str())
+        .map(|format| format.to_owned())
 }
 
 pub(crate) fn read_manifest(path: &Path) -> Result<SeparatorModelManifest> {
@@ -820,19 +757,6 @@ pub(crate) fn validate_manifest_models(
     Ok(resolved)
 }
 
-fn entry_for(artifact: &Artifact, stem: &str, n_fft: usize) -> SeparatorModelEntry {
-    SeparatorModelEntry {
-        stem: stem.to_owned(),
-        file: artifact.filename.to_owned(),
-        sha256: Some(artifact.sha256.to_owned()),
-        n_fft,
-        dim_f: MDX_DIM_F,
-        frames: MDX_FRAMES,
-        hop_length: MDX_HOP_LENGTH,
-        compensation: DEFAULT_COMPENSATION,
-    }
-}
-
 fn write_manifest(path: &Path, manifest: &SeparatorModelManifest) -> Result<()> {
     let serialized = serde_json::to_vec_pretty(manifest)?;
     let temporary = path.with_extension(format!("json.{}.tmp", std::process::id()));
@@ -864,7 +788,6 @@ fn trusted_huggingface_host(host: &str) -> bool {
 
 fn validate_artifact(artifact: &Artifact, path: &Path) -> Result<()> {
     match artifact.validator {
-        ArtifactKind::Mdx { n_fft: _, stem: _ } => validate_mdx_model(path, MDX_DIM_F, MDX_FRAMES),
         ArtifactKind::WhisperTiny => {
             let size = fs::metadata(path)?.len();
             anyhow::ensure!(

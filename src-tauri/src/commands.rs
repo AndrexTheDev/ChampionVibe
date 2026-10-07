@@ -29,6 +29,7 @@ pub struct AppState {
     pub mix_engine: mix_engine::MixEngine,
     pub import_manager: Arc<import::ImportManager>,
     pub(crate) model_manager: audio::model_manager::ModelManager,
+    pub(crate) model_loader: audio::model_loader::ModelLoader,
     signed_license: RwLock<Option<SignedLicense>>,
     device_binding: RwLock<Option<String>>,
     public_key: Option<[u8; 32]>,
@@ -96,7 +97,9 @@ impl AppState {
         let database = Arc::new(Mutex::new(database));
         let mix_engine =
             mix_engine::MixEngine::new(Arc::clone(&database), audio.clone(), mix_spare_deck);
-        let model_manager = audio::model_manager::ModelManager::new(app_data_dir.join("models"))?;
+        let models_dir = app_data_dir.join("models");
+        let model_manager = audio::model_manager::ModelManager::new(models_dir.clone())?;
+        let model_loader = audio::model_loader::ModelLoader::new(models_dir)?;
         Ok(Self {
             database,
             audio,
@@ -104,6 +107,7 @@ impl AppState {
             mix_engine,
             import_manager: Arc::new(import::ImportManager::new(app_data_dir)),
             model_manager,
+            model_loader,
             signed_license: RwLock::new(signed_license),
             // Resolve lazily on Android through Tauri's native plugin after the
             // WebView is initialized; only the SHA-256 digest is cached.
@@ -896,6 +900,75 @@ pub fn import_custom_separator_models(
         .import_user_separator_models(&paths, &mode)
         .map(|path| path.to_string_lossy().into_owned())
         .map_err(|error| format!("custom MDX-Net import failed: {error:#}"))
+}
+
+#[tauri::command]
+pub fn get_separator_catalog(
+    state: State<'_, AppState>,
+) -> Vec<audio::model_loader::ManagedArtifactInfo> {
+    state.model_loader.catalog()
+}
+
+#[tauri::command]
+pub async fn download_default_separator(
+    state: State<'_, AppState>,
+    model_id: Option<String>,
+) -> Result<String, String> {
+    let id = model_id.unwrap_or_else(|| audio::model_loader::default_separator_id().to_owned());
+    state
+        .model_loader
+        .download_separator(&id)
+        .await
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|error| format!("separator download failed: {error:#}"))
+}
+
+#[tauri::command]
+pub fn get_installed_separator(state: State<'_, AppState>) -> Option<String> {
+    state
+        .model_loader
+        .installed_separator_descriptor()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn list_byom_models(state: State<'_, AppState>) -> Vec<audio::model_loader::ByomModelRecord> {
+    state.model_loader.byom_records()
+}
+
+#[tauri::command]
+pub fn validate_byom_model(
+    state: State<'_, AppState>,
+    path: String,
+    kind: String,
+) -> Result<audio::model_loader::ByomContractReport, String> {
+    state
+        .model_loader
+        .validate_byom_file(&path, &kind)
+        .map_err(|error| format!("BYOM validation failed: {error:#}"))
+}
+
+#[tauri::command]
+pub fn import_byom_model(
+    state: State<'_, AppState>,
+    path: String,
+    kind: String,
+    acknowledged: bool,
+    display_name: Option<String>,
+) -> Result<audio::model_loader::ByomModelRecord, String> {
+    state
+        .model_loader
+        .import_byom(&path, &kind, acknowledged, display_name.as_deref())
+        .map(|(record, _)| record)
+        .map_err(|error| format!("BYOM import failed: {error:#}"))
+}
+
+#[tauri::command]
+pub fn remove_byom_model(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    state
+        .model_loader
+        .remove_byom(&id)
+        .map_err(|error| format!("BYOM removal failed: {error:#}"))
 }
 
 #[tauri::command]

@@ -44,8 +44,8 @@ test('covers every static HTML text node and translatable attribute in all local
 test('all literal runtime translation and toast keys exist in every dictionary', () => {
   const source = readFileSync(new URL('./main.js', import.meta.url), 'utf8');
   const keys = new Set();
-  for (const [, key] of source.matchAll(/\bt\(\s*(['"])(.*?)\1/gu)) if (key.length > 1) keys.add(key);
-  for (const [, key] of source.matchAll(/\btoast\(\s*(['"])(.*?)\1/gu)) if (key.length > 1) keys.add(key);
+  for (const [, , key] of source.matchAll(/\bt\(\s*(['"])(.*?)\1/gu)) if (key.length > 1) keys.add(key);
+  for (const [, , key] of source.matchAll(/\btoast\(\s*(['"])(.*?)\1/gu)) if (key.length > 1) keys.add(key);
   for (const locale of SUPPORTED_LOCALES) {
     const missing = [...keys].filter((key) => !Object.hasOwn(dictionaries[locale], key));
     assert.deepEqual(missing, [], `${locale} runtime translation coverage`);

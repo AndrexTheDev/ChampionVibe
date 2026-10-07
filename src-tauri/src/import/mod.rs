@@ -2,6 +2,7 @@ mod analysis;
 mod mdx;
 mod media;
 pub(crate) mod separator;
+pub(crate) mod spleeter;
 mod whisper;
 
 use crate::{commands::AppState, database, media_source};
@@ -126,8 +127,18 @@ pub fn start_job(
     state: &AppState,
     request: StartImportRequest,
 ) -> Result<database::ImportJobSnapshot, String> {
-    let separation_model = canonical_separator_path(&request.separation_model_path)
-        .map_err(|error| format!("{error:#}"))?;
+    let requested_separator = request.separation_model_path.trim();
+    let separation_model = if requested_separator.is_empty() {
+        state
+            .model_loader
+            .installed_separator_descriptor()
+            .map(|path| path.to_string_lossy().into_owned())
+            .ok_or_else(|| {
+                "no cleared separator is installed yet: download the pinned Spleeter 2-stem default in the model library or bring a local .onnx model".to_owned()
+            })?
+    } else {
+        canonical_separator_path(requested_separator).map_err(|error| format!("{error:#}"))?
+    };
     if is_mdx_manifest_path(Path::new(&separation_model)) {
         state
             .model_manager
@@ -1206,11 +1217,18 @@ fn process_import_item_inner(
     })?;
     check_cancel(state, job_id, cancellation)?;
 
-    let stems = ["acapella", "instrumental", "bass", "drums"]
-        .into_iter()
+    // Two-stem Spleeter profiles yield vocals + accompaniment only; `stem_paths[0]` is always the
+    // vocals stem, so Whisper keeps transcribing acapella regardless of the separator profile.
+    let stem_names: &[&str] = if stem_paths.len() == 2 {
+        &["acapella", "instrumental"]
+    } else {
+        &["acapella", "instrumental", "bass", "drums"]
+    };
+    let stems = stem_names
+        .iter()
         .zip(stem_paths.iter())
         .map(|(kind, path)| database::StemPath {
-            kind: kind.to_owned(),
+            kind: (*kind).to_owned(),
             file_path: path.to_string_lossy().into_owned(),
         })
         .collect();

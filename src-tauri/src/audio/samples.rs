@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::{
     collections::HashMap,
     fs,
+    io::Read,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -13,6 +14,61 @@ const MAX_SAMPLE_COUNT: usize = 64;
 const MAX_SAMPLE_SECONDS: usize = 30;
 const MAX_SAMPLE_RATE: u32 = 192_000;
 const MAX_BANK_BYTES: usize = 128 * 1024 * 1024;
+const USER_SAMPLE_LICENSE: &str = "User-provided · verify your own rights";
+const USER_SAMPLE_GROUP: &str = "user";
+/// Licence badge for the bundled sampleboard. The drops are original synthesis released by
+/// ChampionVibe into the public domain under CC0 1.0, so no third-party master, composition,
+/// performance, or vocal right is involved.
+const BUNDLED_DROP_LICENSE: &str = "CC0-1.0 · ChampionVibe original synthesis";
+const BUNDLED_DROP_GROUP: &str = "drop";
+/// Bundled Patois/reggae drop sampleboard.
+///
+/// Rebuild and verify with `python3 scripts/generate-cc0-reggae-drops.py [--check]`; the committed
+/// WAVs are byte-identical to that generator's output and individually hashed in
+/// `assets/samples/README.md`. The two `vocal-*` drops are formant-synthesised shouts, not
+/// recordings of a singer -- the UI states this so nobody mistakes them for an artist sample.
+const BUNDLED_DROPS: &[(&str, &[u8])] = &[
+    (
+        "airhorn-classic",
+        include_bytes!("../../assets/samples/airhorn-classic.wav"),
+    ),
+    (
+        "siren-ragga",
+        include_bytes!("../../assets/samples/siren-ragga.wav"),
+    ),
+    (
+        "siren-dub-sweep",
+        include_bytes!("../../assets/samples/siren-dub-sweep.wav"),
+    ),
+    (
+        "drum-one-drop",
+        include_bytes!("../../assets/samples/drum-one-drop.wav"),
+    ),
+    (
+        "drum-steppers",
+        include_bytes!("../../assets/samples/drum-steppers.wav"),
+    ),
+    (
+        "skank-chord",
+        include_bytes!("../../assets/samples/skank-chord.wav"),
+    ),
+    (
+        "bass-riddim",
+        include_bytes!("../../assets/samples/bass-riddim.wav"),
+    ),
+    (
+        "fx-tape-rewind",
+        include_bytes!("../../assets/samples/fx-tape-rewind.wav"),
+    ),
+    (
+        "vocal-hey",
+        include_bytes!("../../assets/samples/vocal-hey.wav"),
+    ),
+    (
+        "vocal-pull-up",
+        include_bytes!("../../assets/samples/vocal-pull-up.wav"),
+    ),
+];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +77,11 @@ pub struct SampleInfo {
     pub name: String,
     pub builtin: bool,
     pub duration_ms: u64,
+    /// Provenance string shown in the sample deck (CC0 for bundled drops, user responsibility for
+    /// imported WAVs).
+    pub license: String,
+    /// `drop` for the bundled reggae/Patois sampleboard, `user` for imported folders.
+    pub group: String,
 }
 
 #[derive(Clone)]
@@ -30,6 +91,8 @@ pub struct SampleClip {
     pub builtin: bool,
     pub(super) tts_aux: bool,
     pub sample_rate: u32,
+    pub license: String,
+    pub group: String,
     pub frames: Arc<[StereoFrame]>,
 }
 
@@ -40,6 +103,8 @@ impl SampleClip {
             name: self.name.clone(),
             builtin: self.builtin,
             duration_ms: (self.frames.len() as u64 * 1_000) / u64::from(self.sample_rate.max(1)),
+            license: self.license.clone(),
+            group: self.group.clone(),
         }
     }
 }
@@ -53,7 +118,8 @@ pub struct SampleBank {
 
 impl SampleBank {
     pub fn builtins() -> Self {
-        let clips = vec![synth_siren(), synth_airhorn(), synth_vinyl_rewind()];
+        let mut clips = vec![synth_siren(), synth_airhorn(), synth_vinyl_rewind()];
+        clips.extend(bundled_drops());
         let bytes = clips
             .iter()
             .map(|clip| clip.frames.len() * std::mem::size_of::<StereoFrame>())
@@ -211,6 +277,8 @@ impl SampleBank {
             builtin: false,
             tts_aux,
             sample_rate,
+            license: USER_SAMPLE_LICENSE.to_owned(),
+            group: USER_SAMPLE_GROUP.to_owned(),
             frames: Arc::from(frames.into_boxed_slice()),
         });
         self.index.insert(id, self.clips.len() - 1);
@@ -222,6 +290,19 @@ impl SampleBank {
 fn read_wav(path: &Path) -> Result<(u32, Vec<StereoFrame>), String> {
     let reader = WavReader::open(path)
         .map_err(|error| format!("cannot read WAV sample {}: {error}", path.display()))?;
+    read_wav_reader(reader, &path.display().to_string())
+}
+
+fn read_wav_from_bytes(bytes: &[u8], label: &str) -> Result<(u32, Vec<StereoFrame>), String> {
+    let reader = WavReader::new(std::io::Cursor::new(bytes))
+        .map_err(|error| format!("cannot read bundled WAV sample {label}: {error}"))?;
+    read_wav_reader(reader, label)
+}
+
+fn read_wav_reader<R: Read + std::io::Seek>(
+    reader: WavReader<R>,
+    label: &str,
+) -> Result<(u32, Vec<StereoFrame>), String> {
     let spec = reader.spec();
     if spec.channels == 0
         || spec.channels > 2
@@ -229,23 +310,18 @@ fn read_wav(path: &Path) -> Result<(u32, Vec<StereoFrame>), String> {
         || spec.sample_rate > MAX_SAMPLE_RATE
     {
         return Err(format!(
-            "sample {} must be mono or stereo PCM with a sample rate up to {} Hz",
-            path.display(),
+            "sample {label} must be mono or stereo PCM with a sample rate up to {} Hz",
             MAX_SAMPLE_RATE
         ));
     }
     if spec.sample_format == SampleFormat::Int && !(8..=32).contains(&spec.bits_per_sample) {
         return Err(format!(
-            "sample {} uses an unsupported {}-bit PCM format",
-            path.display(),
+            "sample {label} uses an unsupported {}-bit PCM format",
             spec.bits_per_sample
         ));
     }
     if spec.sample_format == SampleFormat::Float && spec.bits_per_sample != 32 {
-        return Err(format!(
-            "sample {} must use 32-bit float PCM",
-            path.display()
-        ));
+        return Err(format!("sample {label} must use 32-bit float PCM"));
     }
 
     let max_input_samples = (u64::from(spec.sample_rate)
@@ -260,9 +336,7 @@ fn read_wav(path: &Path) -> Result<(u32, Vec<StereoFrame>), String> {
                 .map(|sample| {
                     sample
                         .map(|sample| (sample as f32 / divisor).clamp(-1.0, 1.0))
-                        .map_err(|error| {
-                            format!("corrupt PCM sample in {}: {error}", path.display())
-                        })
+                        .map_err(|error| format!("corrupt PCM sample in {label}: {error}"))
                 })
                 .collect::<Result<Vec<_>, _>>()?
         }
@@ -278,7 +352,7 @@ fn read_wav(path: &Path) -> Result<(u32, Vec<StereoFrame>), String> {
                             0.0
                         }
                     })
-                    .map_err(|error| format!("corrupt float sample in {}: {error}", path.display()))
+                    .map_err(|error| format!("corrupt float sample in {label}: {error}"))
             })
             .collect::<Result<Vec<_>, _>>()?,
     };
@@ -290,10 +364,7 @@ fn read_wav(path: &Path) -> Result<(u32, Vec<StereoFrame>), String> {
         frames.push(StereoFrame { left, right });
     }
     if frames.is_empty() {
-        return Err(format!(
-            "sample {} contains no complete frames",
-            path.display()
-        ));
+        return Err(format!("sample {label} contains no complete frames"));
     }
     Ok((spec.sample_rate, frames))
 }
@@ -355,8 +426,35 @@ fn make_builtin(name: &str, frames: Vec<StereoFrame>) -> SampleClip {
         builtin: true,
         tts_aux: false,
         sample_rate: BUILTIN_RATE,
+        license: BUNDLED_DROP_LICENSE.to_owned(),
+        group: BUNDLED_DROP_GROUP.to_owned(),
         frames: Arc::from(frames.into_boxed_slice()),
     }
+}
+
+/// Decodes the embedded CC0 drop sampleboard. Failing to decode a bundled WAV is a build-time
+/// mistake, so the clip is skipped instead of taking the whole sample deck down.
+fn bundled_drops() -> Vec<SampleClip> {
+    let mut clips = Vec::with_capacity(BUNDLED_DROPS.len());
+    for (name, bytes) in BUNDLED_DROPS {
+        let Ok((sample_rate, frames)) = read_wav_from_bytes(bytes, name) else {
+            continue;
+        };
+        if frames.is_empty() {
+            continue;
+        }
+        clips.push(SampleClip {
+            id: stable_id(&format!("drop:{name}")),
+            name: (*name).to_owned(),
+            builtin: true,
+            tts_aux: false,
+            sample_rate,
+            license: BUNDLED_DROP_LICENSE.to_owned(),
+            group: BUNDLED_DROP_GROUP.to_owned(),
+            frames: Arc::from(frames.into_boxed_slice()),
+        });
+    }
+    clips
 }
 
 fn synth_siren() -> SampleClip {
@@ -447,7 +545,11 @@ mod tests {
     fn builtins_are_predecoded_and_unique() {
         let bank = SampleBank::builtins();
         let infos = bank.infos();
-        assert_eq!(infos.len(), 3);
+        assert_eq!(infos.len(), 3 + super::BUNDLED_DROPS.len());
+        assert_eq!(
+            infos.iter().filter(|sample| sample.group == "drop").count(),
+            3 + super::BUNDLED_DROPS.len()
+        );
         assert!(bank.id_by_name("siren").is_some());
         assert!(bank.id_by_name("airhorn").is_some());
         assert!(bank.id_by_name("vinyl-rewind").is_some());
@@ -457,10 +559,62 @@ mod tests {
                 .map(|sample| sample.id)
                 .collect::<std::collections::HashSet<_>>()
                 .len(),
-            3
+            infos.len()
         );
         assert!(infos.iter().all(|sample| bank.get(sample.id).is_some()));
         assert!(bank.clips.iter().all(|clip| !clip.frames.is_empty()));
+    }
+
+    #[test]
+    fn bundled_drops_are_cc0_and_labelled_as_original_synthesis() {
+        let bank = SampleBank::builtins();
+        for (name, _) in super::BUNDLED_DROPS {
+            let id = bank
+                .id_by_name(name)
+                .unwrap_or_else(|| panic!("bundled drop {name} must be loaded"));
+            let clip = bank.get(id).expect("bundled drop resolves");
+            assert_eq!(clip.license, super::BUNDLED_DROP_LICENSE);
+            assert_eq!(clip.group, "drop");
+            assert!(clip.license.contains("CC0-1.0"));
+            assert!(!clip.frames.is_empty());
+        }
+        // The vocal drops must exist and stay advertised as synthesised shouts.
+        assert!(bank.id_by_name("vocal-hey").is_some());
+        assert!(bank.id_by_name("vocal-pull-up").is_some());
+        assert!(bank.id_by_name("airhorn-classic").is_some());
+        assert!(bank.id_by_name("siren-ragga").is_some());
+        assert!(bank.id_by_name("drum-one-drop").is_some());
+        assert!(bank.id_by_name("skank-chord").is_some());
+    }
+
+    #[test]
+    fn imported_wavs_keep_the_user_provenance_badge() {
+        let path = std::env::temp_dir().join(format!(
+            "championvibe-user-sample-{}-{}.wav",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time is after Unix epoch")
+                .as_nanos()
+        ));
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 44_100,
+            bits_per_sample: 16,
+            sample_format: SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(&path, spec).expect("create test sample");
+        for value in [0_i16, 1_000, -1_000, 0] {
+            writer.write_sample(value).expect("write test sample");
+        }
+        writer.finalize().expect("finalize test sample");
+        let bank = SampleBank::builtins()
+            .with_wav(&path, Some("my-drop"))
+            .expect("load user sample");
+        let clip = bank.clips.last().expect("user sample exists");
+        assert_eq!(clip.group, "user");
+        assert_eq!(clip.license, super::USER_SAMPLE_LICENSE);
+        std::fs::remove_file(path).expect("remove test sample");
     }
 
     #[test]

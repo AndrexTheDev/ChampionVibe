@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import './styles.css';
 import { decodeWaveformPacket } from './waveform.js';
 import { getAudioFormat } from './audio-format.js';
@@ -2165,7 +2166,7 @@ async function pickAudioFiles(directory = false) {
 async function pickModel(kind) {
   if (!isTauri) return toast('Modellauswahl ist nur in der installierten Tauri-App verfügbar.', true);
   const specs = {
-    separator: { title: 'HT-Demucs-ONNX oder MDX-Modellmanifest auswählen', extension: 'onnx', extensions: ['onnx', 'json'], input: '#separator-model-path', stateKey: 'separationModelPath', storageKey: 'championvibe.separationModelPath' },
+    separator: { title: 'Lokale Modelldatei (.onnx) auswählen', extension: 'onnx', extensions: ['onnx', 'json'], input: '#separator-model-path', stateKey: 'separationModelPath', storageKey: 'championvibe.separationModelPath' },
     whisper: { title: 'Lokales Whisper-Tiny-Modell auswählen', extension: 'bin', input: '#whisper-model-path', stateKey: 'whisperModelPath', storageKey: 'championvibe.whisperModelPath' },
     'piper-model': { title: 'Lokales Piper-ONNX-Modell auswählen', extension: 'onnx', input: '#piper-model-path', stateKey: 'piperModelPath', storageKey: 'championvibe.piperModelPath' },
     'piper-config': { title: 'Lokale Piper-Voice-JSON auswählen', extension: 'json', input: '#piper-config-path', stateKey: 'piperConfigPath', storageKey: 'championvibe.piperConfigPath' },
@@ -2200,10 +2201,7 @@ function renderManagedModelCatalog() {
   const container = $('#managed-model-catalog');
   if (!container) return;
   container.replaceChildren();
-  const items = state.modelCatalog.filter((item) => {
-    if (item.id === 'separator-android') return isAndroid;
-    return true;
-  });
+  const items = state.modelCatalog.filter(() => true);
   if (!items.length) {
     const empty = document.createElement('span');
     empty.className = 'model-library-empty';
@@ -2275,11 +2273,7 @@ async function downloadManagedModel(modelId) {
   renderManagedModelCatalog();
   try {
     const path = await invoke('download_managed_model', { modelId });
-    if (modelId === 'separator-android' || modelId === 'separator-four-stem') {
-      state.separationModelPath = path;
-      $('#separator-model-path').value = path;
-      localStorage.setItem('championvibe.separationModelPath', path);
-    } else if (modelId === 'whisper-tiny') {
+    if (modelId === 'whisper-tiny') {
       state.whisperModelPath = path;
       $('#whisper-model-path').value = path;
       localStorage.setItem('championvibe.whisperModelPath', path);
@@ -2335,6 +2329,208 @@ async function importCustomMdxModels() {
     state.customModelBusy = false;
     button.disabled = false;
     button.textContent = t('Lokale ONNX-Datei(en) prüfen & importieren');
+  }
+}
+
+const BYOM_KIND_LABELS = { 'spleeter-2stems': 'Spleeter 2-Stem', htdemucs: 'HT-Demucs', 'mdx-net': 'MDX-Net' };
+
+function byomKindLabel(kind) {
+  return BYOM_KIND_LABELS[kind] || kind;
+}
+
+function syncByomFormState() {
+  const kind = $('#byom-model-kind')?.value || 'htdemucs';
+  const acknowledgement = $('#byom-rights-ack');
+  const button = $('#byom-import');
+  if (!acknowledgement || !button) return;
+  const required = kind !== 'spleeter-2stems';
+  button.disabled = required && !acknowledgement.checked;
+  button.title = button.disabled
+    ? t('Bitte zuerst bestätigen, dass du die Rechte an diesen Gewichten geprüft hast.')
+    : '';
+}
+
+function renderByomModels(records) {
+  const container = $('#byom-model-list');
+  if (!container) return;
+  container.replaceChildren();
+  if (!records.length) {
+    const empty = document.createElement('span');
+    empty.className = 'model-library-empty';
+    empty.textContent = t('Noch keine BYOM-Modelle eingetragen.');
+    container.append(empty);
+    return;
+  }
+  for (const record of records) {
+    const card = document.createElement('article');
+    card.className = 'managed-model-card';
+    const head = document.createElement('div');
+    head.className = 'managed-model-card-head';
+    const copy = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = `${record.displayName} · ${byomKindLabel(record.kind)}`;
+    const location = document.createElement('span');
+    location.className = 'managed-model-purpose';
+    location.textContent = `${t('Lokal')}: ${record.path}`;
+    copy.append(title, location);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.dataset.byomId = record.id;
+    remove.textContent = t('Entfernen');
+    head.append(copy, remove);
+    const meta = document.createElement('span');
+    meta.className = 'managed-model-meta';
+    meta.textContent = `${(record.sizeBytes / (1024 * 1024)).toFixed(2)} MB · ${t('Datei bleibt lokal, kein Upload')}`;
+    const hash = document.createElement('code');
+    hash.className = 'managed-model-hash';
+    hash.textContent = `SHA-256: ${record.sha256}`;
+    const contract = document.createElement('p');
+    contract.className = 'managed-model-rights';
+    contract.textContent = record.rightsWarning ? `${record.contract} · ${record.rightsWarning}` : record.contract;
+    card.append(head, meta, hash, contract);
+    container.append(card);
+  }
+}
+
+async function refreshByomModels() {
+  if (!isTauri) return;
+  try {
+    renderByomModels(await invoke('list_byom_models'));
+  } catch (error) {
+    toast(t('BYOM-Liste konnte nicht geladen werden: {error}', { error: String(error) }), true);
+  }
+}
+
+async function refreshSeparatorDefault() {
+  const status = $('#separator-default-status');
+  if (!status || !isTauri) return;
+  try {
+    const catalog = await invoke('get_separator_catalog');
+    const installed = await invoke('get_installed_separator');
+    const entry = catalog.find((item) => item.id === 'spleeter-2stems-onnx') || catalog[0];
+    if (!entry) {
+      status.textContent = t('Kein Standard-Separator verfügbar.');
+      return;
+    }
+    const pin = entry.sha256Verified ? t('SHA-256 verifiziert') : t('SHA-256 noch nicht verifiziert');
+    const size = entry.approximateSize ? ` · ${entry.approximateSize}` : '';
+    status.textContent = installed
+      ? `${entry.title}${size} · ${pin} · ${t('Installiert')}`
+      : `${entry.title}${size} · ${entry.licenseSummary} · ${pin}`;
+  } catch (error) {
+    status.textContent = t('Separator-Status konnte nicht geladen werden: {error}', { error: String(error) });
+  }
+}
+
+async function downloadDefaultSeparator() {
+  if (!isTauri) return toast('Der Standard-Separator ist nur in der installierten Tauri-App verfügbar.', true);
+  const button = $('#download-default-separator');
+  if (button) {
+    button.disabled = true;
+    button.textContent = t('Download läuft …');
+  }
+  try {
+    const path = await invoke('download_default_separator', {});
+    state.separationModelPath = path;
+    $('#separator-model-path').value = path;
+    localStorage.setItem('championvibe.separationModelPath', path);
+    toast(t('Spleeter-2-Stem-Standardmodell heruntergeladen, SHA-256 geprüft und installiert.'));
+  } catch (error) {
+    toast(t('Standard-Separator konnte nicht installiert werden: {error}', { error: String(error) }), true);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = t('Spleeter-2-Stem-Modell herunterladen & prüfen');
+    }
+    await refreshSeparatorDefault();
+  }
+}
+
+async function importByomPath(path) {
+  if (!path || !isTauri) return;
+  const kind = $('#byom-model-kind')?.value || 'htdemucs';
+  const acknowledged = Boolean($('#byom-rights-ack')?.checked);
+  try {
+    const report = await invoke('validate_byom_model', { path, kind });
+    const record = await invoke('import_byom_model', { path, kind, acknowledged, displayName: null });
+    if (kind !== 'spleeter-2stems') {
+      state.separationModelPath = record.path;
+      $('#separator-model-path').value = record.path;
+      localStorage.setItem('championvibe.separationModelPath', record.path);
+    }
+    toast(t('BYOM-Modell lokal geprüft und eingetragen: {contract}', { contract: report.contract }));
+    await refreshByomModels();
+  } catch (error) {
+    toast(t('BYOM-Modell wurde nicht übernommen: {error}', { error: String(error) }), true);
+  }
+}
+
+async function pickByomModel() {
+  if (!isTauri) return toast('BYOM ist nur in der installierten Tauri-App verfügbar.', true);
+  try {
+    const selection = await open({
+      multiple: false,
+      title: t('Lokale Modelldatei (.onnx) auswählen'),
+      filters: [{ name: t('Lokale Modell-Datei'), extensions: ['onnx', 'json'] }],
+    });
+    const path = Array.isArray(selection) ? selection[0] : selection;
+    await importByomPath(path);
+  } catch (error) {
+    toast(t('Modellauswahl fehlgeschlagen: {error}', { error: String(error) }), true);
+  }
+}
+
+function attachByomDropzone() {
+  const zone = $('#byom-dropzone');
+  if (!zone) return;
+  zone.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    zone.classList.add('byom-dropzone-active');
+  });
+  zone.addEventListener('dragleave', () => zone.classList.remove('byom-dropzone-active'));
+  zone.addEventListener('drop', async (event) => {
+    event.preventDefault();
+    zone.classList.remove('byom-dropzone-active');
+    const file = event.dataTransfer?.files?.[0];
+    const dropped = file?.path || event.dataTransfer?.getData('text/plain') || '';
+    await importByomPath(dropped);
+  });
+  zone.addEventListener('click', pickByomModel);
+  zone.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      pickByomModel();
+    }
+  });
+  if (!isTauri) return;
+  getCurrentWebview()
+    .onDragDropEvent(async (event) => {
+      const payload = event.payload;
+      if (payload?.type === 'enter') {
+        zone.classList.add('byom-dropzone-active');
+        return;
+      }
+      if (payload?.type === 'leave') {
+        zone.classList.remove('byom-dropzone-active');
+        return;
+      }
+      if (payload?.type !== 'drop') return;
+      zone.classList.remove('byom-dropzone-active');
+      const paths = payload.paths || [];
+      const candidate = paths.find((value) => /\.(onnx|json)$/iu.test(value)) || paths[0];
+      await importByomPath(candidate);
+    })
+    .catch((error) => console.warn('BYOM drag-drop listener unavailable', error));
+}
+
+async function removeByomModel(id) {
+  if (!isTauri || !id) return;
+  try {
+    await invoke('remove_byom_model', { id });
+    toast(t('BYOM-Eintrag entfernt; die Datei selbst wurde nicht verändert.'));
+    await refreshByomModels();
+  } catch (error) {
+    toast(t('BYOM-Eintrag konnte nicht entfernt werden: {error}', { error: String(error) }), true);
   }
 }
 
@@ -2665,6 +2861,14 @@ $('#pick-audio-folders').addEventListener('click', () => pickAudioFiles(true));
 $('#pick-separator-model').addEventListener('click', () => pickModel('separator'));
 $('#pick-whisper-model').addEventListener('click', () => pickModel('whisper'));
 $('#refresh-model-catalog').addEventListener('click', refreshManagedModelCatalog);
+$('#download-default-separator')?.addEventListener('click', downloadDefaultSeparator);
+$('#byom-import')?.addEventListener('click', pickByomModel);
+$('#byom-model-kind')?.addEventListener('change', syncByomFormState);
+$('#byom-rights-ack')?.addEventListener('change', syncByomFormState);
+$('#byom-model-list')?.addEventListener('click', (event) => {
+  const id = event.target?.dataset?.byomId;
+  if (id) removeByomModel(id);
+});
 $('#managed-model-catalog').addEventListener('click', (event) => {
   const button = event.target.closest('[data-model-id]');
   if (button && !button.disabled) void downloadManagedModel(button.dataset.modelId);
@@ -2781,6 +2985,10 @@ if (!isTauri) {
   void applyPitchLock(state.pitchLockEnabled, true);
   refreshImportJobs();
   refreshManagedModelCatalog();
+  refreshSeparatorDefault();
+  refreshByomModels();
+  syncByomFormState();
+  attachByomDropzone();
   refreshSampleCatalog();
   refreshTtsStatus();
   refreshRiddimFamilies();
