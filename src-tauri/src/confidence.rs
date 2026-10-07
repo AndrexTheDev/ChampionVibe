@@ -14,12 +14,13 @@ pub const TRUSTED_CONFIDENCE: f64 = 0.7;
 /// `>= TRUSTED_CONFIDENCE` comparison.
 pub const UNSURE_CONFIDENCE_CEILING: f64 = 0.69;
 
-/// Clamps arbitrary input onto the stored `[0, 1]` scale; non-finite input becomes `0.0`.
+/// Clamps arbitrary input onto the stored `[0, 1]` scale. The infinities clamp to the ends of the
+/// scale and `NaN` — an undefined reading — becomes `0.0`.
 pub fn normalise(confidence: f64) -> f64 {
-    if confidence.is_finite() {
-        confidence.clamp(0.0, 1.0)
-    } else {
+    if confidence.is_nan() {
         0.0
+    } else {
+        confidence.clamp(0.0, 1.0)
     }
 }
 

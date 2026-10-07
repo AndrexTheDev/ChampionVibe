@@ -705,11 +705,15 @@ mod tests {
         assert_eq!(policy.frames(), 512);
         policy.note_observed_frames(1_024);
         assert_eq!(policy.frames(), 1_024);
-        // A device that hands out more than it advertised is clamped to the hard ceiling.
+        // A device that asks for more than it advertised is clamped to the maximum it accepts.
         policy.note_observed_frames(MAX_RECOVERED_BUFFER_FRAMES * 4);
-        assert_eq!(policy.frames(), MAX_RECOVERED_BUFFER_FRAMES);
+        assert_eq!(policy.frames(), 4_096);
         assert_eq!(policy.plan_growth(GLITCHES_BEFORE_GROWTH, 0), None);
         assert!(policy.exhausted());
+        // Without an advertised maximum the hard ceiling is the limit.
+        let mut unbounded = BufferRecoveryPolicy::new(None, None);
+        unbounded.note_observed_frames(MAX_RECOVERED_BUFFER_FRAMES * 4);
+        assert_eq!(unbounded.frames(), MAX_RECOVERED_BUFFER_FRAMES);
     }
 
     #[test]
