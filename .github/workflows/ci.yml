@@ -113,6 +113,26 @@ jobs:
             exit 1
           fi
 
+      # Temporary: surface the compiler diagnostics as check-run annotations. The job log cannot be
+      # read from this environment (its download redirects to a host outside the allowed network),
+      # so the captured compiler output is republished as annotations and removed again once the
+      # workspace compiles.
+      - name: Diagnose the compiler output
+        if: failure()
+        continue-on-error: true
+        run: |
+          if [ ! -s /tmp/rust-check.log ]; then
+            echo "::error title=cv-rust::the compiler log was not captured"
+            exit 0
+          fi
+          grep -E "(error|warning)(\[|:)" /tmp/rust-check.log | sort -u | head -60 | while IFS= read -r line; do
+            printf '::error title=cv-rust::%s\n' "$(printf '%s' "$line" | sed 's/%/%25/g')"
+          done
+          tail -n 6 /tmp/rust-check.log | while IFS= read -r line; do
+            printf '::error title=cv-tail::%s\n' "$(printf '%s' "$line" | sed 's/%/%25/g')"
+          done
+          exit 0
+
       - name: Test the complete Rust workspace
         run: cargo test --workspace --locked
 
