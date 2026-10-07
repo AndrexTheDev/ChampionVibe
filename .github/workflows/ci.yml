@@ -91,33 +91,6 @@ jobs:
           npm ci
           npm run build
 
-      # TEMPORARY diagnostics (remove before merge): raw job logs are not always retrievable in
-      # this environment, so the rustfmt diff and the compiler messages are re-emitted as a single
-      # check annotation each (GitHub caps the number of annotations per job, so all diagnostics
-      # travel in one payload).
-      - name: Diagnose rustfmt drift
-        continue-on-error: true
-        run: |
-          set +e
-          cargo fmt --all -- --check > /tmp/cv-rustfmt.log 2>&1
-          if [ -s /tmp/cv-rustfmt.log ]; then
-            payload=$(head -c 6000 /tmp/cv-rustfmt.log | sed -e 's/%/%25/g' -e 's/\r//g' \
-              | awk '{printf "%s%%0A", $0}')
-            echo "::warning title=cv-fmt::$payload"
-          fi
-
-      - name: Diagnose Rust compiler messages
-        continue-on-error: true
-        run: |
-          set +e
-          cargo check --workspace --all-targets --locked --message-format=short \
-            > /tmp/cv-rust-diagnostics.log 2>&1
-          payload=$(grep -E ': (error|warning)' /tmp/cv-rust-diagnostics.log | head -80 \
-            | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
-          if [ -n "$payload" ]; then
-            echo "::error title=cv-rustc::$payload"
-          fi
-
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
@@ -132,19 +105,6 @@ jobs:
           if grep -q ': warning' /tmp/rust-check.log; then
             echo "::error title=Compiler warnings::keep the workspace warning-free; the warnings are listed above"
             exit 1
-          fi
-
-      # TEMPORARY diagnostics (remove before merge): surface the failing test output as one
-      # annotation, because raw job logs are not always retrievable in this environment.
-      - name: Diagnose Rust test failures
-        continue-on-error: true
-        run: |
-          set +e
-          cargo test --workspace --locked --no-fail-fast > /tmp/cv-rust-tests.log 2>&1
-          if grep -q '^failures:$' /tmp/cv-rust-tests.log; then
-            payload=$(awk '/^failures:$/{found=1} found' /tmp/cv-rust-tests.log | head -c 6000 \
-              | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
-            echo "::error title=cv-tests::$payload"
           fi
 
       - name: Test the complete Rust workspace
@@ -220,22 +180,7 @@ jobs:
 
       - name: Build Windows MSI and NSIS installer
         if: matrix.platform == 'windows'
-        run: |
-          npm run tauri -- build --ci --bundles msi,nsis 2>&1 | Tee-Object -FilePath cv-package.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Diagnose Windows packaging failure
-        if: failure() && matrix.platform == 'windows'
-        run: |
-          if (Test-Path cv-package.log) {
-            $lines = Get-Content cv-package.log |
-              Where-Object { $_ -match '^error(\[E?[0-9]+\])?:' -or $_ -match '^\s+--> ' -or $_ -match '^warning: ' } |
-              Select-Object -First 80
-            if ($lines) {
-              $payload = (($lines -join "`n") -replace '%','%25') -replace "`r?`n", '%0A'
-              Write-Output "::error title=cv-cargo::$payload"
-            }
-          }
+        run: npm run tauri -- build --ci --bundles msi,nsis
 
       - name: Initialize Tauri Android project
         if: matrix.platform == 'android'
@@ -243,21 +188,7 @@ jobs:
 
       - name: Build Android arm64 APK
         if: matrix.platform == 'android'
-        run: |
-          set -o pipefail
-          npm run tauri -- android build --ci --apk --target aarch64 2>&1 | tee cv-package.log
-
-      - name: Diagnose Android packaging failure
-        if: failure() && matrix.platform == 'android'
-        shell: bash
-        run: |
-          [ -f cv-package.log ] || exit 0
-          payload=$(grep -E '^error(\[E?[0-9]+\])?:|^[[:space:]]+--> |^warning: ' cv-package.log | head -80 \
-            | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
-          if [ -n "$payload" ]; then
-            echo "::error title=cv-cargo::$payload"
-          fi
-          exit 0
+        run: npm run tauri -- android build --ci --apk --target aarch64
 
       - name: Collect Windows installers
         if: matrix.platform == 'windows'
