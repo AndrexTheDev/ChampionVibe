@@ -86,17 +86,27 @@ jobs:
           persist-credentials: true
 
       - name: Verify every pinned artifact against its SHA-256
+        id: verify
+        # The report has to be written even when a pin fails, so the job records what the
+        # release actually served before it turns red.
+        continue-on-error: true
         run: |
           mkdir -p reports
           if [[ "${{ inputs.discover_pins }}" == "true" ]]; then
             scripts/verify-model-pins.sh --allow-pending --report reports/model-pin-verification.json
           else
-            scripts/verify-model-pins.sh
+            scripts/verify-model-pins.sh --report reports/model-pin-verification.json
           fi
 
-      - name: Record the discovery report
-        if: ${{ inputs.discover_pins == true }}
+      - name: Record the verification report
+        if: always()
         run: scripts/ci-commit-file.sh reports/model-pin-verification.json "Record SHA-256 model pin verification from CI"
+
+      - name: Fail when a pin did not verify
+        if: steps.verify.outcome == 'failure'
+        run: |
+          echo "A pinned model artifact did not verify. See reports/model-pin-verification.json." >&2
+          exit 1
       - name: Reject separator downloads with unclear rights
         run: |
           python3 - <<'PY'
