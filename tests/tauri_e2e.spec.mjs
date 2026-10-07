@@ -61,6 +61,22 @@ export const EXPECTED_COMMANDS = Object.freeze({
  * field naming (for example `statusMessage` vs `status_message`) fails the driver.
  */
 export function createTauriIpcStub() {
+  // The Playwright test stringifies this factory into the page, so it must not close over a
+  // module-scope helper: the two assertions the stub needs are declared right here.
+  const assert = {
+    ok(value, message) {
+      if (!value) {
+        throw new Error(message ?? 'IPC contract violation');
+      }
+    },
+    equal(actual, expected, message) {
+      if (actual !== expected) {
+        throw new Error(
+          `${message ?? 'IPC contract violation'}: expected ${String(expected)}, received ${String(actual)}`,
+        );
+      }
+    },
+  };
   const localized = (code, de, en, es, fr) => ({ code, de, en, es, fr });
   const calls = [];
   const callbacks = new Map();
