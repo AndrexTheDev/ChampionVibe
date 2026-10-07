@@ -417,13 +417,9 @@ fn estimate_beat_grid(onsets: &[f32], duration_seconds: f64) -> (Option<f64>, f6
     // The grid must span enough beats and both halves of the track must agree on the period before
     // the heuristic is allowed to report a trusted confidence.
     let spans_enough_beats = grid.len() as f64 >= MIN_CORROBORATED_BEATS;
-    let corroborated = spans_enough_beats
-        && tempo_is_corroborated(&novelty, min_lag, max_lag, best_lag);
-    (
-        Some(bpm),
-        heuristic_confidence(margin, corroborated),
-        grid,
-    )
+    let corroborated =
+        spans_enough_beats && tempo_is_corroborated(&novelty, min_lag, max_lag, best_lag);
+    (Some(bpm), heuristic_confidence(margin, corroborated), grid)
 }
 
 fn estimate_key(chroma: &[f64; 12]) -> (Option<String>, f64) {

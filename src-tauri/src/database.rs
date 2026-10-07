@@ -923,7 +923,12 @@ fn load_stored_grid(connection: &Connection, track_id: i64) -> Result<StoredGrid
         .query_row(
             "SELECT bpm, grid_json FROM beat_grids WHERE track_id = ?1",
             [track_id],
-            |row| Ok((row.get::<_, Option<f64>>(0)?, row.get::<_, Option<String>>(1)?)),
+            |row| {
+                Ok((
+                    row.get::<_, Option<f64>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
         )
         .optional()
         .context("could not read the stored beat grid")?;
@@ -991,10 +996,7 @@ pub fn apply_grid_correction(
         Some(value) => {
             let (tonic, major) = crate::camelot::parse_musical_key(value)
                 .ok_or_else(|| anyhow::anyhow!("musical key \"{value}\" is not a valid key"))?;
-            Some(format!(
-                "{tonic} {}",
-                if major { "major" } else { "minor" }
-            ))
+            Some(format!("{tonic} {}", if major { "major" } else { "minor" }))
         }
         None => None,
     };
@@ -1006,23 +1008,24 @@ pub fn apply_grid_correction(
     }
 
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let (title, duration_ms, stored_key, stored_bpm_confidence, stored_key_confidence) = transaction
-        .query_row(
-            "SELECT t.title, t.duration_ms, a.musical_key, t.bpm_confidence, t.key_confidence
+    let (title, duration_ms, stored_key, stored_bpm_confidence, stored_key_confidence) =
+        transaction
+            .query_row(
+                "SELECT t.title, t.duration_ms, a.musical_key, t.bpm_confidence, t.key_confidence
              FROM tracks AS t
              LEFT JOIN audio_analysis AS a ON a.track_id = t.id
              WHERE t.id = ?1",
-            [track_id],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<i64>>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                    row.get::<_, f64>(3)?,
-                    row.get::<_, f64>(4)?,
-                ))
-            },
-        )
+                [track_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<i64>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, f64>(3)?,
+                        row.get::<_, f64>(4)?,
+                    ))
+                },
+            )
             .optional()
             .context("could not load the track to correct")?
             .ok_or_else(|| anyhow::anyhow!("track {track_id} does not exist"))?;
@@ -1887,7 +1890,12 @@ pub fn commit_import_result(
          ON CONFLICT(track_id) DO UPDATE SET
             bpm = CASE WHEN ?4 THEN beat_grids.bpm ELSE excluded.bpm END,
             grid_json = CASE WHEN ?4 THEN beat_grids.grid_json ELSE excluded.grid_json END",
-        params![track_id, result.bpm, result.beat_grid_json, already_verified],
+        params![
+            track_id,
+            result.bpm,
+            result.beat_grid_json,
+            already_verified
+        ],
     )?;
     transaction.execute(
         "INSERT INTO audio_analysis (
@@ -2101,9 +2109,9 @@ mod tests {
         claim_next_import_job, commit_import_result, create_import_job, ensure_recording_columns,
         ensure_track_metadata_columns, finish_import_item_failed, finish_import_job, import_jobs,
         load_mix_track, load_waveform_peak_blob, mix_candidate_ids, open, save_recording_metadata,
-        save_waveform_peak_blob, search_tracks, search_tracks_page, search_tracks_page_with_filters,
-        upsert_track, GridCorrection, ImportResult, RecordingMetadata, TrackInput,
-        TrackSearchFilters, MAX_GRID_SHIFT_MS,
+        save_waveform_peak_blob, search_tracks, search_tracks_page,
+        search_tracks_page_with_filters, upsert_track, GridCorrection, ImportResult,
+        RecordingMetadata, TrackInput, TrackSearchFilters, MAX_GRID_SHIFT_MS,
     };
     use crate::confidence::{TRUSTED_CONFIDENCE, UNSURE_CONFIDENCE_CEILING};
     use std::path::Path;
@@ -2576,13 +2584,8 @@ mod tests {
             2,
         )
         .unwrap();
-        assert_eq!(
-            claim_next_import_job(connection).unwrap(),
-            Some(job_id)
-        );
-        let item = claim_next_import_item(connection, job_id)
-            .unwrap()
-            .unwrap();
+        assert_eq!(claim_next_import_job(connection).unwrap(), Some(job_id));
+        let item = claim_next_import_item(connection, job_id).unwrap().unwrap();
         let result = ImportResult {
             source_path,
             title: "Grid Track".to_owned(),

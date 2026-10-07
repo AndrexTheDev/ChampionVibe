@@ -696,15 +696,38 @@ fn build_stream_for_format(
 ) -> Result<Stream, String> {
     match sample_format {
         SampleFormat::F32 => build_stream::<f32>(
-            device, config, channels, sample_rate, graph, meter, statuses, glitches,
+            device,
+            config,
+            channels,
+            sample_rate,
+            graph,
+            meter,
+            statuses,
+            glitches,
         ),
         SampleFormat::I16 => build_stream::<i16>(
-            device, config, channels, sample_rate, graph, meter, statuses, glitches,
+            device,
+            config,
+            channels,
+            sample_rate,
+            graph,
+            meter,
+            statuses,
+            glitches,
         ),
         SampleFormat::U16 => build_stream::<u16>(
-            device, config, channels, sample_rate, graph, meter, statuses, glitches,
+            device,
+            config,
+            channels,
+            sample_rate,
+            graph,
+            meter,
+            statuses,
+            glitches,
         ),
-        format => Err(format!("unsupported native output sample format: {format:?}")),
+        format => Err(format!(
+            "unsupported native output sample format: {format:?}"
+        )),
     }
 }
 
@@ -732,6 +755,7 @@ where
     let callback_meter = Arc::clone(&meter);
     let error_statuses = statuses.clone();
     let callback_glitches = Arc::clone(&glitches);
+    let error_glitches = Arc::clone(&glitches);
     device
         .build_output_stream::<T, _, _>(
             *config,
@@ -749,26 +773,22 @@ where
                 }
             },
             move |error| {
+                let kind = error.kind();
                 // Android's AAudio backend reports every xrun as `ErrorKind::Xrun`, and a xrun is
                 // recoverable: it must not raise the permanent device-failure flag.
-                let recoverable = matches!(
-                    error.kind(),
-                    ErrorKind::Xrun | ErrorKind::RealtimeDenied
-                );
-                if error.kind() == ErrorKind::Xrun {
-                    callback_glitches.record(GlitchKind::Xrun);
+                let recoverable = matches!(kind, ErrorKind::Xrun | ErrorKind::RealtimeDenied);
+                if matches!(kind, ErrorKind::Xrun) {
+                    error_glitches.record(GlitchKind::Xrun);
                 } else {
-                    callback_glitches.record(GlitchKind::DeviceError);
+                    error_glitches.record(GlitchKind::DeviceError);
                 }
                 callback_meter.device_errors.fetch_add(1, Ordering::Relaxed);
                 if !recoverable {
                     callback_meter.failed.store(1, Ordering::Release);
                 }
+                let detail = format!("native master audio device error ({kind:?}): {error}");
                 if let Ok(mut last_error) = callback_meter.last_error.lock() {
-                    *last_error = Some(format!(
-                        "native master audio device error ({:?}): {error}",
-                        error.kind()
-                    ));
+                    *last_error = Some(detail);
                 }
                 for status in &error_statuses {
                     status.device_errors.fetch_add(1, Ordering::Relaxed);

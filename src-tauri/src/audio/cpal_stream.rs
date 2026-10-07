@@ -160,11 +160,7 @@ impl GlitchSource {
         {
             Self::CoreAudio
         }
-        #[cfg(not(any(
-            target_os = "windows",
-            target_os = "android",
-            target_os = "macos"
-        )))]
+        #[cfg(not(any(target_os = "windows", target_os = "android", target_os = "macos")))]
         {
             match cpal::default_host().id().name() {
                 "alsa" => Self::Alsa,
@@ -628,7 +624,10 @@ mod tests {
         );
         // Half an interval early: the driver took data we had not produced yet.
         now += 4_000_000;
-        assert_eq!(watchdog.observe(now, 512, 48_000), Some(GlitchKind::Overflow));
+        assert_eq!(
+            watchdog.observe(now, 512, 48_000),
+            Some(GlitchKind::Overflow)
+        );
     }
 
     #[test]
@@ -649,7 +648,10 @@ mod tests {
         assert_eq!(watchdog.observe(now, 256, 48_000), None);
         // ...and a 1 ms cadence means it already consumed frames that were not there.
         now += 1_000_000;
-        assert_eq!(watchdog.observe(now, 256, 48_000), Some(GlitchKind::Overflow));
+        assert_eq!(
+            watchdog.observe(now, 256, 48_000),
+            Some(GlitchKind::Overflow)
+        );
     }
 
     #[test]
@@ -684,10 +686,7 @@ mod tests {
         );
         policy.note_growth(true);
         assert_eq!(
-            policy.plan_growth(
-                GLITCHES_BEFORE_GROWTH,
-                GROWTH_COOLDOWN_MS * 2 + 2_000
-            ),
+            policy.plan_growth(GLITCHES_BEFORE_GROWTH, GROWTH_COOLDOWN_MS * 2 + 2_000),
             Some(4_096)
         );
         policy.note_growth(true);
@@ -723,10 +722,7 @@ mod tests {
         assert_eq!(policy.growths, 0);
         // Too soon after the failed attempt.
         assert_eq!(policy.plan_growth(10, GROWTH_COOLDOWN_MS - 1), None);
-        assert_eq!(
-            policy.plan_growth(0, GROWTH_COOLDOWN_MS + 1),
-            Some(2_048)
-        );
+        assert_eq!(policy.plan_growth(0, GROWTH_COOLDOWN_MS + 1), Some(2_048));
         policy.note_growth(true);
         assert_eq!(policy.growths, 1);
         assert_eq!(policy.pending_frames, None);
@@ -748,7 +744,10 @@ mod tests {
         telemetry.record(GlitchKind::DeviceError);
         telemetry.observe_callback_frames(1_024);
         let recoverable = telemetry.drain_recoverable_glitches();
-        assert_eq!(recoverable, 2, "device errors do not justify a bigger buffer");
+        assert_eq!(
+            recoverable, 2,
+            "device errors do not justify a bigger buffer"
+        );
         let snapshot = telemetry.snapshot();
         assert_eq!(snapshot.underruns, 2);
         assert_eq!(snapshot.device_errors, 1);

@@ -90,11 +90,7 @@ pub fn normalise_tonic(tonic: &str) -> Option<String> {
 /// Camelot position for a spelled tonic and mode, if the tonic belongs to the 12-tone set.
 fn wheel_position(tonic: &str, major: bool) -> Option<&'static str> {
     let sharp = to_sharp_tonic(tonic)?;
-    let table: &[(&str, &str)] = if major {
-        &MAJOR_WHEEL
-    } else {
-        &MINOR_WHEEL
-    };
+    let table: &[(&str, &str)] = if major { &MAJOR_WHEEL } else { &MINOR_WHEEL };
     table
         .iter()
         .find(|(name, _)| *name == sharp)
@@ -116,10 +112,7 @@ fn to_sharp_tonic(tonic: &str) -> Option<&'static str> {
     const NATURALS: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];
-    if let Some((_, sharp)) = SHARP_EQUIVALENTS
-        .iter()
-        .find(|(flat, _)| *flat == tonic)
-    {
+    if let Some((_, sharp)) = SHARP_EQUIVALENTS.iter().find(|(flat, _)| *flat == tonic) {
         return Some(sharp);
     }
     NATURALS.iter().find(|name| **name == tonic).copied()

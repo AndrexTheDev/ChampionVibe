@@ -1283,10 +1283,8 @@ fn audio_control_loop(
                     Some(active) => {
                         let sample_rate = active.quantization_grid.sample_rate;
                         active.grid = grid;
-                        active.quantization_grid = QuantizationGrid::from_grid(
-                            &active.grid,
-                            sample_rate,
-                        );
+                        active.quantization_grid =
+                            QuantizationGrid::from_grid(&active.grid, sample_rate);
                         Ok(status.snapshot())
                     }
                     None => Err("no stem set is loaded".to_owned()),
