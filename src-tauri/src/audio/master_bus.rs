@@ -693,33 +693,15 @@ fn build_stream_for_format(
     glitches: Arc<GlitchTelemetry>,
 ) -> Result<Stream, String> {
     match sample_format {
-        SampleFormat::F32 => build_stream::<f32>(
-            device,
-            config,
-            channels,
-            graph,
-            meter,
-            statuses,
-            glitches,
-        ),
-        SampleFormat::I16 => build_stream::<i16>(
-            device,
-            config,
-            channels,
-            graph,
-            meter,
-            statuses,
-            glitches,
-        ),
-        SampleFormat::U16 => build_stream::<u16>(
-            device,
-            config,
-            channels,
-            graph,
-            meter,
-            statuses,
-            glitches,
-        ),
+        SampleFormat::F32 => {
+            build_stream::<f32>(device, config, channels, graph, meter, statuses, glitches)
+        }
+        SampleFormat::I16 => {
+            build_stream::<i16>(device, config, channels, graph, meter, statuses, glitches)
+        }
+        SampleFormat::U16 => {
+            build_stream::<u16>(device, config, channels, graph, meter, statuses, glitches)
+        }
         format => Err(format!(
             "unsupported native output sample format: {format:?}"
         )),
