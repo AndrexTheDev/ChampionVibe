@@ -568,7 +568,8 @@ impl MasterBus {
             .default_output_device()
             .ok_or_else(|| "no default audio output device is available".to_owned())?;
         let device_name = device
-            .name()
+            .description()
+            .map(|description| description.name().to_owned())
             .unwrap_or_else(|_| "unknown output device".to_owned());
         let supported = device
             .default_output_config()

@@ -161,6 +161,8 @@ pub fn musical_key_for_camelot(value: &str) -> Option<String> {
         (10, _) => "D major".to_owned(),
         (11, _) => "A major".to_owned(),
         (12, _) => "E major".to_owned(),
+        // The range check above makes every other pair unreachable; the arm keeps the match total.
+        _ => return None,
     })
 }
 

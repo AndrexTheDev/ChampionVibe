@@ -706,7 +706,6 @@ pub async fn get_track_waveform_packet(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GridCorrectionResponse {

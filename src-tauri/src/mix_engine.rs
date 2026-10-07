@@ -190,7 +190,10 @@ struct ActiveMix {
 }
 
 enum MixCommand {
-    Start { track_id: i64, preset: MixPreset },
+    Start {
+        track_id: i64,
+        preset: MixPreset,
+    },
     /// Re-reads one track after a manual grid/key correction and adopts the corrected values on the
     /// deck that holds it, without interrupting playback.
     RefreshTrack {

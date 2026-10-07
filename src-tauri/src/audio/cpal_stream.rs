@@ -507,7 +507,7 @@ impl GlitchTelemetry {
         if kinds == 0 {
             return 0;
         }
-        let mut recoverable = 0;
+        let mut recoverable: u32 = 0;
         for index in 0..GLITCH_KIND_COUNT {
             if kinds & (1 << index) == 0 {
                 continue;
@@ -525,7 +525,8 @@ impl GlitchTelemetry {
                 .map(|counter| counter.load(Ordering::Relaxed))
                 .unwrap_or(0);
             if kind.is_buffer_recoverable() {
-                recoverable = recoverable.saturating_add(observed);
+                let clamped = observed.min(u64::from(u32::MAX)) as u32;
+                recoverable = recoverable.saturating_add(clamped);
             }
             self.log_event(
                 kind,

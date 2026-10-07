@@ -752,7 +752,7 @@ button, .track-select { -webkit-tap-highlight-color: transparent; }
 }
 
 /* MIR confidence: green = verified/high confidence, amber/orange = heuristic that needs a review. */
-.track-analysis-badges .track-analysis-badges .track-mood-badge, .track-analysis-badges .track-rhythm-badge { max-width: 34%; }
+.track-analysis-badges .track-mood-badge, .track-analysis-badges .track-rhythm-badge { max-width: 34%; }
 .track-analysis-badges .track-confidence-badge { max-width: 32%; }
 .track-confidence-badge { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 3px; overflow: hidden; padding: 1px 4px; border: 1px solid transparent; border-radius: 3px; font: 6px/1.3 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .track-analysis-badges .track-confidence-badge[hidden] { display: none; }

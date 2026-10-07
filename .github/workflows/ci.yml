@@ -92,16 +92,19 @@ jobs:
           npm run build
 
       # TEMPORARY diagnostics (remove before merge): raw job logs are not always retrievable in
-      # this environment, so the rustfmt diff and the compiler messages are re-emitted as check
-      # annotations, which stay readable through the checks API.
+      # this environment, so the rustfmt diff and the compiler messages are re-emitted as a single
+      # check annotation each (GitHub caps the number of annotations per job, so all diagnostics
+      # travel in one payload).
       - name: Diagnose rustfmt drift
         continue-on-error: true
         run: |
           set +e
           cargo fmt --all -- --check > /tmp/cv-rustfmt.log 2>&1
-          grep -E '^Diff in|^[+-]' /tmp/cv-rustfmt.log | head -24 | while IFS= read -r line; do
-            printf '::warning title=cv-fmt::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r//g')"
-          done
+          if [ -s /tmp/cv-rustfmt.log ]; then
+            payload=$(head -c 6000 /tmp/cv-rustfmt.log | sed -e 's/%/%25/g' -e 's/\r//g' \
+              | awk '{printf "%s%%0A", $0}')
+            echo "::warning title=cv-fmt::$payload"
+          fi
 
       - name: Diagnose Rust compiler messages
         continue-on-error: true
@@ -109,10 +112,11 @@ jobs:
           set +e
           cargo check --workspace --all-targets --locked --message-format=short \
             > /tmp/cv-rust-diagnostics.log 2>&1
-          grep -E '(:| ) ?(error|warning)(\[E?[0-9]+\])?:' /tmp/cv-rust-diagnostics.log \
-            | head -24 | while IFS= read -r line; do
-            printf '::error title=cv-rustc::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r//g')"
-          done
+          payload=$(grep -E ': (error|warning)' /tmp/cv-rust-diagnostics.log | head -80 \
+            | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
+          if [ -n "$payload" ]; then
+            echo "::error title=cv-rustc::$payload"
+          fi
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
@@ -211,10 +215,13 @@ jobs:
         if: failure() && matrix.platform == 'windows'
         run: |
           if (Test-Path cv-package.log) {
-            Get-Content cv-package.log |
-              Where-Object { $_ -match '(^|\s)error(\[E?[0-9]+\])?:' } |
-              Select-Object -First 30 |
-              ForEach-Object { Write-Output ("::error title=cv-package::{0}" -f ($_ -replace '%','%25')) }
+            $lines = Get-Content cv-package.log |
+              Where-Object { $_ -match '^error(\[E?[0-9]+\])?:' -or $_ -match '^\s+--> ' -or $_ -match '^warning: ' } |
+              Select-Object -First 80
+            if ($lines) {
+              $payload = (($lines -join "`n") -replace '%','%25') -replace "`r?`n", '%0A'
+              Write-Output "::error title=cv-cargo::$payload"
+            }
           }
 
       - name: Initialize Tauri Android project
@@ -232,9 +239,12 @@ jobs:
         shell: bash
         run: |
           [ -f cv-package.log ] || exit 0
-          grep -E '(^| ) ?error(\[E?[0-9]+\])?:' cv-package.log | head -30 | while IFS= read -r line; do
-            printf '::error title=cv-package::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r//g')"
-          done
+          payload=$(grep -E '^error(\[E?[0-9]+\])?:|^[[:space:]]+--> |^warning: ' cv-package.log | head -80 \
+            | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
+          if [ -n "$payload" ]; then
+            echo "::error title=cv-cargo::$payload"
+          fi
+          exit 0
 
       - name: Collect Windows installers
         if: matrix.platform == 'windows'
