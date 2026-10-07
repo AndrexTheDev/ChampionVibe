@@ -171,17 +171,6 @@ impl RecordingFormat {
         }
     }
 
-    pub(crate) fn nominal_bitrate_bps(self, sample_rate: u32) -> u32 {
-        match self {
-            Self::Mp3_320 => 320_000,
-            Self::OggVorbis => 0, // variable bitrate; no fixed-rate promise
-            Self::M4aAac => 160_000,
-            Self::WavPcm16 => sample_rate.saturating_mul(2 * 16),
-            Self::WavPcm24 => sample_rate.saturating_mul(2 * 24),
-            Self::Flac => 0, // lossless bitrate is content-dependent
-        }
-    }
-
     fn hound_spec(self, sample_rate: u32) -> hound::WavSpec {
         hound::WavSpec {
             channels: 2,
@@ -287,11 +276,6 @@ impl RecordingHub {
             .map_err(|_| "The recording worker is not available.".to_string())?;
         self.stream_rate.store(sample_rate, Ordering::Release);
         Ok(())
-    }
-
-    pub(crate) fn detach(&self) {
-        self.stream_rate.store(0, Ordering::Release);
-        let _ = self.sender.send(WorkerCommand::Detach);
     }
 
     pub(crate) fn sample_rate(&self) -> Option<u32> {
@@ -426,7 +410,6 @@ enum WorkerCommand {
     Attach {
         consumer: Consumer<CapturedFrame>,
     },
-    Detach,
     Start {
         path: PathBuf,
         format: RecordingFormat,
@@ -909,10 +892,6 @@ fn worker_loop(
                     drain_one(&mut consumer, &mut writer, &flags);
                     consumer = Some(new_consumer);
                 }
-                Ok(WorkerCommand::Detach) => {
-                    drain_one(&mut consumer, &mut writer, &flags);
-                    consumer = None;
-                }
                 Ok(WorkerCommand::Start {
                     path,
                     format,
@@ -1148,10 +1127,6 @@ fn handle_deferred_command(
         } => {
             drain_one(consumer, writer, flags);
             *consumer = Some(new_consumer);
-        }
-        WorkerCommand::Detach => {
-            drain_one(consumer, writer, flags);
-            *consumer = None;
         }
         WorkerCommand::Start {
             path,

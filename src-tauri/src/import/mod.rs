@@ -29,7 +29,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_android_fs::{AndroidFsExt, Entry, FsUri};
 
 const MAX_IMPORT_ITEMS: usize = 50_000;
-const MAX_ANDROID_SAMPLE_FILES: usize = 61; // 64 total sample slots minus three built-ins.
+// 64 total sample slots minus three built-ins.
+#[cfg(target_os = "android")]
+const MAX_ANDROID_SAMPLE_FILES: usize = 61;
 const MAX_IMPORT_JOBS_TO_EMIT: u32 = 100;
 const IMPORT_JOB_UPDATED_EVENT: &str = "import-job-updated";
 #[cfg(target_os = "android")]
@@ -1396,12 +1398,6 @@ fn finish_job(state: &AppState, job_id: i64, cancelled: bool) -> Result<()> {
     Ok(())
 }
 
-fn finish_failed_job(state: &AppState, job_id: i64, error: &str) {
-    if let Ok(mut connection) = state.database.lock() {
-        let _ = database::fail_import_job(&mut connection, job_id, error);
-    }
-}
-
 fn emit_job(app: &AppHandle, job_id: i64) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
@@ -1437,22 +1433,12 @@ fn error_message(error: &anyhow::Error) -> String {
     error.to_string().chars().take(4_096).collect()
 }
 
-fn run_import_job_guarded(
-    app: &AppHandle,
-    state: &AppState,
-    manager: &ImportManager,
-    job_id: i64,
-    cancellation: &Arc<AtomicBool>,
-) {
-    if let Err(error) = run_import_job(app, state, manager, job_id, cancellation) {
-        finish_failed_job(state, job_id, &error_message(&error));
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{is_supported_audio_path, path_sort_key};
-    use std::{path::Path, time::SystemTime};
+    use super::is_supported_audio_path;
+    #[cfg(windows)]
+    use super::path_sort_key;
+    use std::time::SystemTime;
 
     #[test]
     fn audio_import_discovery_uses_file_contents_instead_of_extensions() {

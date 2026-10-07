@@ -300,7 +300,6 @@ fn finite_sample(value: f32) -> f32 {
 }
 
 struct LinearResampler {
-    input_rate: u32,
     output_step: f64,
     phase: f64,
     input: VecDeque<StereoFrame>,
@@ -309,7 +308,6 @@ struct LinearResampler {
 impl LinearResampler {
     fn new(input_rate: u32, output_rate: u32) -> Self {
         Self {
-            input_rate,
             output_step: f64::from(input_rate) / f64::from(output_rate.max(1)),
             phase: 0.0,
             input: VecDeque::with_capacity(4096),

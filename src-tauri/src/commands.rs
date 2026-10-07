@@ -1370,6 +1370,7 @@ pub fn get_sample_directory(app: AppHandle) -> Result<String, String> {
     Ok(directory.to_string_lossy().into_owned())
 }
 
+#[cfg(test)]
 fn stem_files_from_rows(rows: Vec<database::StemPath>) -> Result<audio::StemFiles, String> {
     let profile = profile_for_available_stems(&rows, 4)?;
     stem_files_for_profile(rows, usize::from(profile))

@@ -41,6 +41,7 @@ pub(crate) const SPLEETER_DESCRIPTOR_FORMAT: &str = "championvibe-spleeter-onnx-
 pub(crate) const BYOM_STORE_FORMAT: &str = "championvibe-byom-v1";
 const REGISTRY_JSON: &str = include_str!("../../assets/model-registry.json");
 const BYOM_STORE_FILE: &str = "byom-models.json";
+#[cfg(test)]
 const PIN_PENDING: &str = "PENDING_VERIFICATION";
 const MAX_DESCRIPTOR_BYTES: u64 = 64 * 1024;
 const RECOMMENDED_MEMBER_BYTES: u64 = 512 * 1024 * 1024;
@@ -66,8 +67,12 @@ pub struct ModelRegistry {
     pub byom: ByomPolicy,
 }
 
+/// The machine-readable form of the clearing rules: the download loader enforces
+/// `cleared_tier_only`, while `statement` and `pin_rule` are quoted by
+/// `scripts/verify-model-pins.sh`, `docs/model-registry.md` and the pin workflow.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct RegistryPolicy {
     pub default_separator_id: String,
     pub cleared_tier_only: bool,
@@ -76,8 +81,13 @@ pub struct RegistryPolicy {
     pub pin_rule: String,
 }
 
+/// Mirrors one entry of `assets/model-registry.json`. The provenance fields (`weightsLicense`,
+/// `conversionCopyright`, `upstreamStatement`, `rightsNote`, …) exist so that the JSON stays the
+/// single audited source; the frontend and the pin workflow read them, which is why this struct
+/// does not re-read every field at runtime.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct RegistryArtifact {
     pub id: String,
     pub tier: String,
@@ -107,8 +117,11 @@ pub struct RegistryArtifact {
     pub notices: Vec<String>,
 }
 
+/// Kinds are entered through `accepted_kinds` and `requires_acknowledgement`; `statement` is the
+/// user-facing liability text surfaced by the BYOM importer UI.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct ByomPolicy {
     pub statement: String,
     pub accepted_kinds: Vec<ByomAcceptedKind>,
@@ -206,8 +219,13 @@ pub(crate) struct SpleeterDescriptor {
 pub(crate) fn registry() -> &'static ModelRegistry {
     static REGISTRY: OnceLock<ModelRegistry> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        serde_json::from_str::<ModelRegistry>(REGISTRY_JSON)
-            .expect("assets/model-registry.json must deserialize")
+        let registry: ModelRegistry = serde_json::from_str(REGISTRY_JSON)
+            .expect("assets/model-registry.json must deserialize");
+        assert_eq!(
+            registry.format, REGISTRY_FORMAT,
+            "assets/model-registry.json must declare the {REGISTRY_FORMAT} format"
+        );
+        registry
     })
 }
 
@@ -308,6 +326,10 @@ impl ModelLoader {
         anyhow::ensure!(
             artifact.tier == "cleared",
             "only cleared-tier artifacts can be downloaded"
+        );
+        anyhow::ensure!(
+            registry().policy.cleared_tier_only,
+            "the model registry does not declare cleared-tier-only downloads; refusing to download"
         );
         anyhow::ensure!(
             is_pinned(artifact),

@@ -75,6 +75,8 @@ pub struct TrackSearchFilters {
 #[derive(Debug, Clone)]
 pub struct MixTrackRecord {
     pub id: i64,
+    /// Mirrors `tracks.file_path`; playback resolves the audible files through the stem rows.
+    #[allow(dead_code)]
     pub file_path: String,
     pub title: String,
     pub artist: String,
@@ -176,6 +178,8 @@ pub struct ImportJobSnapshot {
 #[derive(Debug, Clone)]
 pub struct ImportItem {
     pub id: i64,
+    /// Mirrors `import_items.job_id`; the runner is already scoped to one job.
+    #[allow(dead_code)]
     pub job_id: i64,
     pub source_path: String,
 }
@@ -192,6 +196,8 @@ pub struct RecordingMetadata {
 
 #[derive(Debug, Clone)]
 pub struct ImportJobConfig {
+    /// Mirrors `import_jobs.id`; the caller carries the id alongside this record.
+    #[allow(dead_code)]
     pub id: i64,
     pub separation_model_path: String,
     pub whisper_model_path: String,

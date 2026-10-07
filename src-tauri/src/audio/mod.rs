@@ -642,13 +642,6 @@ impl Clone for AudioEngine {
 }
 
 impl AudioEngine {
-    pub fn new() -> std::io::Result<Self> {
-        let (first, second, recording) = Self::new_pair()?;
-        drop(second);
-        drop(recording);
-        Ok(first)
-    }
-
     pub(crate) fn new_pair() -> std::io::Result<(Self, Self, Arc<RecordingHub>)> {
         let recording = RecordingHub::new().map_err(std::io::Error::other)?;
         let status_a = Arc::new(EngineStatus::new());
@@ -901,27 +894,16 @@ impl AudioEngine {
         Ok(samples)
     }
 
-    pub fn add_sample_file(
-        &self,
-        path: &std::path::Path,
-        display_name: Option<&str>,
-    ) -> Result<SampleInfo, String> {
-        self.add_sample_file_routed(path, display_name, false)
-    }
-
+    /// Registers a locally synthesised TTS clip on the master TTS aux bus.
+    ///
+    /// The only caller is the local Piper TTS writer, which is itself behind `local-piper-tts`,
+    /// so this looks unreachable in a default build; it is kept compiled because the aux routing
+    /// is exercised by the audio-engine tests and will serve future vetted TTS adapters.
+    #[allow(dead_code)]
     pub(crate) fn add_tts_file(
         &self,
         path: &std::path::Path,
         display_name: Option<&str>,
-    ) -> Result<SampleInfo, String> {
-        self.add_sample_file_routed(path, display_name, true)
-    }
-
-    fn add_sample_file_routed(
-        &self,
-        path: &std::path::Path,
-        display_name: Option<&str>,
-        tts_aux: bool,
     ) -> Result<SampleInfo, String> {
         let _update_guard = self
             .controls
@@ -929,11 +911,7 @@ impl AudioEngine {
             .lock()
             .map_err(|_| "sample bank update lock is poisoned".to_owned())?;
         let current = self.controls.sample_bank.load_full();
-        let bank = if tts_aux {
-            current.with_tts_wav(path, display_name)?
-        } else {
-            current.with_wav(path, display_name)?
-        };
+        let bank = current.with_tts_wav(path, display_name)?;
         let info = bank
             .infos()
             .into_iter()

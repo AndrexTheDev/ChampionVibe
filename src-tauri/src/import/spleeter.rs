@@ -50,7 +50,6 @@ pub(crate) struct SpleeterSeparator {
     accompaniment: Session,
     input_name: String,
     output_name: String,
-    sample_rate: u32,
     backend: &'static str,
     forward: Arc<dyn Fft<f32>>,
     inverse: Arc<dyn Fft<f32>>,
@@ -144,7 +143,6 @@ impl SpleeterSeparator {
             accompaniment,
             input_name,
             output_name,
-            sample_rate: descriptor.sample_rate,
             backend,
             forward,
             inverse,
@@ -158,10 +156,6 @@ impl SpleeterSeparator {
 
     pub(crate) fn stem_count(&self) -> usize {
         SPLEETER_STEM_NAMES.len()
-    }
-
-    pub(crate) fn sample_rate(&self) -> u32 {
-        self.sample_rate
     }
 
     pub(crate) fn separate(
@@ -288,10 +282,7 @@ impl SpleeterSeparator {
             )?;
 
             for frame in 0..chunk_frames {
-                for (stem_index, values) in [&vocals_values, &accompaniment_values]
-                    .into_iter()
-                    .enumerate()
-                {
+                for stem_index in 0..SPLEETER_STEM_NAMES.len() {
                     for channel in 0..2 {
                         let channel_plane = channel * plane;
                         spectrum.fill(Complex::new(0.0_f32, 0.0_f32));

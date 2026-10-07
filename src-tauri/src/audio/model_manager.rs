@@ -98,7 +98,6 @@ struct Artifact {
     repository_path: &'static str,
     sha256: &'static str,
     max_bytes: u64,
-    approximate_size: &'static str,
     validator: ArtifactKind,
 }
 
@@ -109,7 +108,6 @@ const WHISPER_TINY: Artifact = Artifact {
     repository_path: "ggml-tiny.bin",
     sha256: "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
     max_bytes: MAX_WHISPER_BYTES,
-    approximate_size: "77.7 MB",
     validator: ArtifactKind::WhisperTiny,
 };
 const KOKORO_MODEL: Artifact = Artifact {
@@ -119,7 +117,6 @@ const KOKORO_MODEL: Artifact = Artifact {
     repository_path: "onnx/model_quantized.onnx",
     sha256: "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
     max_bytes: MAX_ONNX_BYTES,
-    approximate_size: "92.4 MB",
     validator: ArtifactKind::KokoroOnnx,
 };
 const KOKORO_VOICE: Artifact = Artifact {
@@ -129,7 +126,6 @@ const KOKORO_VOICE: Artifact = Artifact {
     repository_path: "voices/af_heart.bin",
     sha256: "d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b",
     max_bytes: MAX_VOICE_BYTES,
-    approximate_size: "522 kB",
     validator: ArtifactKind::KokoroVoice,
 };
 
@@ -157,10 +153,6 @@ impl ModelManager {
             .build()
             .context("could not configure the local model downloader")?;
         Ok(Self { root, client })
-    }
-
-    pub fn root(&self) -> &Path {
-        &self.root
     }
 
     pub fn catalog(&self) -> Vec<ManagedModelInfo> {

@@ -84,8 +84,10 @@ fn soft_knee_reduction_db(level_db: f32, ceiling_db: f32, knee_db: f32) -> f32 {
 /// Fixed-storage live limiter. `process` returns silence for the initial lookahead interval and
 /// then emits the delayed frame after applying a 4x windowed-sinc peak estimate over the window.
 pub(super) struct LookaheadLimiter {
+    /// Retained for the latency helpers and this module's tests; the sample loop itself only
+    /// needs the derived state below.
+    #[cfg_attr(not(test), allow(dead_code))]
     sample_rate: u32,
-    lookahead_frames: usize,
     latency_frames: usize,
     delay: Vec<StereoFrame>,
     history: VecDeque<[f64; 2]>,
@@ -117,7 +119,6 @@ impl LookaheadLimiter {
         }
         Self {
             sample_rate,
-            lookahead_frames,
             latency_frames,
             delay: vec![StereoFrame::default(); latency_frames + 1],
             history,
@@ -135,6 +136,7 @@ impl LookaheadLimiter {
         }
     }
 
+    #[cfg(test)]
     #[inline]
     pub(super) fn process(&mut self, input: StereoFrame) -> StereoFrame {
         self.process_with_reduction(input).0
@@ -177,10 +179,12 @@ impl LookaheadLimiter {
         )
     }
 
+    #[cfg(test)]
     pub(super) fn latency_frames(&self) -> usize {
         self.latency_frames
     }
 
+    #[cfg(test)]
     pub(super) fn latency_ms(&self) -> f32 {
         self.latency_frames as f32 * 1_000.0 / self.sample_rate as f32
     }

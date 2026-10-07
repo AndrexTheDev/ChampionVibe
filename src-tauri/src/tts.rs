@@ -2,20 +2,28 @@ use crate::audio::{AudioEngine, SampleInfo};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "local-piper-tts")]
 use std::{fs, path::PathBuf};
+// The dubplate writer below is only reachable with local Piper TTS, so its imports are only
+// read in that configuration.
+#[cfg_attr(not(feature = "local-piper-tts"), allow(unused_imports))]
 use std::{
     path::Path,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(feature = "local-piper-tts")]
 static DUBPLATE_FILE_ID: AtomicU64 = AtomicU64::new(0);
 const MAX_DUBPLATE_TEXT_CHARS: usize = 1_000;
+#[cfg(feature = "local-piper-tts")]
 const TARGET_PEAK: f32 = 0.92;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DubplateRequest {
+    /// The frontend always sends both paths; only a local-Piper build reads them back here.
+    #[cfg_attr(not(feature = "local-piper-tts"), allow(dead_code))]
     pub model_path: String,
+    #[cfg_attr(not(feature = "local-piper-tts"), allow(dead_code))]
     pub config_path: String,
     pub text: String,
     pub preset: String,
@@ -303,6 +311,7 @@ fn canonical_local_file(path_text: &str, extension: &str) -> Result<PathBuf, Str
     Ok(path)
 }
 
+#[cfg(feature = "local-piper-tts")]
 fn next_dubplate_filename() -> String {
     let unix_millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -315,6 +324,7 @@ fn next_dubplate_filename() -> String {
     )
 }
 
+#[cfg(feature = "local-piper-tts")]
 fn write_pcm_wav(path: &Path, sample_rate: u32, samples: &[f32]) -> Result<(), String> {
     let spec = hound::WavSpec {
         channels: 1,

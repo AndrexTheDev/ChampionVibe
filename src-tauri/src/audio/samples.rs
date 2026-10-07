@@ -192,26 +192,27 @@ impl SampleBank {
         Ok(bank)
     }
 
-    pub fn with_wav(&self, path: &Path, display_name: Option<&str>) -> Result<Self, String> {
-        self.with_routed_wav(path, display_name, false)
-    }
-
+    /// Returns a copy of the bank with one clip routed to the master TTS aux bus.
+    ///
+    /// Only a build with local Piper TTS registers such clips, so `AudioEngine::add_tts_file` is
+    /// the single caller today. The routing itself is engine behaviour rather than Piper
+    /// behaviour, so it stays compiled and covered by this module's tests in every configuration.
+    #[allow(dead_code)]
     pub(super) fn with_tts_wav(
         &self,
         path: &Path,
         display_name: Option<&str>,
     ) -> Result<Self, String> {
-        self.with_routed_wav(path, display_name, true)
+        let mut next = self.clone();
+        next.add_wav(path, display_name, true)?;
+        Ok(next)
     }
 
-    fn with_routed_wav(
-        &self,
-        path: &Path,
-        display_name: Option<&str>,
-        tts_aux: bool,
-    ) -> Result<Self, String> {
+    /// Test-only counterpart: loads a plain user sample instead of a TTS-routed one.
+    #[cfg(test)]
+    fn with_wav(&self, path: &Path, display_name: Option<&str>) -> Result<Self, String> {
         let mut next = self.clone();
-        next.add_wav(path, display_name, tts_aux)?;
+        next.add_wav(path, display_name, false)?;
         Ok(next)
     }
 

@@ -350,16 +350,6 @@ impl MixEngine {
         self.decks[1].load_sample_folder(path)?;
         Ok(first)
     }
-
-    pub fn add_sample_file(
-        &self,
-        path: &std::path::Path,
-        display_name: Option<&str>,
-    ) -> Result<audio::SampleInfo, String> {
-        let first = self.decks[0].add_sample_file(path, display_name)?;
-        self.decks[1].add_sample_file(path, display_name)?;
-        Ok(first)
-    }
 }
 
 fn mix_worker(
