@@ -247,10 +247,6 @@ impl ModelLoader {
         Ok(Self { root, client })
     }
 
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
-
     pub fn catalog(&self) -> Vec<ManagedArtifactInfo> {
         registry()
             .artifacts
@@ -479,6 +475,10 @@ impl ModelLoader {
     }
 
     /// Re-hashes an installed artifact to prove the local files still match what was downloaded.
+    ///
+    /// Kept as a support and troubleshooting entry point: the UI never re-hashes the ~75 MB graph
+    /// set on a status refresh, so this is intentionally not part of the normal catalogue path.
+    #[allow(dead_code)]
     pub(crate) fn verify_installed_artifact(&self, id: &str) -> Result<bool> {
         let descriptor_path = self.descriptor_path(id);
         let descriptor = read_spleeter_descriptor(&descriptor_path)?;
@@ -982,10 +982,6 @@ pub(crate) fn sha256_file(path: &Path) -> Result<String> {
         hasher.update(&buffer[..read]);
     }
     Ok(hex::encode(hasher.finalize()))
-}
-
-pub(crate) fn sha256_bytes(bytes: &[u8]) -> String {
-    hex::encode(Sha256::digest(bytes))
 }
 
 fn unix_now() -> u64 {
