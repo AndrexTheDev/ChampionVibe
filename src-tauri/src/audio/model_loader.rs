@@ -911,7 +911,7 @@ pub(crate) fn extract_members<R: Read>(
         .entries()
         .context("model archive is not a readable tar.bz2")?
     {
-        let mut entry = entry.context("model archive contains an unreadable entry")?;
+        let entry = entry.context("model archive contains an unreadable entry")?;
         if !entry.header().entry_type().is_file() {
             continue;
         }

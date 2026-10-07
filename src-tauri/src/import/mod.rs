@@ -1052,7 +1052,7 @@ fn run_import_job(
             Ok(()) => {}
             Err(error) if cancellation_requested(state, job_id, cancellation)? => {
                 let _ = error;
-                let mut connection = state
+                let connection = state
                     .database
                     .lock()
                     .map_err(|_| anyhow::anyhow!("SQLite connection lock is poisoned"))?;

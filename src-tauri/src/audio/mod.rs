@@ -17,8 +17,7 @@ mod samples;
 mod wsola;
 
 pub(crate) use recording::{
-    CaptureClock, CaptureFlags, CapturedFrame, RecordingFile, RecordingFormat, RecordingHub,
-    RecordingSnapshot,
+    CaptureClock, CapturedFrame, RecordingFile, RecordingFormat, RecordingHub, RecordingSnapshot,
 };
 pub(crate) use recording_formats::RecordingFormatInfo;
 
@@ -44,7 +43,6 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
-use wsola::SharedSchedule;
 
 const STEM_COUNT: usize = 4;
 pub(crate) const MAX_TTS_PCM_BYTES: usize = 64 * 1024 * 1024;

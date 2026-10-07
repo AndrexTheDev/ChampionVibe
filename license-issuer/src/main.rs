@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -7,7 +7,7 @@ use axum::{
 };
 use championvibe_licensing_core::{
     ActivateRequest, ApiEndpoints, CreateQuoteRequest, LicensePayload, LicenseSigner,
-    PaymentVerifier, Plan, PriceOracle, Quote, SignedLicense, Treasury,
+    PaymentVerifier, PriceOracle, Quote, SignedLicense, Treasury,
 };
 use chrono::{Months, TimeZone, Utc};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};

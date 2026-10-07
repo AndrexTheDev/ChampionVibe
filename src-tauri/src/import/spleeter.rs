@@ -18,6 +18,7 @@
 //! `center = false` framing cannot cover the final `n_fft - hop` samples by construction).
 
 use anyhow::{Context, Result};
+use flacenc::error::Verify;
 use hound::{SampleFormat, WavReader};
 use ort::{
     session::Session,
@@ -26,7 +27,7 @@ use ort::{
 use rustfft::{num_complex::Complex, Fft, FftPlanner};
 use std::{
     fs::{self, File},
-    io::{BufReader, BufWriter, Write},
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -104,9 +105,9 @@ impl SpleeterSeparator {
         }
 
         let threads = threads.clamp(1, 8);
-        let (mut vocals, backend) =
+        let (vocals, backend) =
             super::separator::create_session(Path::new(vocals_path), threads, use_directml)?;
-        let (mut accompaniment, accompaniment_backend) =
+        let (accompaniment, accompaniment_backend) =
             super::separator::create_session(Path::new(accompaniment_path), threads, use_directml)?;
         anyhow::ensure!(
             backend == accompaniment_backend,
@@ -189,6 +190,8 @@ impl SpleeterSeparator {
             "Spleeter needs the normalized 44.1 kHz stereo 16-bit workspace WAV"
         );
 
+        let mut samples = reader.samples::<i16>();
+
         let raw_paths: Vec<PathBuf> = SPLEETER_STEM_NAMES
             .iter()
             .map(|name| output_dir.join(format!(".{name}.pcm")))
@@ -234,7 +237,7 @@ impl SpleeterSeparator {
             let needed_end =
                 (chunk_start + chunk_frames - 1) * SPLEETER_HOP_LENGTH + SPLEETER_N_FFT;
             fill_input_window(
-                &mut reader,
+                &mut samples,
                 &mut input,
                 input_base,
                 &mut read_next,
@@ -508,7 +511,7 @@ fn run_graph(
 }
 
 fn fill_input_window(
-    reader: &mut WavReader<BufReader<File>>,
+    samples: &mut impl Iterator<Item = std::result::Result<i16, hound::Error>>,
     input: &mut Vec<[f32; 2]>,
     input_base: usize,
     read_next: &mut usize,
@@ -516,12 +519,12 @@ fn fill_input_window(
     total_frames: usize,
 ) -> Result<()> {
     while input_base + input.len() < needed_end && *read_next < total_frames {
-        let left = reader.read_sample::<i16>().with_context(|| {
-            format!("normalized audio ended after {read_next} of {total_frames} frames")
-        })?;
-        let right = reader.read_sample::<i16>().with_context(|| {
-            format!("normalized audio ended after {read_next} of {total_frames} frames")
-        })?;
+        let left = samples
+            .next()
+            .context("normalized WAV ended before its declared duration")??;
+        let right = samples
+            .next()
+            .context("normalized WAV has an incomplete stereo frame")??;
         input.push([
             super::separator::i16_to_f32(left),
             super::separator::i16_to_f32(right),

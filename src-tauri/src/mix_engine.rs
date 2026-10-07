@@ -1872,7 +1872,7 @@ fn find_word_play(
             best = Some((matched.len(), time, matched));
         }
     }
-    let (count, cue_ms, matched_words) = best?;
+    let (_count, cue_ms, matched_words) = best?;
     let phrase = normalized
         .iter()
         .filter(|(_, time)| *time >= cue_ms)

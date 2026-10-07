@@ -444,7 +444,7 @@ fn classify_acoustic(
     centroid_hz: f64,
     low_ratio: f64,
     mid_ratio: f64,
-    high_ratio: f64,
+    _high_ratio: f64,
     bpm: Option<f64>,
 ) -> Result<(String, String)> {
     let loudness = ((energy_dbfs + 38.0) / 28.0).clamp(0.0, 1.0);

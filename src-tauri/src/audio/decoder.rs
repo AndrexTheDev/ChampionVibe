@@ -11,7 +11,7 @@ use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::Sender,
-        Arc, Mutex,
+        Arc,
     },
     thread,
     time::Duration,
@@ -188,7 +188,6 @@ pub(super) fn run_worker(
                         );
                     } else {
                         let _ = startup.send(Ok(()));
-                        ready_sent = true;
                     }
                 }
                 return;
@@ -374,7 +373,7 @@ impl StemDecoder {
         let source = media_source::open_media_source(path)
             .map_err(|error| format!("{}: {error}", path.display()))?;
         let source = MediaSourceStream::new(source, Default::default());
-        let mut format = symphonia::default::get_probe()
+        let format = symphonia::default::get_probe()
             .probe(
                 &symphonia::core::formats::probe::Hint::new(),
                 source,

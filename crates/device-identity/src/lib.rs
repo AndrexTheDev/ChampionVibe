@@ -26,9 +26,9 @@ impl<R: Runtime, T: Manager<R>> DeviceIdentityExt<R> for T {
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("device-identity")
-        .setup(|app, api| {
+        .setup(|app, _api| {
             #[cfg(target_os = "android")]
-            let identity = mobile::init(app, api)?;
+            let identity = mobile::init(app, _api)?;
             #[cfg(not(target_os = "android"))]
             let identity = desktop::init::<R>();
             app.manage(identity);

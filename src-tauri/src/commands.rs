@@ -883,6 +883,22 @@ pub fn validate_local_model(
             path: model_path.to_string_lossy().into_owned(),
         });
     }
+    if kind == "separator" {
+        let supplied = PathBuf::from(path.trim());
+        if import::separator::is_spleeter_descriptor(&supplied).unwrap_or(false) {
+            let report = state
+                .model_loader
+                .validate_byom_file(&path, "spleeter-2stems")
+                .map_err(|error| format!("Spleeter model contract is invalid: {error:#}"))?;
+            return Ok(audio::model_manager::ModelValidation {
+                valid: report.valid,
+                kind,
+                contract: report.contract,
+                details: report.details,
+                path: report.path,
+            });
+        }
+    }
     state
         .model_manager
         .validate_user_file(&path, &kind)

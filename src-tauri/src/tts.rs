@@ -1,11 +1,12 @@
 use crate::audio::{AudioEngine, SampleInfo};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs,
-    path::{Path, PathBuf},
+    path::Path,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
+#[cfg(feature = "local-piper-tts")]
+use std::{fs, path::PathBuf};
 
 static DUBPLATE_FILE_ID: AtomicU64 = AtomicU64::new(0);
 const MAX_DUBPLATE_TEXT_CHARS: usize = 1_000;

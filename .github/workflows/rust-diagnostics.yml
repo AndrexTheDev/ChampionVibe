@@ -11,6 +11,7 @@ on:
     paths:
       - "src-tauri/**"
       - "crates/**"
+      - "license-issuer/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/rust-diagnostics.yml"
@@ -27,7 +28,7 @@ jobs:
   diagnostics:
     name: Format and compile diagnostics
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Check out source
@@ -80,10 +81,10 @@ jobs:
           cargo fmt --all
           git diff > reports/rustfmt.diff
 
-      - name: Compile the workspace and capture diagnostics
+      - name: Compile every target and capture diagnostics
         run: |
           set +e
-          cargo check --workspace --message-format=short > reports/rust-check.txt 2>&1
+          cargo check --workspace --all-targets --message-format=short > reports/rust-check.txt 2>&1
           status=$?
           echo "exit=$status" >> reports/rust-check.txt
           set -e
@@ -92,24 +93,24 @@ jobs:
             echo "::warning title=Rust check failed::see reports/rust-check.txt"
           fi
 
-      - name: Commit the compile diagnostics
-        if: always()
-        run: scripts/ci-commit-file.sh reports/rust-check.txt "Record Rust compile diagnostics from CI"
-
-      - name: Commit the rustfmt diff
-        if: always()
-        run: scripts/ci-commit-file.sh reports/rustfmt.diff "Record the rustfmt diff from CI"
-
-      - name: Commit the formatted sources
+      # One commit and one push for reports *and* formatted sources: the token push is the only
+      # channel back to the sandbox, so it must not depend on the source tree having changed.
+      - name: Commit the diagnostics and any rustfmt changes
         if: always()
         run: |
-          if git diff --quiet -- '*.rs'; then
-            echo "sources are already rustfmt-clean"
-            exit 0
-          fi
           git config user.name "championvibe-ci"
           git config user.email "ci@championvibe.invalid"
-          git add -A -- '*.rs'
-          git commit -m "Apply rustfmt to the workspace sources"
+          git add -A reports
+          if git diff --quiet -- '*.rs'; then
+            echo "sources are already rustfmt-clean"
+          else
+            git add -A -- '*.rs'
+          fi
+          if git diff --cached --quiet; then
+            echo "no diagnostics change to commit"
+            exit 0
+          fi
+          git commit -m "Record Rust diagnostics and formatted sources from CI"
           git pull --rebase origin "${{ github.ref_name }}"
           git push origin "HEAD:${{ github.ref_name }}"
+          echo "diagnostics pushed to ${{ github.ref_name }}"

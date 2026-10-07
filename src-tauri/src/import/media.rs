@@ -11,7 +11,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 use symphonia::core::{
-    codecs::audio::{AudioDecoder, AudioDecoderOptions},
+    codecs::audio::AudioDecoderOptions,
     errors::Error as SymphoniaError,
     formats::{FormatOptions, TrackType},
     io::MediaSourceStream,

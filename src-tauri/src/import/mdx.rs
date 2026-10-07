@@ -2,9 +2,7 @@
 //! The model contract is deliberately explicit in `.cvmodel.json`; arbitrary ONNX files are not
 //! guessed from their extension and cannot enter this path without validating their tensor graph.
 
-use crate::audio::model_manager::{
-    read_manifest, validate_manifest_models, SeparatorModelEntry, SeparatorModelManifest,
-};
+use crate::audio::model_manager::{read_manifest, validate_manifest_models, SeparatorModelEntry};
 use anyhow::{Context, Result};
 use flacenc::error::Verify;
 use hound::WavReader;

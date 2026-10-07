@@ -45,7 +45,7 @@ pub(crate) fn is_championvibe_manifest(path: &Path) -> bool {
         .is_some_and(|name| name.to_ascii_lowercase().ends_with(".cvmodel.json"))
 }
 
-fn manifest_format(path: &Path) -> Result<Option<String>> {
+pub(crate) fn manifest_format(path: &Path) -> Result<Option<String>> {
     let bytes =
         fs::read(path).with_context(|| format!("cannot read model manifest {}", path.display()))?;
     anyhow::ensure!(bytes.len() <= 64 * 1024, "model manifest is too large");
@@ -55,6 +55,15 @@ fn manifest_format(path: &Path) -> Result<Option<String>> {
         .get("format")
         .and_then(|format| format.as_str())
         .map(|format| format.to_owned()))
+}
+
+/// True when the ChampionVibe manifest at `path` is the installed Spleeter model descriptor.
+pub(crate) fn is_spleeter_descriptor(path: &Path) -> Result<bool> {
+    if !is_championvibe_manifest(path) {
+        return Ok(false);
+    }
+    let expected = crate::audio::model_loader::SPLEETER_DESCRIPTOR_FORMAT;
+    Ok(manifest_format(path)?.as_deref() == Some(expected))
 }
 
 impl SeparationEngine {
