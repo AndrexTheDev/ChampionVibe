@@ -101,6 +101,12 @@ the vocals stem so Whisper always transcribes an acapella.
 - `.github/workflows/model-pins.yml` runs it on every push, commits the report back to the branch, and
   generates/commits `Cargo.lock` so releases build from a locked dependency graph.
 - `reports/model-pin-verification.json` is the machine-readable evidence for the current pins.
+- `scripts/verify-cleared-model-policy.sh` is the offline gate that runs on every push in the
+  `compliance` CI job and inside `npm test`: it checks the tiers, pins, forbidden sources, bundled
+  weights, BYOM acknowledgement rules, the CC0 sampleboard bytes, the locale transparency wording and
+  the `--locked` build wiring without downloading anything.
+- `reports/rust-diagnostics.txt` is not part of the pipeline; the temporary diagnostics workflow that
+  produced it was retired once CI started checking `--all-targets` and failing on warnings itself.
 
 ## Licensing gates
 
