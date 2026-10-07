@@ -1,0 +1,104 @@
+{
+  "format": "championvibe-model-registry-v2",
+  "policy": {
+    "defaultSeparatorId": "spleeter-2stems-onnx",
+    "clearedTierOnly": true,
+    "statement": "Only artifacts whose code AND weights are distributed under a commercially usable license are listed in the standard package. Unclear-rights separators (HT-Demucs, KUIELab/UVR MDX mirrors, Open-Unmix) are never downloaded by ChampionVibe; users may import their own local files through BYOM and carry the responsibility for those weights.",
+    "forbiddenDownloadSources": [
+      "facebookresearch/demucs",
+      "adefossez/demucs",
+      "Politrees/UVR_resources",
+      "kuielab/mdx-net-submission",
+      "sigsep/open-unmix-pytorch",
+      "openunmix",
+      "TRvlvr/model_repo"
+    ],
+    "pinRule": "Every cleared artifact carries a 64-hex SHA-256 pin. A pin that has not been verified against the upstream bytes (PENDING_VERIFICATION) makes the artifact non-installable instead of silently trusted."
+  },
+  "artifacts": [
+    {
+      "id": "spleeter-2stems-onnx",
+      "tier": "cleared",
+      "kind": "spleeter-2stems",
+      "title": "Spleeter 2-stem (ONNX)",
+      "purpose": "Default local separator: acapella + instrumental, CPU, Windows + Android",
+      "repository": "k2-fsa/sherpa-onnx",
+      "releaseTag": "source-separation-models",
+      "asset": "sherpa-onnx-spleeter-2stems.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/sherpa-onnx-spleeter-2stems.tar.bz2",
+      "checksumSource": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/checksum.txt",
+      "sha256": "PENDING_VERIFICATION",
+      "sizeBytes": 74682545,
+      "maxBytes": 134217728,
+      "archive": "tar.bz2",
+      "archiveRoot": "sherpa-onnx-spleeter-2stems",
+      "members": ["vocals.onnx", "accompaniment.onnx"],
+      "approximateSize": "74.7 MB",
+      "sampleRate": 44100,
+      "weightsLicense": "MIT",
+      "weightsCopyright": "Copyright (c) 2019-present Deezer SA (Spleeter pretrained models)",
+      "conversionLicense": "Apache-2.0",
+      "conversionCopyright": "Copyright 2025 Xiaomi Corporation (sherpa-onnx ONNX export)",
+      "licenseSummary": "MIT weights (Deezer Spleeter 2stems) + Apache-2.0 conversion (sherpa-onnx)",
+      "upstreamStatement": "JOSS 5(50):2154, doi:10.21105/joss.02154, by the Spleeter authors: \"Spleeter source code and pre-trained models are available on github and distributed under a MIT license.\" The repository README licenses \"the code\" and ships the same MIT LICENSE file; retain the MIT notice with any redistribution.",
+      "rightsNote": "Cleared for the default package: MIT weights exported by an Apache-2.0 converter, no restricted training corpus (Spleeter was trained on Deezer's own internal dataset, unlike MUSDB-HQ-based separators). Residual review item: the Spleeter README names only \"the code\" while the authors' peer-reviewed paper names code and pretrained models; keep both statements in the bundled notices.",
+      "notices": [
+        "THIRD-PARTY-NOTICES.md#deezer-spleeter-mit",
+        "THIRD-PARTY-NOTICES.md#k2-fsa-sherpa-onnx-apache-2-0"
+      ]
+    },
+    {
+      "id": "spleeter-2stems-onnx-fp16",
+      "tier": "cleared",
+      "kind": "spleeter-2stems",
+      "title": "Spleeter 2-stem (ONNX, FP16, low memory)",
+      "purpose": "Optional lower-memory variant of the default separator for Android devices",
+      "repository": "k2-fsa/sherpa-onnx",
+      "releaseTag": "source-separation-models",
+      "asset": "sherpa-onnx-spleeter-2stems-fp16.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/sherpa-onnx-spleeter-2stems-fp16.tar.bz2",
+      "checksumSource": "https://github.com/k2-fsa/sherpa-onnx/releases/download/source-separation-models/checksum.txt",
+      "sha256": "PENDING_VERIFICATION",
+      "sizeBytes": 35271738,
+      "maxBytes": 134217728,
+      "archive": "tar.bz2",
+      "archiveRoot": "sherpa-onnx-spleeter-2stems-fp16",
+      "members": ["vocals.fp16.onnx", "accompaniment.fp16.onnx"],
+      "approximateSize": "35.3 MB",
+      "sampleRate": 44100,
+      "weightsLicense": "MIT",
+      "weightsCopyright": "Copyright (c) 2019-present Deezer SA (Spleeter pretrained models)",
+      "conversionLicense": "Apache-2.0",
+      "conversionCopyright": "Copyright 2025 Xiaomi Corporation (sherpa-onnx ONNX export)",
+      "licenseSummary": "MIT weights (Deezer Spleeter 2stems) + Apache-2.0 conversion (sherpa-onnx)",
+      "upstreamStatement": "Converted from the same MIT-licensed Spleeter 2stems checkpoint with onnxmltools float16 conversion (weights only; IO types stay float32).",
+      "rightsNote": "Same clearance as the FP32 default. FP16 storage can alter numerics slightly; the FP32 artifact stays the reference for verification.",
+      "notices": [
+        "THIRD-PARTY-NOTICES.md#deezer-spleeter-mit",
+        "THIRD-PARTY-NOTICES.md#k2-fsa-sherpa-onnx-apache-2-0"
+      ]
+    }
+  ],
+  "byom": {
+    "statement": "Bring Your Own Model (BYOM) never downloads and never redistributes weights. Dropped .onnx/.cvmodel.json files stay on the user's device, are validated for structure and tensor shapes only, and the app stores the local path plus the file hash in byom-models.json.",
+    "acceptedKinds": [
+      {
+        "kind": "spleeter-2stems",
+        "contract": "two Spleeter U-Net graphs (vocals + accompaniment): float32 input 'x' [2, splits, 512, 1024], float32 output 'y' of identical shape",
+        "requiresAcknowledgement": false
+      },
+      {
+        "kind": "htdemucs",
+        "contract": "float32 [1, 2, 343980] -> [1, 4, 2, 343980]",
+        "requiresAcknowledgement": true,
+        "rightsWarning": "The Demucs maintainers state that the pretrained weights are not covered by the repository's MIT license and that the models were trained on MUSDB-HQ plus additional data; commercial use of these weights is not cleared. Bring your own file and obtain your own rights."
+      },
+      {
+        "kind": "mdx-net",
+        "contract": "float32 [1, 4, 2048, 512] target graph, selected through a .cvmodel.json manifest",
+        "requiresAcknowledgement": true,
+        "rightsWarning": "MDX-Net mirrors (KUIELab Track A, UVR) have unclear model and training-data provenance. Bring your own file and obtain your own rights."
+      }
+    ]
+  }
+}

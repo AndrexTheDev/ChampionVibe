@@ -1,0 +1,95 @@
+name: Model pins and lockfile
+
+on:
+  push:
+    paths:
+      - "src-tauri/assets/model-registry.json"
+      - "scripts/verify-model-pins.sh"
+      - ".github/workflows/model-pins.yml"
+      - "Cargo.toml"
+      - "**/Cargo.toml"
+  pull_request:
+    paths:
+      - "src-tauri/assets/model-registry.json"
+      - "scripts/verify-model-pins.sh"
+      - ".github/workflows/model-pins.yml"
+      - "Cargo.toml"
+      - "**/Cargo.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lockfile:
+    name: Generate the pinned Cargo.lock
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve every workspace dependency version
+        run: cargo generate-lockfile --verbose
+
+      - name: Summarize the resolved lockfile
+        run: |
+          echo "resolved packages: $(grep -c '^\[\[package\]\]' Cargo.lock)"
+          sha256sum Cargo.lock
+          if [[ -f Cargo.lock ]] && git ls-files --error-unmatch Cargo.lock >/dev/null 2>&1; then
+            echo "Cargo.lock is tracked; builds are reproducible with --locked."
+          else
+            echo "Cargo.lock is not tracked yet. Download the cargo-lockfile artifact and commit it,"
+            echo "then CI and releases can build with --locked."
+          fi
+
+      - name: Upload the generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lockfile
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 30
+
+  model-pins:
+    name: Verify pinned model downloads
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Verify every pinned artifact against its SHA-256
+        run: scripts/verify-model-pins.sh
+
+      - name: Reject separator downloads with unclear rights
+        run: |
+          python3 - <<'PY'
+          import json
+          import sys
+
+          with open("src-tauri/assets/model-registry.json", "r", encoding="utf-8") as handle:
+              registry = json.load(handle)
+
+          forbidden = [source.lower() for source in registry["policy"]["forbiddenDownloadSources"]]
+          offenders = []
+          for artifact in registry["artifacts"]:
+              url = artifact["url"].lower()
+              for source in forbidden:
+                  if source in url:
+                      offenders.append(f"{artifact['id']} -> {source}")
+
+          if offenders:
+              print("Uncleared separator sources are downloadable from the standard package:", file=sys.stderr)
+              for offender in offenders:
+                  print(f"  {offender}", file=sys.stderr)
+              sys.exit(1)
+
+          print("No uncleared separator source is downloadable from the standard package.")
+          PY
