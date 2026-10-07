@@ -91,6 +91,29 @@ jobs:
           npm ci
           npm run build
 
+      # TEMPORARY diagnostics (remove before merge): raw job logs are not always retrievable in
+      # this environment, so the rustfmt diff and the compiler messages are re-emitted as check
+      # annotations, which stay readable through the checks API.
+      - name: Diagnose rustfmt drift
+        continue-on-error: true
+        run: |
+          set +e
+          cargo fmt --all -- --check > /tmp/cv-rustfmt.log 2>&1
+          grep -E '^Diff in|^[+-]' /tmp/cv-rustfmt.log | head -24 | while IFS= read -r line; do
+            printf '::warning title=cv-fmt::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r//g')"
+          done
+
+      - name: Diagnose Rust compiler messages
+        continue-on-error: true
+        run: |
+          set +e
+          cargo check --workspace --all-targets --locked --message-format=short \
+            > /tmp/cv-rust-diagnostics.log 2>&1
+          grep -E '(:| ) ?(error|warning)(\[E?[0-9]+\])?:' /tmp/cv-rust-diagnostics.log \
+            | head -24 | while IFS= read -r line; do
+            printf '::error title=cv-rustc::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r//g')"
+          done
+
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
@@ -180,7 +203,19 @@ jobs:
 
       - name: Build Windows MSI and NSIS installer
         if: matrix.platform == 'windows'
-        run: npm run tauri -- build --ci --bundles msi,nsis
+        run: |
+          npm run tauri -- build --ci --bundles msi,nsis 2>&1 | Tee-Object -FilePath cv-package.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Diagnose Windows packaging failure
+        if: failure() && matrix.platform == 'windows'
+        run: |
+          if (Test-Path cv-package.log) {
+            Get-Content cv-package.log |
+              Where-Object { $_ -match '(^|\s)error(\[E?[0-9]+\])?:' } |
+              Select-Object -First 30 |
+              ForEach-Object { Write-Output ("::error title=cv-package::{0}" -f ($_ -replace '%','%25')) }
+          }
 
       - name: Initialize Tauri Android project
         if: matrix.platform == 'android'
@@ -188,7 +223,18 @@ jobs:
 
       - name: Build Android arm64 APK
         if: matrix.platform == 'android'
-        run: npm run tauri -- android build --ci --apk --target aarch64
+        run: |
+          set -o pipefail
+          npm run tauri -- android build --ci --apk --target aarch64 2>&1 | tee cv-package.log
+
+      - name: Diagnose Android packaging failure
+        if: failure() && matrix.platform == 'android'
+        shell: bash
+        run: |
+          [ -f cv-package.log ] || exit 0
+          grep -E '(^| ) ?error(\[E?[0-9]+\])?:' cv-package.log | head -30 | while IFS= read -r line; do
+            printf '::error title=cv-package::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r//g')"
+          done
 
       - name: Collect Windows installers
         if: matrix.platform == 'windows'
