@@ -20,6 +20,22 @@ publishes a checksum file that lists the artifact, that value is cross-checked t
 `sherpa-onnx-spleeter-2stems*` archives k2-fsa's `checksum.txt` does not list them, so those pins rest
 on the byte-exact CI download plus the recorded size, timestamp and run reference.
 
+## Warning-free workspace
+
+The Rust job runs `cargo fmt --all -- --check` and
+`cargo check --workspace --all-targets --message-format=short`, and it **fails on any compiler
+warning**. The workspace is kept at zero warnings under `--all-targets`, which compiles the library,
+the binaries and the test code, so a dead helper, an unused binding or a lost integration fails the
+build instead of silently accumulating. Platform-specific code (Android) and feature-specific code
+(`local-piper-tts`) is gated with `#[cfg]`/`#[cfg_attr]`, so the host check stays meaningful.
+
+Reproduce locally:
+
+```sh
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --message-format=short
+```
+
 ## Not verified by CI (release tasks)
 
 - Real-model inference on device: Spleeter separation quality, Whisper keyword timing and Kokoro WAV

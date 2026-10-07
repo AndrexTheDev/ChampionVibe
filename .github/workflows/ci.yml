@@ -82,8 +82,17 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
-      - name: Check the complete Rust workspace
-        run: cargo check --workspace
+      # Every target (library, binary and test code) is checked, and a warning fails the job: the
+      # workspace is kept warning-free so that a lost integration or a stale binding stays visible.
+      # Reproduce locally with `cargo check --workspace --all-targets`.
+      - name: Check the complete Rust workspace without warnings
+        run: |
+          set -o pipefail
+          cargo check --workspace --all-targets --message-format=short 2>&1 | tee /tmp/rust-check.log
+          if grep -q ': warning' /tmp/rust-check.log; then
+            echo "::error title=Compiler warnings::keep the workspace warning-free; the warnings are listed above"
+            exit 1
+          fi
 
       - name: Test the complete Rust workspace
         run: cargo test --workspace
