@@ -539,9 +539,9 @@ impl ModelManager {
             .first()
             .map(|(_, _, signature)| signature.frames)
             .unwrap_or(MDX_FRAMES);
-        let shared_dimensions = sources.iter().all(|(_, _, signature)| {
-            signature.frames == frames && signature.dim_f == MDX_DIM_F
-        });
+        let shared_dimensions = sources
+            .iter()
+            .all(|(_, _, signature)| signature.frames == frames && signature.dim_f == MDX_DIM_F);
         anyhow::ensure!(
             shared_dimensions,
             "all custom MDX-Net models must share float32 [1, 4, 2048, T] tensor dimensions"

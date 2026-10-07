@@ -216,7 +216,10 @@ pub(crate) fn default_separator_id() -> &'static str {
 }
 
 pub(crate) fn artifact(id: &str) -> Option<&'static RegistryArtifact> {
-    registry().artifacts.iter().find(|artifact| artifact.id == id)
+    registry()
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.id == id)
 }
 
 fn is_pinned(artifact: &RegistryArtifact) -> bool {
@@ -264,8 +267,7 @@ impl ModelLoader {
                     sha256: artifact.sha256.clone(),
                     sha256_verified: is_pinned(artifact),
                     installed: installed_path.is_some(),
-                    installed_path: installed_path
-                        .map(|path| path.to_string_lossy().into_owned()),
+                    installed_path: installed_path.map(|path| path.to_string_lossy().into_owned()),
                     rights_note: artifact.rights_note.clone(),
                     notices: artifact.notices.clone(),
                 }
@@ -352,16 +354,16 @@ impl ModelLoader {
                 .await
                 .with_context(|| format!("could not download {}", artifact.asset))?
                 .error_for_status()
-                .with_context(|| format!("model source returned an error for {}", artifact.asset))?;
+                .with_context(|| {
+                    format!("model source returned an error for {}", artifact.asset)
+                })?;
             let final_url = response.url().clone();
             anyhow::ensure!(
                 final_url.scheme() == "https",
                 "model download redirected away from HTTPS"
             );
             anyhow::ensure!(
-                final_url
-                    .host_str()
-                    .is_some_and(trusted_download_host),
+                final_url.host_str().is_some_and(trusted_download_host),
                 "model download redirected to an untrusted host"
             );
             let mut file = File::create(&temporary)
@@ -399,7 +401,10 @@ impl ModelLoader {
                 downloaded
             );
             fs::rename(&temporary, path).with_context(|| {
-                format!("could not install the verified archive at {}", path.display())
+                format!(
+                    "could not install the verified archive at {}",
+                    path.display()
+                )
             })?;
             Ok(hash)
         }
@@ -434,7 +439,11 @@ impl ModelLoader {
             members,
             extracted
                 .iter()
-                .map(|path| path.file_name().unwrap_or_default().to_string_lossy().into_owned())
+                .map(|path| path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned())
                 .collect::<Vec<_>>()
         );
 
@@ -504,14 +513,14 @@ impl ModelLoader {
         anyhow::ensure!(
             !accepted.requires_acknowledgement || acknowledged,
             "{}",
-            accepted
-                .rights_warning
-                .clone()
-                .unwrap_or_else(|| {
-                    "this model kind needs an explicit rights acknowledgement".to_owned()
-                })
+            accepted.rights_warning.clone().unwrap_or_else(|| {
+                "this model kind needs an explicit rights acknowledgement".to_owned()
+            })
         );
-        anyhow::ensure!(!path_text.trim().is_empty(), "choose a local model file first");
+        anyhow::ensure!(
+            !path_text.trim().is_empty(),
+            "choose a local model file first"
+        );
         anyhow::ensure!(path_text.len() <= 4_096, "model path is too long");
         let supplied = PathBuf::from(path_text.trim());
         let path = fs::canonicalize(&supplied)
@@ -580,8 +589,7 @@ impl ModelLoader {
 
     /// Validates a local file *without* storing it, so the UI can preview a dropped model.
     pub fn validate_byom_file(&self, path_text: &str, kind: &str) -> Result<ByomContractReport> {
-        accepted_kind(kind)
-            .with_context(|| format!("unknown BYOM kind {kind}"))?;
+        accepted_kind(kind).with_context(|| format!("unknown BYOM kind {kind}"))?;
         let supplied = PathBuf::from(path_text.trim());
         let path = fs::canonicalize(&supplied)
             .with_context(|| format!("could not resolve {}", supplied.display()))?;
@@ -815,8 +823,9 @@ fn inspect_descriptor_contract(path: &Path, kind: &str) -> Result<ByomContractRe
     Ok(ByomContractReport {
         valid: true,
         kind: kind.to_owned(),
-        contract: "two Spleeter U-Net graphs (vocals + accompaniment), float32 [2, splits, 512, 1024]"
-            .to_owned(),
+        contract:
+            "two Spleeter U-Net graphs (vocals + accompaniment), float32 [2, splits, 512, 1024]"
+                .to_owned(),
         details: format!(
             "descriptor {} with {} graph(s) and per-file SHA-256 verification",
             descriptor.id,
@@ -860,7 +869,10 @@ fn load_byom_store(root: &Path) -> Result<ByomStore> {
     );
     let store: ByomStore = serde_json::from_slice(&bytes)
         .with_context(|| format!("invalid BYOM store {}", path.display()))?;
-    anyhow::ensure!(store.format == BYOM_STORE_FORMAT, "unsupported BYOM store format");
+    anyhow::ensure!(
+        store.format == BYOM_STORE_FORMAT,
+        "unsupported BYOM store format"
+    );
     Ok(store)
 }
 
@@ -895,7 +907,10 @@ pub(crate) fn extract_members<R: Read>(
     let mut archive = tar::Archive::new(decoder);
     let mut extracted: Vec<PathBuf> = Vec::new();
     let mut total = 0_u64;
-    for entry in archive.entries().context("model archive is not a readable tar.bz2")? {
+    for entry in archive
+        .entries()
+        .context("model archive is not a readable tar.bz2")?
+    {
         let mut entry = entry.context("model archive contains an unreadable entry")?;
         if !entry.header().entry_type().is_file() {
             continue;
@@ -1033,11 +1048,18 @@ mod tests {
                 artifact.id
             );
             assert!(
-                artifact.weights_license.to_ascii_lowercase().contains("mit"),
+                artifact
+                    .weights_license
+                    .to_ascii_lowercase()
+                    .contains("mit"),
                 "{} must declare MIT weights to stay in the cleared tier",
                 artifact.id
             );
-            assert!(!artifact.notices.is_empty(), "{} has no notices", artifact.id);
+            assert!(
+                !artifact.notices.is_empty(),
+                "{} has no notices",
+                artifact.id
+            );
             assert_eq!(artifact.archive, "tar.bz2");
             assert_eq!(artifact.members.len(), 2);
         }
@@ -1074,7 +1096,10 @@ mod tests {
         assert!(!spleeter_input_shape_matches(&[2, 1, 1024, 512]));
         assert!(spleeter_output_shape_matches(&[2, -1, 512, 1024]));
 
-        assert!(htdemucs_shape_matches(&[1, 2, 343_980], &[1, 4, 2, 343_980]));
+        assert!(htdemucs_shape_matches(
+            &[1, 2, 343_980],
+            &[1, 4, 2, 343_980]
+        ));
         assert!(!htdemucs_shape_matches(&[1, 2, 343_980], &[1, 4, 2, 1]));
 
         assert!(mdx_shape_matches(&[1, 4, 2048, 512], &[1, 4, 2048, 512]));
@@ -1132,9 +1157,18 @@ mod tests {
             let mut builder = tar::Builder::new(encoder);
             let mut header = tar::Header::new_gnu();
             for (name, payload) in [
-                ("sherpa-onnx-spleeter-2stems/vocals.onnx", b"vocals".to_vec()),
-                ("sherpa-onnx-spleeter-2stems/accompaniment.onnx", b"accompaniment".to_vec()),
-                ("sherpa-onnx-spleeter-2stems/readme.txt", b"ignored".to_vec()),
+                (
+                    "sherpa-onnx-spleeter-2stems/vocals.onnx",
+                    b"vocals".to_vec(),
+                ),
+                (
+                    "sherpa-onnx-spleeter-2stems/accompaniment.onnx",
+                    b"accompaniment".to_vec(),
+                ),
+                (
+                    "sherpa-onnx-spleeter-2stems/readme.txt",
+                    b"ignored".to_vec(),
+                ),
             ] {
                 header.set_size(payload.len() as u64);
                 header.set_mode(0o644);
@@ -1158,13 +1192,14 @@ mod tests {
         .expect("extract members");
         assert_eq!(extracted.len(), 2);
         assert_eq!(
-            extracted[0]
-                .file_name()
-                .and_then(|value| value.to_str()),
+            extracted[0].file_name().and_then(|value| value.to_str()),
             Some("vocals.onnx")
         );
         assert!(!root.join("readme.txt").exists());
-        assert_eq!(fs::read(&extracted[1]).expect("read member"), b"accompaniment");
+        assert_eq!(
+            fs::read(&extracted[1]).expect("read member"),
+            b"accompaniment"
+        );
         fs::remove_dir_all(&root).ok();
     }
 
@@ -1185,7 +1220,10 @@ mod tests {
             stems: vec!["acapella".to_owned(), "instrumental".to_owned()],
             models: HashMap::from([
                 ("vocals".to_owned(), "/tmp/vocals.onnx".to_owned()),
-                ("accompaniment".to_owned(), "/tmp/accompaniment.onnx".to_owned()),
+                (
+                    "accompaniment".to_owned(),
+                    "/tmp/accompaniment.onnx".to_owned(),
+                ),
             ]),
             sha256: HashMap::new(),
             installed_at_unix: 7,
@@ -1195,8 +1233,11 @@ mod tests {
             source_sha256: "a".repeat(64),
         };
         let path = root.join("spleeter-2stems.cvmodel.json");
-        write_json_atomic(&path, &serde_json::to_vec_pretty(&descriptor).expect("serialize"))
-            .expect("write descriptor");
+        write_json_atomic(
+            &path,
+            &serde_json::to_vec_pretty(&descriptor).expect("serialize"),
+        )
+        .expect("write descriptor");
         let loaded = read_spleeter_descriptor(&path).expect("read descriptor");
         assert_eq!(loaded.frames, SPLEETER_FRAMES);
         assert_eq!(loaded.bins, SPLEETER_BINS);

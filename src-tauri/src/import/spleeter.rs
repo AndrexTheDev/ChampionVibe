@@ -19,7 +19,10 @@
 
 use anyhow::{Context, Result};
 use hound::{SampleFormat, WavReader};
-use ort::{session::Session, value::{Tensor, TensorElementType, ValueType}};
+use ort::{
+    session::Session,
+    value::{Tensor, TensorElementType, ValueType},
+};
 use rustfft::{num_complex::Complex, Fft, FftPlanner};
 use std::{
     fs::{self, File},
@@ -101,16 +104,10 @@ impl SpleeterSeparator {
         }
 
         let threads = threads.clamp(1, 8);
-        let (mut vocals, backend) = super::separator::create_session(
-            Path::new(vocals_path),
-            threads,
-            use_directml,
-        )?;
-        let (mut accompaniment, accompaniment_backend) = super::separator::create_session(
-            Path::new(accompaniment_path),
-            threads,
-            use_directml,
-        )?;
+        let (mut vocals, backend) =
+            super::separator::create_session(Path::new(vocals_path), threads, use_directml)?;
+        let (mut accompaniment, accompaniment_backend) =
+            super::separator::create_session(Path::new(accompaniment_path), threads, use_directml)?;
         anyhow::ensure!(
             backend == accompaniment_backend,
             "both Spleeter graphs must run on the same execution provider"
@@ -288,8 +285,9 @@ impl SpleeterSeparator {
             )?;
 
             for frame in 0..chunk_frames {
-                for (stem_index, values) in
-                    [&vocals_values, &accompaniment_values].into_iter().enumerate()
+                for (stem_index, values) in [&vocals_values, &accompaniment_values]
+                    .into_iter()
+                    .enumerate()
                 {
                     for channel in 0..2 {
                         let channel_plane = channel * plane;
@@ -300,8 +298,7 @@ impl SpleeterSeparator {
                             let accompaniment = accompaniment_values[slot];
                             let vocals_energy = vocals * vocals;
                             let accompaniment_energy = accompaniment * accompaniment;
-                            let total =
-                                vocals_energy + accompaniment_energy + SPLEETER_EPSILON;
+                            let total = vocals_energy + accompaniment_energy + SPLEETER_EPSILON;
                             let own = if stem_index == 0 {
                                 vocals_energy
                             } else {
@@ -317,10 +314,7 @@ impl SpleeterSeparator {
                             } else {
                                 0.0
                             };
-                            let value = Complex::new(
-                                real[slot] * mask,
-                                imag[slot] * mask,
-                            );
+                            let value = Complex::new(real[slot] * mask, imag[slot] * mask);
                             spectrum[bin] = value;
                             match bin {
                                 0 => {}
@@ -443,7 +437,10 @@ fn validate_spleeter_session(session: &Session) -> Result<()> {
         session.inputs().len() == 1 && session.outputs().len() == 1,
         "Spleeter graphs must have exactly one input and one output tensor"
     );
-    let input = session.inputs().first().context("Spleeter graph has no input")?;
+    let input = session
+        .inputs()
+        .first()
+        .context("Spleeter graph has no input")?;
     let output = session
         .outputs()
         .first()
