@@ -1,0 +1,44 @@
+version: 2.1
+
+jobs:
+  build-android:
+    docker:
+      - image: cimg/android:2024.04 # Enthält Java und Android SDK
+    resource_class: medium
+    steps:
+      - checkout
+
+      # 1. Node.js (für Vite / Frontend) installieren
+      - run:
+          name: Node.js installieren
+          command: |
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+
+      # 2. Rust & Android-Architektur-Targets installieren
+      - run:
+          name: Rust & Android Targets installieren
+          command: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            echo 'source "$HOME/.cargo/env"' >> $BASH_ENV
+            source "$HOME/.cargo/env"
+            rustup target add aarch64-linux-android armv7-linux-android x86_64-linux-android i686-linux-android
+
+      # 3. Node-Abhängigkeiten installieren
+      - run:
+          name: NPM Packages installieren
+          command: npm install
+
+      # 4. Tauri Android Build ausführen
+      - run:
+          name: Tauri Android Build starten
+          command: |
+            source "$HOME/.cargo/env"
+            # Nutze --debug für den Test (für Release benötigst du später Signing-Keys)
+            npx tauri android build --debug
+
+workflows:
+  version: 2
+  android-pipeline:
+    jobs:
+      - build-android
