@@ -1,0 +1,19 @@
+[package]
+name = "tauri-plugin-device-identity"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Native Android identifier bridge for ChampionVibe"
+links = "tauri-plugin-device-identity"
+build = "build.rs"
+
+[lib]
+name = "tauri_plugin_device_identity"
+crate-type = ["lib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", default-features = false }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

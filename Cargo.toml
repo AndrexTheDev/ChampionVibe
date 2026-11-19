@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/licensing-core",
+  "crates/device-identity",
+  "src-tauri",
+  "license-issuer",
+]
+default-members = ["src-tauri"]

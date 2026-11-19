@@ -1,0 +1,22 @@
+[package]
+name = "championvibe-issuer"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Self-hostable payment-verification and license-issuing service"
+
+[dependencies]
+anyhow = "1"
+axum = "0.7"
+championvibe-licensing-core = { path = "../crates/licensing-core" }
+chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+# Envelope encryption for ISSUER_SECRET_KEY: ChaCha20-Poly1305 with a PBKDF2-HMAC-SHA256 key.
+# The same ring release is already compiled through reqwest/rustls, including the Windows MSVC and
+# Android targets, so the issuer adds no new native build requirement.
+ring = { version = "0.17", features = ["alloc", "std"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
+uuid = { version = "1", features = ["v4"] }

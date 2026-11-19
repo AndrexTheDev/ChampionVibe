@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1017" />
+    <meta name="description" content="ChampionVibe – performante Audio-Bibliothek mit lokaler Lizenzprüfung." />
+    <title>ChampionVibe</title>
+  </head>
+  <body>
+    <div class="app-shell" id="app-shell" data-view-mode="player" data-tools-open="false">
+      <aside class="sidebar">
+        <a class="brand" href="#home" aria-label="ChampionVibe Startseite">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          <span class="brand-name">champion<span>vibe</span></span>
+        </a>
+
+        <div class="workspace-label">WORKSPACE</div>
+        <nav class="navigation" aria-label="Hauptnavigation">
+          <a class="nav-link active" href="#library" data-app-view="player"><span class="nav-icon">▦</span><span>Player &amp; Bibliothek</span><span class="nav-count">—</span></a>
+          <button class="nav-link" type="button" data-open-license-modal><span class="nav-icon">◈</span><span>Lizenzierung</span></button>
+          <button class="nav-link" type="button" data-toggle-tools><span class="nav-icon">⌘</span><span>Library-Tools</span></button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="local-card">
+            <div class="local-indicator"><span></span> LOKAL</div>
+            <p>Deine Track-Metadaten bleiben auf diesem Gerät.</p>
+            <div class="local-meta"><span>SQLite</span><span>WAL aktiv</span></div>
+          </div>
+          <div class="sidebar-foot"><span class="pulse-dot"></span> ChampionVibe <span class="version">v0.1.0</span></div>
+        </div>
+      </aside>
+
+      <main class="main-content" id="home">
+        <header class="topbar">
+          <div class="breadcrumb"><span>Workspace</span><i>/</i><strong>Übersicht</strong></div>
+          <div class="topbar-actions">
+            <button class="mode-button info-trigger" id="open-info-modal" type="button" aria-haspopup="dialog"><span class="info-trigger-full">Hilfe &amp; Info</span><span class="info-trigger-short" aria-hidden="true">?</span></button>
+            <label class="language-control"><span class="sr-only">Sprache</span><select id="language-select" aria-label="Sprache wählen" title="Sprache wählen"><option value="de">DE</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select></label>
+            <button class="mode-button" id="toggle-tools" type="button" aria-expanded="false" aria-label="Library-Tools" title="Library-Tools">Library-Tools</button>
+            <button class="mode-button mode-button-primary" id="toggle-performance" type="button" aria-pressed="false">Performance Mode</button>
+            <span class="environment-pill" id="environment-pill"><span></span> Tauri-App</span>
+            <button class="icon-button" id="refresh-status" type="button" aria-label="Status aktualisieren" title="Status aktualisieren">↻</button>
+            <div class="avatar" aria-label="Lokales Profil">CV</div>
+          </div>
+        </header>
+
+        <section class="page-heading" id="library">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span> AUDIO WORKSPACE</div>
+            <h1>Dein Sound. <span>Dein Flow.</span></h1>
+            <p class="page-subtitle">Verwalte deine lokale Musiksammlung und prüfe deinen Lizenzstatus.</p>
+          </div>
+          <div class="date-chip"><span class="date-icon">◷</span><span id="today-label">Offline-first · lokal gespeichert</span></div>
+        </section>
+
+        <section class="status-banner" id="license-status" aria-live="polite">
+          <div class="status-symbol" id="status-symbol"><span>⌁</span></div>
+          <div class="status-copy">
+            <div class="status-title-row"><h2 id="status-title">Demo-Modus</h2><span class="status-tag" id="status-tag">AKTIV</span></div>
+            <p id="status-message">Lizenzstatus wird geladen …</p>
+          </div>
+          <div class="status-expiry" id="status-expiry"><span>FUNKTIONEN</span><strong>Bibliothek verfügbar</strong></div>
+          <button type="button" class="button button-dark" id="open-license-modal">Lizenz aktivieren <span>↗</span></button>
+        </section>
+
+        <div class="content-grid">
+          <aside class="right-column">
+            <section class="panel device-panel" id="device">
+              <div class="panel-header compact">
+                <div><div class="panel-kicker">GERÄTEBINDUNG</div><h2>Dieses Gerät</h2></div>
+                <div class="device-icon">⌘</div>
+              </div>
+              <p class="device-description">Eine gültige Lizenz ist an diesen app-spezifischen Geräte-Fingerprint gebunden.</p>
+              <div class="fingerprint-row"><div class="fingerprint-icon">◉</div><div class="fingerprint-copy"><span>DEVICE FINGERPRINT</span><code id="device-fingerprint">wird geladen …</code></div><button id="copy-binding" class="copy-button" type="button" title="Fingerprint kopieren">⧉</button></div>
+              <div class="security-note"><span class="shield-icon">◇</span><span>Nur der gehashte Fingerprint wird an den Issuer übertragen. Roh-IDs werden nicht gespeichert.</span></div>
+              <div class="device-footer"><span><i></i> HARDWARE-BINDING</span><span id="binding-state">PRÜFUNG …</span></div>
+            </section>
+
+            <section class="panel player-panel" aria-label="Native Audio-Player">
+              <div class="collection-heading">
+                <div><div class="panel-kicker">NATIVE AUDIO ENGINE</div><h2>Native Player</h2></div>
+                <span class="audio-backend-badge">RUST · CPAL</span>
+              </div>
+              <div class="now-playing" id="now-playing-card">
+                <div class="player-cover" id="player-cover" aria-hidden="true">♫</div>
+                <div class="player-track-copy"><strong id="audio-track-title">Wähle einen Track aus deiner Bibliothek.</strong><span id="audio-track-artist">Lokale Sammlung · keine Cloud-Wiedergabe</span><span class="auto-gain-indicator" id="auto-gain-applied" aria-live="polite">Auto-Gain · LUFS unavailable</span></div>
+                <span class="demo-stem-indicator" id="demo-stem-indicator">DEMO · 4 STEMS</span>
+              </div>
+              <div class="stem-switches" id="stem-switches" role="group" aria-label="Stem-Schalter">
+                <button class="stem-switch active" type="button" data-stem-index="0" aria-pressed="true" aria-label="Vocals"><span class="stem-switch-dot" aria-hidden="true"></span><span class="stem-switch-label">Vocals</span></button>
+                <button class="stem-switch active" type="button" data-stem-index="1" aria-pressed="true" aria-label="Instrumental"><span class="stem-switch-dot" aria-hidden="true"></span><span class="stem-switch-label">Instrumental</span></button>
+                <button class="stem-switch active" type="button" data-stem-index="2" aria-pressed="true" aria-label="Bass"><span class="stem-switch-dot" aria-hidden="true"></span><span class="stem-switch-label">Bass</span></button>
+                <button class="stem-switch active" type="button" data-stem-index="3" aria-pressed="true" aria-label="Drums"><span class="stem-switch-dot" aria-hidden="true"></span><span class="stem-switch-label">Drums</span></button>
+              </div>
+              <div class="track-visualization" id="track-visualization" data-waveform-mode="progress" aria-label="Trackfortschritt">
+                <canvas id="waveform-canvas" aria-hidden="true"></canvas>
+                <div class="progress-only"><span id="progress-only-fill"></span></div>
+                <span class="waveform-playhead" id="waveform-playhead" aria-hidden="true"></span>
+              </div>
+              <div class="track-time-row"><span id="track-time-current">0:00</span><span id="track-time-total">0:00</span></div>
+              <details class="player-settings">
+                <summary>Wiedergabe-Optionen</summary>
+                <label for="waveform-mode">Waveform &amp; Android-Leistung
+                  <select id="waveform-mode">
+                    <option value="canvas">On-demand Canvas</option>
+                    <option value="progress">Einfache Fortschrittsleiste</option>
+                    <option value="off">Waveform aus</option>
+                  </select>
+                </label>
+                <small id="waveform-mode-note">SQLite-Peaks und Beat-Grid werden erst nach Play lokal geladen.</small>
+                <div class="audio-setting-row">
+                  <label class="setting-toggle" for="auto-gain-enabled"><input id="auto-gain-enabled" type="checkbox" checked /><span>Auto-Gain</span></label>
+                  <label class="setting-select" for="auto-gain-target"><span>R128 target</span>
+                    <select id="auto-gain-target">
+                      <option value="off">Off</option>
+                      <option value="-14">−14 LUFS</option>
+                      <option value="-16">−16 LUFS</option>
+                    </select>
+                  </label>
+                </div>
+                <output id="auto-gain-target-value" class="setting-readout">−14 LUFS</output>
+                <small>Target is applied on both decks with an 8 ms gain ramp. The player shows the estimated per-track offset.</small>
+                <label class="setting-toggle pitch-lock-toggle" for="pitch-lock-enabled"><input id="pitch-lock-enabled" type="checkbox" checked /><span>Pitch-Lock / WSOLA</span></label>
+                <output id="pitch-lock-mode" class="setting-readout">Pitch-locked WSOLA</output>
+                <small>WSOLA preserves pitch for tempo changes; Varispeed changes pitch with tempo. The choice applies when a deck next loads.</small>
+              </details>
+              <div class="transport-controls" role="group" aria-label="Wiedergabe">
+                <button id="audio-play" type="button" aria-label="Wiedergabe starten" title="Wiedergabe starten">▶</button>
+                <button id="audio-pause" type="button" aria-label="Wiedergabe pausieren" title="Pausieren">Ⅱ</button>
+                <button id="audio-stop" type="button" aria-label="Wiedergabe stoppen" title="Stoppen">■</button>
+                <button id="audio-next" type="button" aria-label="Nächsten Track starten" title="Nächster Track">⏭</button>
+                <label class="record-format-control" for="recording-format">EXPORT
+                  <select id="recording-format" aria-label="Master-Aufnahmeformat">
+                    <option value="wavPcm16">WAV 16-bit · Lossless Master</option>
+                    <option value="wavPcm24">WAV 24-bit · Lossless Master</option>
+                    <option value="flac">FLAC 16-bit · Lossless Compact</option>
+                    <option value="mp3">MP3 · 320 kbps</option>
+                    <option value="oggVorbis">OGG/Vorbis · Mobile VBR</option>
+                    <option value="m4aAac">M4A/AAC · 160 kbps</option>
+                  </select>
+                </label>
+                <button class="record-button" id="record-button" type="button" aria-label="Aufnahme starten">● <span>Record</span></button>
+                <span class="audio-status" id="audio-engine-status" aria-live="polite">Native Ausgabe bereit</span>
+              </div>
+              <div class="intensity-control player-intensity-control">
+                <div class="intensity-topline">
+                  <label class="intensity-toggle" for="intensity-override-toggle"><input id="intensity-override-toggle" type="checkbox" /><span>KI live überschreiben</span></label>
+                  <output id="intensity-readout" for="intensity-slider">2 · Club / Hype</output>
+                </div>
+                <input id="intensity-slider" type="range" min="1" max="4" step="1" value="2" aria-label="Mix-Intensität von Roots bis Clash Max" disabled />
+                <div class="intensity-scale" aria-hidden="true"><span>1 · ROOTS</span><span>2 · CLUB</span><span>3 · CLASH</span><span>4 · MAX</span></div>
+                <p id="intensity-status" class="intensity-status">KI entscheidet automatisch. Override bleibt aus.</p>
+              </div>
+              <section class="performance-controls" id="performance-controls" aria-label="Live Performance Overrides">
+                <div class="performance-heading"><div><span>LIVE CONTROL</span><strong>Performance overrides</strong></div><span class="performance-live-dot">READY</span></div>
+                <div class="performance-action-grid">
+                  <button class="performance-action force-next-action" id="force-next-track" type="button" disabled><span class="action-symbol">▶</span><span><strong>Force Next Track</strong><small>Übergang sofort auslösen</small></span></button>
+                  <button class="performance-action rewind-action" id="pull-up-rewind" type="button" disabled><span class="action-symbol">↶</span><span><strong>Pull Up / Rewind</strong><small>Vinyl-FX · zurück zu Beat eins</small></span></button>
+                  <button class="performance-action sample-action" id="drop-sample" type="button" disabled><span class="action-symbol">✳</span><span><strong>Drop Sample</strong><small>Auswahl im Sample-Deck abfeuern</small></span></button>
+                  <button class="performance-action shoutout-action" id="dj-shoutout" type="button" disabled><span class="action-symbol">🎙</span><span><strong>DJ Shoutout</strong><small>Lokalen Dubplate-Take abfeuern</small></span></button>
+                </div>
+                <div class="performance-sample-row">
+                  <label for="performance-sample">SAMPLE<select id="performance-sample"></select></label>
+                  <label for="performance-quantization">GRID<select id="performance-quantization"><option value="beat">Beat</option><option value="bar">Takt</option><option value="off">Sofort</option></select></label>
+                </div>
+              </section>
+              <section class="mix-engine-block" aria-label="Automatische Rust-Mix-Engine">
+                <div class="sound-block-heading"><span>LOCAL MIX ENGINE · 2 DECKS</span><span class="tts-state">RUST</span></div>
+                <div class="mix-engine-controls">
+                  <label for="mix-preset">PRESET
+                    <select id="mix-preset">
+                      <option value="smoothSelector">P1 · Smooth Selector</option>
+                      <option value="clubHype">P2 · Club / Hype</option>
+                      <option value="aggressiveClash">P3 · Aggressiv / Clash</option>
+                      <option value="freestyleMaestro" selected>P4 · Freestyle Maestro</option>
+                    </select>
+                  </label>
+                  <button id="mix-start" type="button">▶ RUN MIX</button>
+                  <button id="mix-stop" type="button" disabled>■ STOP</button>
+                </div>
+                <div class="mix-engine-status" id="mix-engine-status" aria-live="polite">Wähle einen Library-Track mit lokal verfügbaren Stems, dann Run Mix.</div>
+              </section>
+              <div class="audio-dsp-controls">
+                <div class="kill-controls" role="group" aria-label="Isolator-Kill-Switches">
+                  <button class="kill-button" type="button" data-kill="killBass" aria-pressed="false">BASS KILL</button>
+                  <button class="kill-button" type="button" data-kill="killMid" aria-pressed="false">MID KILL</button>
+                  <button class="kill-button" type="button" data-kill="killHigh" aria-pressed="false">HIGH KILL</button>
+                </div>
+                <label class="effect-control" for="tape-mix"><span>TAPE DELAY</span><input id="tape-mix" type="range" min="0" max="100" value="0" /><output id="tape-mix-value">0%</output></label>
+                <label class="effect-control" for="spring-mix"><span>SPRING REVERB</span><input id="spring-mix" type="range" min="0" max="100" value="0" /><output id="spring-mix-value">0%</output></label>
+              </div>
+              <section class="sound-system-block" aria-label="Sound system samples and rewind">
+                <div class="sound-block-heading"><span>SAMPLE DECK</span><label class="auto-rewind-toggle"><input id="auto-rewind" type="checkbox" /><span>Auto-Wheel am Trackende</span></label></div>
+                <div class="sample-toolbar">
+                  <label for="sample-quantization">GRID
+                    <select id="sample-quantization"><option value="beat">Beat</option><option value="bar">Takt</option><option value="off">Sofort</option></select>
+                  </label>
+                  <button id="load-sample-folder" type="button">WAV-Ordner laden</button>
+                </div>
+                <div class="sample-folder-path" id="sample-folder-path">Built-ins: Siren · Airhorn · Vinyl-Rewind</div>
+                <div class="sample-pads" id="sample-pads" aria-label="RAM-Sample-Pads"></div>
+                <div class="rewind-row">
+                  <label for="rewind-sample">Wheel-Sample
+                    <select id="rewind-sample"></select>
+                  </label>
+                  <button class="wheel-button" id="wheel-and-come-again" type="button">↶ Wheel &amp; Come Again</button>
+                </div>
+              </section>
+              <section class="dubplate-block" aria-label="Lokaler Patois-Dubplate-Generator">
+                <div class="sound-block-heading"><span>US-Englische KI-Stimme mit Patois-Aussprache-Annäherung</span><span class="tts-state" id="tts-state">CPU</span></div>
+                <label class="dubplate-label" for="dubplate-text">Textblock
+                  <textarea id="dubplate-text" maxlength="1000" rows="3" placeholder="Schreib deinen Patois-/Sound-System-Text …"></textarea>
+                </label>
+                <div class="dubplate-row">
+                  <select id="dubplate-preset" aria-label="Dubplate-Vorlage">
+                    <option value="custom">Eigener Text</option>
+                    <option value="selector">Selector Drop</option>
+                    <option value="riddim">Riddim Call</option>
+                    <option value="wheel">Wheel &amp; Come Again</option>
+                  </select>
+                  <input id="dubplate-dj-name" type="text" maxlength="80" placeholder="DJ-Name optional" aria-label="DJ-Name" />
+                </div>
+                <div class="import-model-row">
+                  <span class="import-model-label">LOKALES PIPER ONNX-MODELL · NICHT MITGELIEFERT</span>
+                  <div class="import-model-control"><input id="piper-model-path" type="text" readonly placeholder=".onnx-Modell auswählen" /><button id="pick-piper-model" type="button">Modell …</button></div>
+                </div>
+                <div class="import-model-row">
+                  <span class="import-model-label">VOICE-KONFIGURATION · .onnx.json</span>
+                  <div class="import-model-control"><input id="piper-config-path" type="text" readonly placeholder="Voice-JSON auswählen" /><button id="pick-piper-config" type="button">Config …</button></div>
+                </div>
+                <div class="import-model-row kokoro-wasm-row">
+                  <span class="import-model-label">KOKORO WASM · LOKALE GEPRÜFTE GEWICHTE</span>
+                  <button id="load-kokoro-wasm" type="button">Kokoro WASM laden</button>
+                </div>
+                <p class="sound-legal-note">Lade das Kokoro-Modell und die Stimme zuerst im lokalen Modellkatalog herunter; beide werden nicht mitgeliefert.</p>
+                <p class="sound-legal-note">Kokoro stellt hier eine US-englische Stimme bereit. Optionale Patois-Regeln ändern ausgewählte Schreibweisen vor der englischen G2P, sind aber nur eine Annäherung und keine authentische Patois-Stimme. Hype/Aggressiv nutzen lokale Tempo- und einfache Tonhöhen-/Intonations-Varispeed-Effekte (keine nativen Emotionseingaben und nicht formanttreu). Die lokale Synthese läuft über den nativen Master-Ausgang zum nächsten Beat oder Takt; die Stimme wird nicht an den Track-Key angepasst. Windows überträgt PCM binär via Tauri IPC; Android nutzt wegen der Tauri-Einschränkung kompaktes Base64 statt Zahlenarrays. Prüfe Modell- und Voice-Rechte vor kommerzieller Nutzung.</p>
+                <div class="dubplate-footer">
+                  <span id="dubplate-key">Key: Track auswählen</span>
+                  <button class="dubplate-generate" id="generate-dubplate" type="button" disabled>Dubplate rendern &amp; laden</button>
+                </div>
+                <p class="sound-legal-note">Der Akzent hängt vom gewählten Modell ab; ohne jamaikanisches Patois-Modell ist das keine authentische Patois-Stimme. Prüfe GPL-/Voice-Modell-Lizenzen vor Distribution.</p>
+              </section>
+            </section>
+
+            <section class="panel collection-panel">
+              <div class="collection-heading"><div><div class="panel-kicker">DEINE SAMMLUNG</div><h2>Track-Bibliothek</h2></div><span class="count-badge" id="track-count">0</span></div>
+              <details class="local-import-disclosure">
+                <summary>Lokale Tracks importieren &amp; analysieren</summary>
+                <section class="local-import" aria-label="Lokaler Audioimport">
+                <div class="import-intro"><strong>Lokale Analyse &amp; vier Stems</strong><span>Audio bleibt auf diesem Gerät · bis zu 50.000 Tracks</span></div>
+                <div class="import-picker-actions">
+                  <button class="import-picker-button" id="pick-audio-files" type="button">Dateien wählen</button>
+                  <button class="import-picker-button" id="pick-audio-folders" type="button">Ordner wählen</button>
+                  <button class="import-clear-button" id="clear-import-selection" type="button" title="Auswahl leeren">×</button>
+                </div>
+                <div class="import-selection-count" id="import-selection-count">Keine Audio-Dateien ausgewählt</div>
+                <div class="import-model-row">
+                  <span class="import-model-label">Lokale Modelldatei (.onnx)</span>
+                  <div class="import-model-control"><input id="separator-model-path" type="text" readonly placeholder="BYOM: lokale .onnx-Datei oder .cvmodel.json auswählen" /><button id="pick-separator-model" type="button">Modell …</button></div>
+                </div>
+                <div class="import-model-row">
+                  <span class="import-model-label">Whisper Tiny</span>
+                  <div class="import-model-control"><input id="whisper-model-path" type="text" readonly placeholder="Lokales Whisper-Tiny-.bin auswählen" /><button id="pick-whisper-model" type="button">Modell …</button></div>
+                </div>
+                <details class="model-library-disclosure">
+                  <summary>Lokale Modellbibliothek · SHA-256 geprüft</summary>
+                  <div class="model-library-content">
+                    <div class="model-library-heading"><span>Downloads bleiben auf diesem Gerät</span><button id="refresh-model-catalog" type="button">Aktualisieren</button></div>
+                    <div id="managed-model-catalog" class="managed-model-catalog" aria-live="polite"><span class="model-library-empty">Modellkatalog wird geladen …</span></div>
+                    <div class="separator-default" id="separator-default">
+                      <strong>Standard-Separator · Spleeter 2-Stem (MIT)</strong>
+                      <p>Der Standard-Download ist das kommerziell freie Spleeter-2-Stem-Modell (Vocals + Begleitung) mit fest hinterlegter SHA-256-Prüfsumme. Es gibt keine unklaren HT-Demucs-, MDX- oder Open-Unmix-Downloadpfade mehr.</p>
+                      <div class="separator-default-actions">
+                        <button id="download-default-separator" type="button">Spleeter-2-Stem-Modell herunterladen &amp; prüfen</button>
+                        <span id="separator-default-status" class="model-library-empty">Separator-Status wird geladen …</span>
+                      </div>
+                    </div>
+                    <div class="byom-import" id="byom-import">
+                      <strong>BYOM · eigene Modelldatei ablegen (.onnx)</strong>
+                      <p>Datei hier ablegen oder auswählen. Sie bleibt auf diesem Gerät, wird niemals hochgeladen und nicht weitergegeben; geprüft werden nur Tensorform, Datentyp und Datei-Hash. Für HT-Demucs- und MDX-Net-Gewichte liegt die Lizenzverantwortung bei dir.</p>
+                      <div class="byom-dropzone" id="byom-dropzone" tabindex="0" role="button" aria-label="Lokale Modelldatei (.onnx) ablegen">
+                        <span>Lokale Modelldatei (.onnx) hier ablegen oder klicken</span>
+                        <code id="byom-dropzone-hint">BYOM · htdemucs · mdx-net · spleeter-2stems</code>
+                      </div>
+                      <label class="byom-kind" for="byom-model-kind">Zweck
+                        <select id="byom-model-kind">
+                          <option value="htdemucs">HT-Demucs (BYOM, Rechte-Bestätigung nötig)</option>
+                          <option value="mdx-net">MDX-Net-Manifest (BYOM, Rechte-Bestätigung nötig)</option>
+                          <option value="spleeter-2stems">Spleeter 2-Stem-Manifest (MIT, keine Bestätigung nötig)</option>
+                        </select>
+                      </label>
+                      <label class="byom-ack" for="byom-rights-ack"><input id="byom-rights-ack" type="checkbox" /> <span>Ich bestätige, dass ich die Rechte an diesen Gewichten geprüft habe (HT-Demucs/MDX-Net erforderlich).</span></label>
+                      <button id="byom-import" type="button">Datei prüfen &amp; lokal eintragen</button>
+                      <div id="byom-model-list" class="byom-model-list" aria-live="polite"></div>
+                    </div>
+                    <div class="custom-mdx-import">
+                      <strong>Eigenes MDX-Net-ONNX importieren</strong>
+                      <p>Dateien werden vor dem Kopieren auf ONNX-Tensorform, Datentyp und Zielkonfiguration geprüft.</p>
+                      <label for="custom-mdx-mode">Profil
+                        <select id="custom-mdx-mode"><option value="two-stem">2 Stems · Vocals + Mix-minus-Vocals</option><option value="four-stem">4 Stems · Vocals, Other, Bass, Drums</option></select>
+                      </label>
+                      <button id="import-custom-mdx" type="button">Lokale ONNX-Datei(en) prüfen &amp; importieren</button>
+                    </div>
+                    <p class="model-rights-warning">Ein gültiger SHA-256-Pin belegt nur die Identität der Datei, nicht kommerzielle Rechte. KUIELab-Gewichte und Trainingsdaten sind vor kommerziellem Einsatz separat zu klären. Kokoro-TTS läuft lokal mit englischer G2P und einer US-englischen Stimme; es ist keine authentische Patois-Stimme. Modell- und Voice-Rechte sind vor kommerzieller Distribution zu prüfen.</p>
+                  </div>
+                </details>
+                <div class="import-runtime-options">
+                  <label id="directml-option"><input id="use-directml" type="checkbox" /><span>Windows DirectML versuchen</span></label>
+                  <label class="cpu-thread-option" for="cpu-threads"><span>CPU-Threads</span><input id="cpu-threads" type="number" min="1" max="8" value="4" /></label>
+                </div>
+                <button class="button button-primary full-width import-start-button" id="start-import" type="button"><span>Importieren &amp; analysieren</span><span class="button-arrow">→</span></button>
+                <p class="import-legal-note">Gewichte werden nur auf ausdrückliche Auswahl über HTTPS geladen, SHA-256-geprüft und lokal gespeichert. Prüfe vor kommerziellem Einsatz die Rechte an Modellgewichten und Trainingsdaten.</p>
+                <div class="import-jobs-heading"><span>IMPORT-AUFTRÄGE</span><button id="refresh-import-jobs" type="button" aria-label="Importstatus aktualisieren" title="Importstatus aktualisieren">↻</button></div>
+                <div class="import-jobs" id="import-jobs" aria-live="polite"></div>
+                </section>
+              </details>
+              <div class="search-wrap"><span class="search-icon" aria-hidden="true">⌕</span><input id="track-search" type="search" placeholder="Mood, Rhythmus, Key, BPM oder LUFS suchen …" aria-label="Tracks nach Stimmung, Rhythmus, Tonart, BPM oder Lautheit durchsuchen" /></div>
+              <p class="track-search-help" id="track-search-help">Zum Beispiel: sad dembow 95 bpm · D minor −14 LUFS</p>
+              <div class="track-search-feedback" id="track-search-feedback" aria-live="polite"></div>
+              <div class="track-list" id="track-list"><div class="empty-state"><div class="empty-wave">∿</div><strong>Noch keine Tracks</strong><span>Track-Metadaten, Beat-Grids und Stems werden lokal verwaltet.</span></div></div>
+              <div class="collection-footer"><span class="sqlite-mark">▤</span><span>SQLite · WAL · indexiert</span><span class="capacity-label">50K+</span></div>
+            </section>
+
+            <section class="panel riddim-panel" aria-label="Riddim-Familien und manuelle Tags">
+              <div class="collection-heading"><div><div class="panel-kicker">LOCAL LIBRARY BRAIN</div><h2>Riddim-Familien</h2></div><button id="rebuild-riddims" class="riddim-scan-button" type="button">Analysieren ↻</button></div>
+              <p class="riddim-selected" id="riddim-selected-track">Wähle einen Track aus der Bibliothek.</p>
+              <div class="riddim-match" id="riddim-match">Instrumental-Fingerprints + manuelle Tags</div>
+              <label class="riddim-field" for="manual-riddim-name"><span>MANUELLER RIDDIM-NAME</span><input id="manual-riddim-name" type="text" maxlength="96" placeholder="z. B. Sleng Teng" /></label>
+              <label class="riddim-field" for="manual-riddim-tags"><span>PRODUCER / GENRE / LABEL / TAGS</span><input id="manual-riddim-tags" type="text" maxlength="500" placeholder="King Jammy, dancehall, 1985" /></label>
+              <button id="save-riddim-tags" class="button button-outline full-width" type="button">Tags speichern &amp; Familien neu berechnen</button>
+              <div class="riddim-families" id="riddim-families" aria-live="polite"></div>
+              <p class="sound-legal-note">Vergleicht 272-dimensionale Spektral-/Zeit-Fingerprints des Instrumental-Stems; gleiche manuelle Riddim-Namen verbinden Tracks zusätzlich.</p>
+            </section>
+
+            <section class="panel recording-panel">
+              <div class="recording-top"><div class="recording-icon">●</div><div><div class="panel-kicker">PRO SESSION TOOLS</div><h2>Record &amp; Session-Cache</h2></div></div>
+              <p id="recording-mode-copy">Demo: Session-Saving aus. Record öffnet die sichere Lizenzprüfung.</p>
+              <div class="recording-mode-state"><span id="recording-state-badge">DEMO · GESPERRT</span><span id="session-cache-state">CACHE AUS</span></div>
+              <button class="button button-outline full-width" id="check-recording" type="button">Record / Zugriff prüfen <span>→</span></button>
+              <small>Rust prüft die Pro-Berechtigung. Verfügbar: WAV PCM 16/24-bit, FLAC 16-bit, MP3 320 kbps, OGG/Vorbis VBR und M4A/AAC 160 kbps.</small>
+            </section>
+          </aside>
+        </div>
+
+        <footer class="page-footer"><span><i class="footer-dot"></i> Track-Metadaten bleiben lokal auf diesem Gerät</span><span>ChampionVibe · Lizenzprüfung im Rust-Backend</span></footer>
+      </main>
+    </div>
+    <dialog class="license-modal" id="license-modal" aria-labelledby="license-modal-title">
+      <div class="license-modal-shell">
+        <header class="license-modal-heading">
+          <div><span class="panel-kicker">SECURE LOCAL ACTIVATION</span><h2 id="license-modal-title">Lizenz aktivieren</h2><p>Bezahlung per SOL, BTC oder ETH · Signierung durch den Issuer · Prüfung im Rust-Backend.</p></div>
+          <button class="modal-close" id="close-license-modal" type="button" aria-label="Lizenzdialog schließen">×</button>
+        </header>
+        <section class="panel payment-panel" id="licensing">
+          <div class="panel-header">
+            <div><div class="panel-kicker">CHAMPIONVIBE PRO</div><h2>Lizenz freischalten</h2><p>Preisangebot erstellen, on-chain bezahlen und TxHash verifizieren.</p></div>
+            <div class="panel-icon">◈</div>
+          </div>
+          <div class="oracle-overview">
+            <div class="oracle-overview-heading"><div><span class="field-label">CHAINLINK ORACLE · NATIVE COINS</span><span class="oracle-updated" id="oracle-status">Kurse und Empfangsadressen werden vom Issuer geladen.</span></div><button id="refresh-oracle-prices" class="copy-button" type="button" title="Oracle-Preise aktualisieren" aria-label="Oracle-Preise aktualisieren">↻</button></div>
+            <div class="oracle-price-grid" id="oracle-price-grid" aria-live="polite">
+              <article class="oracle-price-card" data-chain="solana"><header><strong>SOLANA · SOL</strong><span data-oracle-price>—</span></header><small data-eur-price>EUR/USD —</small><code data-recipient-address>Empfänger wird geladen …</code><small data-published-at>Chainlink-Zeit —</small><button type="button" data-select-chain="solana">SOL wählen</button></article>
+              <article class="oracle-price-card" data-chain="bitcoin"><header><strong>BITCOIN · BTC</strong><span data-oracle-price>—</span></header><small data-eur-price>EUR/USD —</small><code data-recipient-address>Empfänger wird geladen …</code><small data-published-at>Chainlink-Zeit —</small><button type="button" data-select-chain="bitcoin">BTC wählen</button></article>
+              <article class="oracle-price-card" data-chain="ethereum"><header><strong>ETHEREUM · ETH</strong><span data-oracle-price>—</span></header><small data-eur-price>EUR/USD —</small><code data-recipient-address>Empfänger wird geladen …</code><small data-published-at>Chainlink-Zeit —</small><button type="button" data-select-chain="ethereum">ETH wählen</button></article>
+            </div>
+            <p class="oracle-disclaimer">Tagesaktuelle Referenzwerte aus Chainlink-Feeds. Der verbindliche Betrag wird pro Netzwerk und Tarif neu berechnet.</p>
+          </div>
+          <div class="field-label">LAUFZEIT AUSWÄHLEN</div>
+          <div class="plan-selector" role="group" aria-label="Abonnement auswählen">
+            <button class="plan-option selected" data-plan="monthly" type="button" aria-pressed="true"><span class="plan-radio"></span><span class="plan-copy"><strong>Monatlich</strong><small>Flexibel kündbar</small></span><span class="plan-price">19<span> €</span><small>/ Monat</small></span></button>
+            <button class="plan-option" data-plan="annual" type="button" aria-pressed="false"><span class="plan-radio"></span><span class="plan-copy"><strong>Jährlich</strong><small>12 Monate Zugang</small></span><span class="plan-price">150<span> €</span><small>/ Jahr</small></span><span class="save-tag">SPARE 34 %</span></button>
+          </div>
+          <div class="field-row">
+            <label class="field-group" for="chain-select"><span class="field-label">ZAHLUNGSNETZWERK</span><span class="select-wrap"><select id="chain-select"><option value="solana">Solana · SOL</option><option value="bitcoin">Bitcoin · BTC</option><option value="ethereum">Ethereum · ETH</option></select><span class="select-caret">⌄</span></span></label>
+            <div class="wallet-field"><span class="field-label">WEB3 WALLET</span><button class="wallet-button" id="connect-wallet" type="button"><span class="wallet-spark">✦</span><span id="wallet-label">Wallet verbinden</span><span class="wallet-arrow">↗</span></button></div>
+          </div>
+          <label class="field-group issuer-field" for="issuer-url"><span class="field-label">ISSUER-SERVER</span><input id="issuer-url" type="url" value="http://127.0.0.1:8080" autocomplete="url" spellcheck="false" /><small>Self-hosted · local issuer / HTTPS für Remote-Server</small></label>
+          <button class="button button-primary full-width" id="create-quote" type="button"><span>Angebot berechnen</span><span class="button-arrow">→</span></button>
+          <p class="inline-note"><span class="note-icon">ⓘ</span> Native Coins only. Netzwerkgebühren zahlt die Wallet separat.</p>
+          <div class="quote-card hidden" id="quote-card" aria-live="polite">
+            <div class="quote-topline"><div><span class="quote-kicker">DEIN ANGEBOT</span><strong id="quote-amount">—</strong><span class="quote-conversion" id="quote-conversion">—</span></div><div class="quote-timer"><span class="pulse-dot"></span><span id="quote-expiry">15 Min. gültig</span></div></div>
+            <div class="recipient-box"><span class="field-label">EMPFÄNGERADRESSE</span><div class="recipient-line"><code id="quote-recipient">—</code><button id="copy-recipient" class="copy-button" type="button" title="Adresse kopieren">⧉</button></div></div>
+            <label class="field-group tx-field" for="tx-hash"><span class="field-label">TRANSAKTIONSHASH / TXID</span><input id="tx-hash" type="text" autocomplete="off" spellcheck="false" placeholder="Nach dem Senden hier einfügen" /></label>
+            <button class="button button-secondary full-width" id="activate-license" type="button"><span>Zahlung verifizieren &amp; aktivieren</span><span class="button-arrow">→</span></button>
+            <p class="quote-footnote">Aktivierung erfolgt erst nach finaler Chain-Prüfung durch den Issuer. Ein Wallet-Connect allein gilt nicht als Zahlungsnachweis.</p>
+          </div>
+        </section>
+        <p class="license-key-note">Nach bestätigter Zahlung ruft Rust <code>activate_license</code> auf, prüft die ED25519-signierte Geräte-Lizenz und speichert sie lokal. Der private Signierschlüssel bleibt beim Issuer.</p>
+      </div>
+    </dialog>
+    <dialog class="grid-editor-modal" id="grid-editor-modal" aria-labelledby="grid-editor-title">
+      <div class="grid-editor-shell">
+        <header class="license-modal-heading">
+          <div><span class="panel-kicker">MIR CONFIDENCE · MANUAL OVERRIDE</span><h2 id="grid-editor-title">Beat-Grid &amp; Tonart korrigieren</h2><p>±0,1 BPM, Grid-Verschiebung in Millisekunden und Camelot-Rad. Speichern markiert den Track als manuell verifiziert.</p></div>
+          <button class="modal-close" id="close-grid-editor" type="button" aria-label="Grid-Editor schließen">×</button>
+        </header>
+        <p class="grid-editor-context" id="grid-editor-context"></p>
+        <section class="grid-editor-field">
+          <span class="field-label">BPM</span>
+          <div class="grid-editor-row">
+            <button class="grid-editor-nudge" id="grid-editor-bpm-down" type="button" aria-label="BPM um 0,1 senken">−0,1</button>
+            <output class="grid-editor-value" id="grid-editor-bpm-value"></output>
+            <button class="grid-editor-nudge" id="grid-editor-bpm-up" type="button" aria-label="BPM um 0,1 erhöhen">+0,1</button>
+          </div>
+          <input id="grid-editor-bpm-range" type="range" min="30" max="300" step="0.1" aria-label="BPM feinjustieren" />
+        </section>
+        <section class="grid-editor-field">
+          <span class="field-label">GRID-VERSCHIEBUNG (MS)</span>
+          <div class="grid-editor-row">
+            <output class="grid-editor-value" id="grid-editor-shift-value"></output>
+          </div>
+          <input id="grid-editor-shift-range" type="range" min="-2000" max="2000" step="1" value="0" aria-label="Grid-Verschiebung in Millisekunden" />
+          <div class="grid-editor-shift-steps" id="grid-editor-shift-steps"></div>
+        </section>
+        <section class="grid-editor-field">
+          <span class="field-label">TONART (CAMELOT-RAD)</span>
+          <div class="grid-editor-row">
+            <output class="grid-editor-value" id="grid-editor-key-value"></output>
+            <div class="grid-editor-transposition" id="grid-editor-transposition"></div>
+            <label class="grid-editor-key-select" for="grid-editor-key-select"><span class="field-label">TONART WÄHLEN</span><select id="grid-editor-key-select" aria-label="Tonart auf dem Camelot-Rad wählen"></select></label>
+          </div>
+          <div class="camelot-wheel" id="grid-editor-wheel" role="group" aria-label="Camelot-Rad"></div>
+          <span class="field-label">KOMPATIBLE POSITIONEN</span>
+          <div class="camelot-wheel compatible" id="grid-editor-compatible"></div>
+        </section>
+        <p class="grid-editor-legend">Grün = verifiziert oder hohe Konfidenz · gelb-orange = Heuristik, bitte prüfen.</p>
+        <footer class="grid-editor-actions">
+          <button class="button button-outline" id="grid-editor-reset" type="button">Zurücksetzen</button>
+          <button class="button button-primary" id="grid-editor-save" type="button">Speichern &amp; verifizieren</button>
+        </footer>
+      </div>
+    </dialog>
+    <dialog class="info-modal" id="info-modal" aria-labelledby="info-modal-title">
+      <div class="info-modal-shell">
+        <header class="license-modal-heading">
+          <div><span class="panel-kicker">CHAMPIONVIBE · SUPPORT</span><h2 id="info-modal-title">Hilfe &amp; Informationen</h2><p>Lokale Wiedergabe, Mix-Presets und rechtliche Hinweise.</p></div>
+          <button class="modal-close" id="close-info-modal" type="button" aria-label="Informationsdialog schließen">×</button>
+        </header>
+        <div class="info-tabs" role="tablist" aria-label="Hilfe und Rechtliches">
+          <button class="info-tab active" id="tab-help" type="button" role="tab" aria-selected="true" aria-controls="info-help" data-info-tab="help">Hilfe &amp; FAQ</button>
+          <button class="info-tab" id="tab-terms" type="button" role="tab" aria-selected="false" aria-controls="info-terms" data-info-tab="terms">AGB</button>
+          <button class="info-tab" id="tab-privacy" type="button" role="tab" aria-selected="false" aria-controls="info-privacy" data-info-tab="privacy">Datenschutz</button>
+          <button class="info-tab" id="tab-audio" type="button" role="tab" aria-selected="false" aria-controls="info-audio" data-info-tab="audio">Audio-Hinweis</button>
+          <button class="info-tab" id="tab-developer" type="button" role="tab" aria-selected="false" aria-controls="info-developer" data-info-tab="developer">Developer</button>
+        </div>
+        <section class="info-page active" id="info-help" role="tabpanel" aria-labelledby="tab-help" data-info-page="help">
+          <h3>Vier Mix-Presets</h3>
+          <dl class="faq-list">
+            <div><dt>P1 · Smooth Selector</dt><dd>Roots-orientierter, langer Crossfade mit Bass-Swap und Spring-Reverb-Auto-Dub.</dd></div>
+            <div><dt>P2 · Club / Hype</dt><dd>Chorus-Hard-Cut, während das Riddim erhalten bleibt.</dd></div>
+            <div><dt>P3 · Aggressiv / Clash</dt><dd>Semantisches Wordplay mit Whisper-Zeitstempeln, Auto-Rewind und Fader-Kills.</dd></div>
+            <div><dt>P4 · Freestyle Maestro</dt><dd>Routet anhand von Track-Metadaten und Intensität zu P1, P2 oder P3.</dd></div>
+          </dl>
+          <h3>Stem-Schalter</h3>
+          <p>Vocals, Instrumental, Bass und Drums schalten einzelne lokale Stem-Kanäle stumm oder aktiv. Das ändert nur die Wiedergabe, nicht die gespeicherten Dateien. Im Android-Demo sind zwei Kanäle freigeschaltet; Pro kann alle vier nutzen.</p>
+          <h3>Live-Controls</h3>
+          <p><strong>Force Next</strong> löst den vorbereiteten Übergang aus. <strong>Pull Up / Rewind</strong> spielt den lokalen Rewind-FX und startet am Beat eins. <strong>Drop Sample</strong> plant ein Sample am Beat- oder Takt-Grid.</p>
+          <p>Der Regler 1–4 steht für Deep / Roots, Club / Hype, Aggressiv / Clash und Clash Max. „KI live überschreiben“ muss aktiv sein, bevor der Regler den Autopilot übersteuert.</p>
+          <p>Ein DJ-Shoutout kann lokal mit Piper gerendert werden, wenn das optionale Build-Feature aktiviert und ein Modell samt Voice-JSON gewählt ist. Es ist in der Standardkonfiguration deaktiviert; Stimme, Aussprache und Lizenz hängen vom verwendeten Modell ab.</p>
+          <h3>BPM-Matching &amp; Time-Stretch</h3>
+          <p>Der Maestro vergleicht halbes, normales und doppeltes Tempo und gleicht lokale Stem-Streams an. Bei aktivem Pitch-Lock nutzt er WSOLA innerhalb von ±20 %, wobei die Tonhöhe weitgehend erhalten bleibt. Ohne Pitch-Lock nutzt er Varispeed, sodass sich die Tonhöhe mit dem Tempo ändert. Die Umschaltung gilt beim nächsten Laden eines Decks.</p>
+        </section>
+        <section class="info-page" id="info-terms" role="tabpanel" aria-labelledby="tab-terms" data-info-page="terms" hidden>
+          <h3>Nutzungsbedingungen · Kurzfassung</h3>
+          <p>ChampionVibe wird als Werkzeug zur lokalen Verwaltung und Wiedergabe von Audiodateien bereitgestellt. Du bist dafür verantwortlich, nur Inhalte zu importieren, zu bearbeiten, aufzunehmen oder weiterzugeben, für die du die erforderlichen Rechte und Einwilligungen besitzt.</p>
+          <p>Sofern kein zwingendes Recht entgegensteht, wird die Software ohne Garantie für unterbrechungsfreien Betrieb, Eignung für einen bestimmten Zweck oder Fehlerfreiheit bereitgestellt. Du bleibst verantwortlich für Backups, Gerätesicherheit und die Einhaltung der jeweils geltenden Urheber-, Datenschutz- und Plattformregeln.</p>
+          <p>Diese Kurzfassung ist keine Rechtsberatung und keine vollständige Vertragsvorlage. Vor Veröffentlichung müssen Anbieterangaben, anwendbares Recht, Widerrufs- und Verbraucherrechte geprüft und ergänzt werden.</p>
+        </section>
+        <section class="info-page" id="info-privacy" role="tabpanel" aria-labelledby="tab-privacy" data-info-page="privacy" hidden>
+          <h3>Datenschutz &amp; lokale Verarbeitung</h3>
+          <p>Audiodateien, Stems, Transkripte, Peaks und Bibliotheks-Metadaten werden lokal verarbeitet und in der app-eigenen SQLite-Datenbank bzw. im lokalen Dateisystem gespeichert. ChampionVibe lädt keine Audioinhalte zu einem Cloud-Inferenzdienst hoch.</p>
+          <p>Für Preisangebote und Lizenzaktivierung kommuniziert die App mit dem konfigurierten Issuer sowie öffentlichen Blockchain-/Oracle-Endpunkten. Dabei werden Zahlungsdaten, TxHash und ein gehashter Geräte-Fingerprint zur Lizenzprüfung übertragen. Roh-Gerätekennungen und private Signierschlüssel werden nicht an den Issuer gesendet.</p>
+          <p>Diese Produktinformation ersetzt keine geprüfte Datenschutzerklärung. Vor Veröffentlichung sind Verantwortlicher, Rechtsgrundlagen, Aufbewahrung, Betroffenenrechte und lokale Marktanforderungen zu ergänzen.</p>
+        </section>
+        <section class="info-page" id="info-audio" role="tabpanel" aria-labelledby="tab-audio" data-info-page="audio" hidden>
+          <h3>Audio- &amp; Rechtehinweis</h3>
+          <p>Importiere, analysiere, trenne, transkribiere, bearbeite oder nimm nur Audio auf, für das du die erforderlichen Urheber-, Leistungsschutz- und Einwilligungsrechte besitzt. Du bist für die rechtmäßige Nutzung und Weitergabe selbst verantwortlich.</p>
+          <p>Audioanalyse, Stem-Wiedergabe, Transkription und TTS laufen lokal. Für Oracle-Preise, Zahlungsprüfung und Lizenzaktivierung werden Netzwerkdienste verwendet; Netzwerkgebühren und Transaktionen liegen in deiner Verantwortung. Eine Wallet-Verbindung allein ist kein Zahlungsnachweis.</p>
+          <p>Die mitgelieferten Schnittstellen gewähren keine Rechte an HT-Demucs-Gewichten, Trainingsdaten, TTS-Engines oder Sprachmodellen. Prüfe die Rechte des konkret verwendeten Modells vor kommerzieller Nutzung. Mix-, Tonart-, Tempo- und Transkriptionsdaten sind Schätzungen und können ungenau sein.</p>
+        </section>
+        <section class="info-page developer-page" id="info-developer" role="tabpanel" aria-labelledby="tab-developer" data-info-page="developer" hidden>
+          <div class="developer-mark" aria-hidden="true">CV</div>
+          <div><span class="panel-kicker">DEVELOPER</span><h3>AndrexTheDev</h3><a href="mailto:hippie.highho@gmail.com">hippie.highho@gmail.com</a></div>
+        </section>
+      </div>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

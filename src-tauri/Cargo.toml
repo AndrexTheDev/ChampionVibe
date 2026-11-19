@@ -1,0 +1,73 @@
+[package]
+name = "championvibe"
+version = "0.1.0"
+description = "ChampionVibe cross-platform audio library and licensing client"
+authors = ["ChampionVibe"]
+edition = "2021"
+
+[lib]
+name = "championvibe_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2" }
+
+[features]
+default = []
+# Piper is kept opt-in until its eSpeak NG copyleft terms and per-voice model
+# licenses are approved for the intended ChampionVibe distribution.
+local-piper-tts = ["dep:piper-rs"]
+
+[dependencies]
+anyhow = "1"
+arc-swap = "1.7"
+base64 = "0.22"
+# Verified model archives from the cleared registry are tar.bz2; extraction is pure Rust or
+# bundled C with no runtime system dependency.
+bzip2 = "0.4"
+tar = "0.4"
+libc = "0.2"
+cpal = { version = "0.18.2", features = ["realtime"] }
+piper-rs = { version = "=0.2.0", default-features = false, optional = true }
+flacenc = "0.5.1"
+hound = "3.5"
+# Native recording encoders: shine-rs is LGPL-2.0 (review redistribution obligations before release);
+# Vorbis builds bundled native codec bindings; AAC and MP4 are pure Rust crates.
+shine-rs = "=0.1.5"
+vorbis_rs = { version = "=0.5.6", default-features = false }
+rusty_aac = { version = "=1.1.0", default-features = false }
+mp4 = "=0.14.0"
+ndarray = "0.17"
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "load-dynamic", "api-24"] }
+rustfft = "6.4"
+whisper-rs = "0.16.0"
+rtrb = "0.3"
+# Symphonia's first-party codec/container coverage. `all` includes MKV/WebM, ISO/MP4,
+# AIFF, Ogg, WAV, AAC/ALAC/FLAC/MP3/Vorbis and metadata readers. Opus is registered through
+# the permissively licensed libopus adapter; Symphonia has no WMA/ASF decoder, so WMA stays unsupported.
+symphonia = { version = "0.6.1", default-features = false, features = ["all", "opt-simd"] }
+memmap2 = "0.9"
+symphonia-adapter-libopus = "0.3.0"
+tauri-plugin-device-identity = { path = "../crates/device-identity" }
+championvibe-licensing-core = { path = "../crates/licensing-core" }
+chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+sha2 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2" }
+# Only the timer is needed: the issuer's retry-later signal is honored with a bounded async wait
+# instead of blocking a Tauri worker thread.
+tokio = { version = "1", features = ["time"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-android-fs = "=29.0.0"
+url = "2"
+
+[target.'cfg(windows)'.dependencies]
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "load-dynamic", "directml"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"

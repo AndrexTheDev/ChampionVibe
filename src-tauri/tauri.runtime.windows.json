@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "resources": {
+      "runtime/windows-x64/onnxruntime.dll": "onnxruntime.dll",
+      "runtime/windows-x64/DirectML.dll": "DirectML.dll",
+      "runtime/windows-x64/dxcompiler.dll": "dxcompiler.dll",
+      "runtime/windows-x64/dxil.dll": "dxil.dll"
+    }
+  }
+}

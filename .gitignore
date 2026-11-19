@@ -1,0 +1,21 @@
+# Frontend / Tauri
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+/src-tauri/runtime/
+**/.gradle/
+crates/device-identity/android/build/
+
+# Rust
+/target/
+
+# Local issuer data and secrets
+.env
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+issuer-data/
+
+# Python staging and verification helpers
+__pycache__/

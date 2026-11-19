@@ -1,0 +1,45 @@
+[1m[92m    Updating[0m crates.io index
+[1m[92m   Compiling[0m tauri-plugin-device-identity v0.1.0 (/home/runner/work/ChampionVibe/ChampionVibe/crates/device-identity)
+[1m[92m    Checking[0m championvibe-licensing-core v0.1.0 (/home/runner/work/ChampionVibe/ChampionVibe/crates/licensing-core)
+[1m[92m   Compiling[0m championvibe v0.1.0 (/home/runner/work/ChampionVibe/ChampionVibe/src-tauri)
+[1m[92m    Checking[0m championvibe-issuer v0.1.0 (/home/runner/work/ChampionVibe/ChampionVibe/license-issuer)
+src-tauri/src/import/mod.rs:1454:42: [1m[33mwarning[0m: unused import: `path_sort_key`
+src-tauri/src/import/mod.rs:1455:15: [1m[33mwarning[0m: unused import: `path::Path`
+src-tauri/src/import/spleeter.rs:291:34: [1m[33mwarning[0m: unused variable: `values`: help: if this is intentional, prefix it with an underscore: `_values`
+src-tauri/src/audio/mod.rs:645:12: [1m[33mwarning[0m: associated items `new`, `load`, `load_at`, `add_sample_file`, `add_tts_file`, and `add_sample_file_routed` are never used
+src-tauri/src/audio/limiter.rs:87:5: [1m[33mwarning[0m: fields `sample_rate` and `lookahead_frames` are never read
+src-tauri/src/audio/limiter.rs:139:19: [1m[33mwarning[0m: methods `process`, `latency_frames`, and `latency_ms` are never used
+src-tauri/src/audio/model_loader.rs:39:18: [1m[33mwarning[0m: constant `REGISTRY_FORMAT` is never used
+src-tauri/src/audio/model_loader.rs:44:7: [1m[33mwarning[0m: constant `PIN_PENDING` is never used
+src-tauri/src/audio/model_loader.rs:63:9: [1m[33mwarning[0m: field `format` is never read
+src-tauri/src/audio/model_loader.rs:73:9: [1m[33mwarning[0m: fields `cleared_tier_only`, `statement`, and `pin_rule` are never read
+src-tauri/src/audio/model_loader.rs:87:9: [1m[33mwarning[0m: multiple fields are never read
+src-tauri/src/audio/model_loader.rs:113:9: [1m[33mwarning[0m: field `statement` is never read
+src-tauri/src/audio/model_manager.rs:101:5: [1m[33mwarning[0m: field `approximate_size` is never read
+src-tauri/src/audio/model_manager.rs:162:12: [1m[33mwarning[0m: method `root` is never used
+src-tauri/src/audio/recording.rs:174:19: [1m[33mwarning[0m: method `nominal_bitrate_bps` is never used
+src-tauri/src/audio/recording.rs:292:19: [1m[33mwarning[0m: method `detach` is never used
+src-tauri/src/audio/recording.rs:429:5: [1m[33mwarning[0m: variant `Detach` is never constructed
+src-tauri/src/audio/samples.rs:195:12: [1m[33mwarning[0m: methods `with_wav`, `with_tts_wav`, and `with_routed_wav` are never used
+src-tauri/src/commands.rs:1373:4: [1m[33mwarning[0m: function `stem_files_from_rows` is never used
+src-tauri/src/database.rs:78:9: [1m[33mwarning[0m: field `file_path` is never read
+src-tauri/src/database.rs:179:9: [1m[33mwarning[0m: field `job_id` is never read
+src-tauri/src/database.rs:195:9: [1m[33mwarning[0m: field `id` is never read
+src-tauri/src/import/mod.rs:32:7: [1m[33mwarning[0m: constant `MAX_ANDROID_SAMPLE_FILES` is never used
+src-tauri/src/import/mod.rs:1399:4: [1m[33mwarning[0m: function `finish_failed_job` is never used
+src-tauri/src/import/mod.rs:1440:4: [1m[33mwarning[0m: function `run_import_job_guarded` is never used
+src-tauri/src/import/media.rs:303:5: [1m[33mwarning[0m: field `input_rate` is never read
+src-tauri/src/import/spleeter.rs:53:5: [1m[33mwarning[0m: field `sample_rate` is never read
+src-tauri/src/import/spleeter.rs:163:19: [1m[33mwarning[0m: method `sample_rate` is never used
+src-tauri/src/mix_engine.rs:354:12: [1m[33mwarning[0m: method `add_sample_file` is never used
+src-tauri/src/tts.rs:11:8: [1m[33mwarning[0m: static `DUBPLATE_FILE_ID` is never used
+src-tauri/src/tts.rs:13:7: [1m[33mwarning[0m: constant `TARGET_PEAK` is never used
+src-tauri/src/tts.rs:18:9: [1m[33mwarning[0m: fields `model_path` and `config_path` are never read
+src-tauri/src/tts.rs:306:4: [1m[33mwarning[0m: function `next_dubplate_filename` is never used
+src-tauri/src/tts.rs:318:4: [1m[33mwarning[0m: function `write_pcm_wav` is never used
+src-tauri/src/audio/limiter.rs:88:5: [1m[33mwarning[0m: field `lookahead_frames` is never read
+src-tauri/src/audio/model_loader.rs:74:9: [1m[33mwarning[0m: fields `statement` and `pin_rule` are never read
+[1m[33mwarning[0m: `championvibe` (lib) generated 32 warnings (run `cargo fix --lib -p championvibe` to apply 1 suggestion)
+[1m[33mwarning[0m: `championvibe` (lib test) generated 28 warnings (24 duplicates) (run `cargo fix --lib -p championvibe --tests` to apply 2 suggestions)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 6.50s
+exit=0
