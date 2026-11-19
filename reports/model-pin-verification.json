@@ -1,6 +1,6 @@
 {
   "format": "championvibe-model-pin-verification-v1",
-  "generatedAt": "2026-10-07T21:52:58Z",
+  "generatedAt": "2026-11-19T19:36:42Z",
   "registry": "championvibe-model-registry-v2",
   "artifacts": [
     {
@@ -11,7 +11,7 @@
       "actualSizeBytes": 74682545,
       "sizeStatus": "ok",
       "status": "verified",
-      "upstreamChecksum": "not-listed"
+      "upstreamChecksum": "confirmed"
     },
     {
       "id": "spleeter-2stems-onnx-fp16",
@@ -21,7 +21,7 @@
       "actualSizeBytes": 35271738,
       "sizeStatus": "ok",
       "status": "verified",
-      "upstreamChecksum": "not-listed"
+      "upstreamChecksum": "confirmed"
     }
   ]
 }
