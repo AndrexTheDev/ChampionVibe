@@ -6,10 +6,10 @@ What CI proves about a ChampionVibe commit, and what it cannot prove yet.
 
 | Workflow / job | Runs | Proves |
 | --- | --- | --- |
-| `ci.yml` · `frontend` | `npm ci`, `npm run build`, `node --test` | The WebView build compiles and all frontend suites pass, including the model-library, i18n and BYOM contract tests |
+| `ci.yml` · `frontend` | `npm ci`, `npm test`, `npm run e2e:tauri`, `python3 tests/onnx_runtime_test.py`, `npm run build` | The WebView build compiles and all frontend suites pass, including the model-library, i18n and BYOM contract tests; the IPC driver checks the command and event contract against a stub, not a native runtime |
 | `ci.yml` · `compliance` | `scripts/verify-cleared-model-policy.sh` | Offline policy gate: registry tiers, SHA-256 pins and forbidden sources, no bundled weights, BYOM acknowledgement rules, byte-exact CC0 sampleboard, locale transparency wording, and the locked/warning-free build wiring |
 | `ci.yml` · `rust` | `cargo fmt --all -- --check`, `cargo check --workspace --all-targets --locked`, `cargo test --workspace --locked` | Formatting, warning-free compilation of library, binaries and tests on Linux with Tauri/audio system dependencies, all Rust unit tests (`model_loader`, `samples`, Spleeter frame/STFT bookkeeping), and that the checked-in `Cargo.lock` is the graph the build actually uses |
-| `ci.yml` · `package` | Tauri bundling on `windows-latest` and Android `aarch64-linux-android` | Windows MSI/NSIS and Android APK artifacts (`championvibe-windows-test-build`, `championvibe-android-apk`, 14-day retention) build from the same commit |
+| `package.yml` (manual only) · `package` | Tauri bundling on `windows-latest` and Android `aarch64-linux-android` | Windows MSI/NSIS and Android APK artifacts (`championvibe-windows-test-build`, `championvibe-android-apk`, 14-day retention) build after CI passes for the selected commit |
 | `model-pins.yml` · `lockfile` | `cargo generate-lockfile`, `::notice` annotation, commit-back | `Cargo.lock` tracks the full workspace dependency graph and is committed to the branch; the job reports the lock SHA-256 and package count |
 | `model-pins.yml` · `model-pins` | `scripts/verify-model-pins.sh` + forbidden-source check | Every downloadable artifact matches its registry byte size and SHA-256, no forbidden separator source is reachable, and `reports/model-pin-verification.json` is refreshed |
 
@@ -67,8 +67,7 @@ cargo test --workspace --locked
 
 - Real-model inference on device: Spleeter separation quality, Whisper keyword timing and Kokoro WAV
   playback must be exercised on Windows 10 and a physical Android device; CI only compiles and unit-tests.
-- ONNX Runtime native libraries (`ort` loads dynamically) and DirectML availability are packaging-time
-  concerns, not compile-time ones.
+- The native ONNX Runtime is staged during final packaging; ordinary CI checks the staging logic with offline fixtures. Whether the packaged libraries load and DirectML works on a given Windows 10 device still requires a device test. See [runtime packaging](native-onnx-runtime.md).
 - `audio-embedding-int8.onnx` and all BYOM models: the app validates tensor shapes and local paths; it
   cannot and does not verify licensing, provenance or numeric parity of user-supplied weights.
 - Commercial rights to Kokoro voice data, the optional Piper feature (GPL-3.0 gating) and any BYOM
@@ -78,7 +77,7 @@ cargo test --workspace --locked
 
 ```sh
 npm ci && npm run build && npm test          # frontend
-cargo fmt --all -- --check && cargo test --workspace   # Rust (needs the Linux audio/Tauri deps)
+cargo fmt --all -- --check && cargo test --workspace --locked  # Rust (needs the Linux audio/Tauri deps)
 scripts/verify-model-pins.sh --report reports/model-pin-verification.json   # strict pin verification
 scripts/verify-model-pins.sh --allow-pending                                # discovery mode
 python3 scripts/generate-cc0-reggae-drops.py --check                        # sampleboard byte-exactness

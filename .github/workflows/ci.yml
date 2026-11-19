@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -37,6 +38,9 @@ jobs:
       # here instead of on a device.
       - name: Run the headless Tauri IPC driver
         run: npm run e2e:tauri
+
+      - name: Test native runtime staging without installers
+        run: python3 tests/onnx_runtime_test.py
 
       - name: Build frontend
         run: npm run build
@@ -115,108 +119,3 @@ jobs:
 
       - name: Test the complete Rust workspace
         run: cargo test --workspace --locked
-
-  package:
-    name: Package ${{ matrix.platform }} test artifact
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows
-            os: windows-latest
-            artifact-name: championvibe-windows-test-build
-          - platform: android
-            os: ubuntu-latest
-            artifact-name: championvibe-android-apk
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Set up Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install Android Rust target
-        if: matrix.platform == 'android'
-        run: rustup target add aarch64-linux-android
-
-      - name: Install Windows desktop prerequisites
-        if: matrix.platform == 'windows'
-        run: choco install wixtoolset --yes --no-progress
-
-      - name: Set up Java for Android Gradle
-        if: matrix.platform == 'android'
-        uses: actions/setup-java@v6.0.1
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Android SDK
-        if: matrix.platform == 'android'
-        uses: android-actions/setup-android@v4.0.4
-
-      - name: Install Android SDK packages and NDK
-        if: matrix.platform == 'android'
-        shell: bash
-        run: |
-          sdkmanager --install \
-            'platform-tools' \
-            'platforms;android-35' \
-            'build-tools;35.0.0' \
-            'ndk;27.2.12479018'
-          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/27.2.12479018" >> "$GITHUB_ENV"
-          echo "NDK_HOME=${ANDROID_SDK_ROOT}/ndk/27.2.12479018" >> "$GITHUB_ENV"
-
-      - name: Install Android Rust bridge tooling
-        if: matrix.platform == 'android'
-        run: cargo install cargo-ndk --locked
-
-      - name: Install frontend and Tauri CLI dependencies
-        run: npm ci
-
-      - name: Build Windows MSI and NSIS installer
-        if: matrix.platform == 'windows'
-        run: npm run tauri -- build --ci --bundles msi,nsis
-
-      - name: Initialize Tauri Android project
-        if: matrix.platform == 'android'
-        run: npm run tauri -- android init --ci
-
-      - name: Build Android arm64 APK
-        if: matrix.platform == 'android'
-        run: npm run tauri -- android build --ci --apk --target aarch64
-
-      - name: Collect Windows installers
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Get-ChildItem -Path target/release/bundle, src-tauri/target/release/bundle -Recurse -File -Include *.msi,*.exe -ErrorAction SilentlyContinue |
-            Copy-Item -Destination artifacts
-          if (-not (Get-ChildItem artifacts -File)) { throw 'No Windows MSI/EXE installers were produced.' }
-
-      - name: Collect Android APK
-        if: matrix.platform == 'android'
-        shell: bash
-        run: |
-          mkdir -p artifacts
-          find src-tauri/gen/android -type f -path '*/build/outputs/apk/*' -name '*.apk' -exec cp '{}' artifacts/ \;
-          test -n "$(find artifacts -maxdepth 1 -name '*.apk' -print -quit)"
-
-      - name: Upload test installers
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact-name }}
-          path: artifacts/*
-          if-no-files-found: error
-          retention-days: 14

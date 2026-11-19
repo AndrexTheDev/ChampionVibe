@@ -11,6 +11,7 @@ const commandRegistry = readFileSync(new URL('../src-tauri/src/lib.rs', import.m
 const mdx = readFileSync(new URL('../src-tauri/src/import/mdx.rs', import.meta.url), 'utf8');
 const wasmTts = readFileSync(new URL('./services/tts_wasm.js', import.meta.url), 'utf8');
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+const packageWorkflow = readFileSync(new URL('../.github/workflows/package.yml', import.meta.url), 'utf8');
 const artifactDownloadScript = readFileSync(new URL('../scripts/download-actions-builds.sh', import.meta.url), 'utf8');
 const registry = JSON.parse(readFileSync(new URL('../src-tauri/assets/model-registry.json', import.meta.url), 'utf8'));
 const pinScript = readFileSync(new URL('../scripts/verify-model-pins.sh', import.meta.url), 'utf8');
@@ -29,11 +30,19 @@ test('the pin workflow verifies artifacts and locks Cargo.lock into the branch',
   assert.doesNotMatch(readFileSync(new URL('../.gitignore', import.meta.url), 'utf8'), /^Cargo\.lock$/mu);
 });
 
-test('GitHub Actions runs on push and exposes downloadable Windows and Android artifacts', () => {
-  assert.match(ciWorkflow, /^on:\n  push:\n/m);
-  assert.match(ciWorkflow, /championvibe-windows-test-build/u);
-  assert.match(ciWorkflow, /championvibe-android-apk/u);
-  assert.match(ciWorkflow, /retention-days: 14/u);
+test('routine GitHub Actions checks run on push and PR without packaging', () => {
+  assert.match(ciWorkflow, /^on:\n  push:\n  pull_request:\n  workflow_dispatch:\n  workflow_call:\n\n/mu);
+  assert.doesNotMatch(ciWorkflow, /^  package:|tauri -- (?:android )?build|actions\/upload-artifact/mu);
+});
+
+test('manual final packaging waits for checks and retains both downloadable installers', () => {
+  assert.match(packageWorkflow, /^on:\n  workflow_dispatch:\n\n/mu);
+  assert.match(packageWorkflow, /^    uses: \.\/\.github\/workflows\/ci\.yml$/mu);
+  assert.match(packageWorkflow, /^  package:\n    needs: validate$/mu);
+  assert.match(packageWorkflow, /championvibe-windows-test-build/u);
+  assert.match(packageWorkflow, /championvibe-android-apk/u);
+  assert.match(packageWorkflow, /retention-days: 14/u);
+  assert.match(artifactDownloadScript, /--workflow package\.yml/u);
   assert.match(artifactDownloadScript, /gh run download/u);
   assert.match(artifactDownloadScript, /gh release download/u);
 });

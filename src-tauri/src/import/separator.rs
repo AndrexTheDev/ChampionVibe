@@ -449,12 +449,14 @@ pub(super) fn create_session(
     threads: usize,
     use_directml: bool,
 ) -> Result<(Session, &'static str)> {
+    use crate::audio::onnx_runtime::session_builder;
+
     #[cfg(windows)]
     if use_directml {
         let directml = (|| -> std::result::Result<Session, String> {
-            let builder = Session::builder().map_err(|error| error.to_string())?;
+            let builder = session_builder().map_err(|error| error.to_string())?;
             let builder = builder
-                .with_execution_providers([ort::ep::DirectML::default().build()])
+                .with_execution_providers([ort::ep::DirectML::default().build().error_on_failure()])
                 .map_err(|error| error.to_string())?;
             let builder = builder
                 .with_intra_threads(threads)
@@ -464,6 +466,8 @@ pub(super) fn create_session(
                 .map_err(|error| error.to_string())?;
             let mut builder = builder
                 .with_parallel_execution(false)
+                .map_err(|error| error.to_string())?
+                .with_memory_pattern(false)
                 .map_err(|error| error.to_string())?;
             builder
                 .commit_from_file(model_path)
@@ -476,8 +480,7 @@ pub(super) fn create_session(
     #[cfg(not(windows))]
     let _ = use_directml;
 
-    let session = Session::builder()
-        .map_err(|error| anyhow::anyhow!("could not create ONNX session builder: {error}"))?
+    let session = session_builder()?
         .with_intra_threads(threads)
         .map_err(|error| anyhow::anyhow!("could not set ONNX intra-op threads: {error}"))?
         .with_inter_threads(1)

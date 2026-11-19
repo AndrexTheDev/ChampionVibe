@@ -1,27 +1,23 @@
 # Downloading Windows and Android builds
 
-`.github/workflows/ci.yml` runs on every `push` (all branches), every `pull_request`, and manual `workflow_dispatch`. The `package` matrix uploads two Actions artifacts:
+Normal pushes and pull requests run `ci.yml` without building any installers. The separate **Final packaging** workflow (`package.yml`) runs only when started manually. It first runs CI for that revision and uploads two Actions artifacts if packaging succeeds:
 
 - `championvibe-windows-test-build` — Windows `.msi` and NSIS `.exe` installers.
 - `championvibe-android-apk` — Android `.apk` for `arm64-v8a` (64-bit ARM). The CI excludes 32-bit ABIs because the current `whisper-rs-sys` bundled bindings do not compile for them; the APK therefore requires a 64-bit ARM Android device.
 
 Actions artifacts are retained for 14 days. **The current workflow does not publish GitHub Release assets**; it publishes run artifacts only. The download script supports both, so it can also fetch assets after a Release is created and populated separately.
 
-## First Actions run
+## Start final packaging
 
-Push a commit to the branch you want to validate. Once the workflow completes, find its run ID with:
-
-```sh
-gh run list --workflow CI --branch <branch-name> --limit 5
-```
-
-Watch a run and fail the command if a job fails:
+Wait until the candidate is ready according to the [release checklist](release-checklist.md). For manual dispatch, GitHub requires the workflow file to be present on the default branch. Select the candidate ref in **Actions → Final packaging → Run workflow**, or use:
 
 ```sh
+gh workflow run package.yml --ref <candidate-branch-or-tag>
+gh run list --workflow package.yml --branch <candidate-branch> --limit 5
 gh run watch <run-id> --exit-status
 ```
 
-The CI includes frontend tests/build, Rust formatting/checks/tests, and Windows/Android packaging. Package jobs need the corresponding GitHub-hosted runner prerequisites and may take up to two hours.
+The package jobs use Windows and Android build tools and can each take up to two hours. Do not dispatch this workflow just to check an ordinary change.
 
 ## Download the artifacts
 
@@ -37,7 +33,7 @@ For example:
 scripts/download-actions-builds.sh 123456789 ./downloads/championvibe
 ```
 
-To choose the newest successful run for the current branch automatically:
+To choose the newest successful **Final packaging** run for the current branch automatically:
 
 ```sh
 scripts/download-actions-builds.sh latest

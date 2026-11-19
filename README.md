@@ -261,7 +261,7 @@ No paid API or WalletConnect project ID is required by this scaffold. It reads C
 
 ## CI builds and downloads
 
-`.github/workflows/ci.yml` starts on every push and pull request and can also be run manually. It packages Windows `.msi`/`.exe` and Android `.apk` files as GitHub Actions artifacts (14-day retention). The same workflow runs the offline cleared-model compliance gate and a warning-free, `--locked` Rust build, so a licensing or determinism regression fails the commit rather than the release. The current workflow does not publish GitHub Release assets. Use `scripts/download-actions-builds.sh <run-id>` or see [the artifact download guide](docs/github-actions-artifacts.md) for latest-run, run-ID and Release downloads.
+Normal pushes and pull requests run frontend tests/build, the headless IPC driver, the offline compliance gate and warning-free Rust checks/tests with `--locked`. They do **not** build an APK or a Windows installer. When the release candidate is ready, deliberately run **Final packaging** (`package.yml`); it repeats the checks on the selected revision before building Windows `.msi`/`.exe` and Android `.apk` Actions artifacts (14-day retention). It does not publish GitHub Release assets. See [the release checklist](docs/release-checklist.md), [native ONNX Runtime packaging](docs/native-onnx-runtime.md), and [the artifact download guide](docs/github-actions-artifacts.md).
 
 ## Validation
 

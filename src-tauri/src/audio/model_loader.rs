@@ -733,8 +733,7 @@ fn tensor_shape(value_type: &ValueType, expected: TensorElementType) -> Result<V
 }
 
 fn local_session(path: &Path) -> Result<Session> {
-    let mut builder = Session::builder()
-        .map_err(|error| anyhow::anyhow!("could not initialize ONNX Runtime: {error}"))?
+    let mut builder = super::onnx_runtime::session_builder()?
         .with_intra_threads(1)
         .map_err(|error| anyhow::anyhow!("could not configure ONNX Runtime: {error}"))?
         .with_inter_threads(1)

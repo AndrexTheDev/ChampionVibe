@@ -251,7 +251,8 @@ impl MdxSeparator {
 
 fn load_target(config: &MdxTargetConfig, threads: usize, use_directml: bool) -> Result<MdxTarget> {
     let (session, backend) =
-        create_mdx_session(&config.model_path, threads.clamp(1, 8), use_directml)?;
+        super::separator::create_session(&config.model_path, threads.clamp(1, 8), use_directml)
+            .context("could not initialize the MDX-Net session")?;
     let input = session
         .inputs()
         .first()
@@ -583,56 +584,6 @@ fn write_stereo_frame(writer: &mut impl Write, frame: [f32; 2]) -> Result<()> {
         writer.write_all(&pcm.to_le_bytes())?;
     }
     Ok(())
-}
-
-fn create_mdx_session(
-    path: &Path,
-    threads: usize,
-    use_directml: bool,
-) -> Result<(Session, &'static str)> {
-    #[cfg(windows)]
-    if use_directml {
-        let directml = (|| -> std::result::Result<Session, String> {
-            let builder = Session::builder().map_err(|error| error.to_string())?;
-            let builder = builder
-                .with_execution_providers([ort::ep::DirectML::default().build()])
-                .map_err(|error| error.to_string())?;
-            let builder = builder
-                .with_intra_threads(threads)
-                .map_err(|error| error.to_string())?;
-            let builder = builder
-                .with_inter_threads(1)
-                .map_err(|error| error.to_string())?;
-            let mut builder = builder
-                .with_parallel_execution(false)
-                .map_err(|error| error.to_string())?;
-            builder
-                .commit_from_file(path)
-                .map_err(|error| error.to_string())
-        })();
-        if let Ok(session) = directml {
-            return Ok((session, "DirectML"));
-        }
-    }
-    #[cfg(not(windows))]
-    let _ = use_directml;
-
-    let session = Session::builder()
-        .map_err(|error| anyhow::anyhow!("could not create ONNX session builder: {error}"))?
-        .with_intra_threads(threads)
-        .map_err(|error| anyhow::anyhow!("could not set ONNX intra-op threads: {error}"))?
-        .with_inter_threads(1)
-        .map_err(|error| anyhow::anyhow!("could not set ONNX inter-op threads: {error}"))?
-        .with_parallel_execution(false)
-        .map_err(|error| anyhow::anyhow!("could not disable ONNX parallel execution: {error}"))?
-        .commit_from_file(path)
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "could not load local MDX-Net ONNX model {}: {error}",
-                path.display()
-            )
-        })?;
-    Ok((session, "CPU"))
 }
 
 #[cfg(test)]

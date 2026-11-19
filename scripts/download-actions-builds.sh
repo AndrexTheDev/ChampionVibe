@@ -8,7 +8,7 @@ Usage:
   scripts/download-actions-builds.sh <run-id> [destination]
   scripts/download-actions-builds.sh release [tag] [destination]
 
-Downloads the Windows and Android CI artifacts from a successful Actions run, or all assets
+Downloads the Windows and Android packaging artifacts from a successful Actions run, or all assets
 from a GitHub Release. Requires GitHub CLI (`gh`) authentication and the Actions read permission.
 Set GH_REPO=OWNER/REPOSITORY to override repository detection.
 EOF
@@ -48,14 +48,14 @@ if [[ "$mode" == "latest" ]]; then
     exit 1
   fi
   run_id="$(gh run list \
-    --workflow CI \
+    --workflow package.yml \
     --repo "$repo" \
     --branch "$branch" \
     --limit 30 \
     --json databaseId,status,conclusion \
     --jq '[.[] | select(.status == "completed" and .conclusion == "success")][0].databaseId // empty')"
   if [[ -z "$run_id" ]]; then
-    echo "Error: no successful CI run was found for branch '$branch'. Pass a run ID after the workflow completes." >&2
+    echo "Error: no successful final packaging run was found for branch '$branch'. Pass a run ID after the workflow completes." >&2
     exit 1
   fi
 else

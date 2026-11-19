@@ -12,6 +12,7 @@ pub(crate) mod mir_analysis;
 pub(crate) mod model_loader;
 pub(crate) mod model_manager;
 pub(crate) mod onnx_embedding;
+pub(crate) mod onnx_runtime;
 mod recording;
 mod recording_formats;
 mod samples;

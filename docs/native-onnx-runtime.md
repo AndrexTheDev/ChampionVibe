@@ -1,0 +1,13 @@
+# Native ONNX Runtime in release builds
+
+ChampionVibe uses ONNX Runtime **1.24.3** for native model validation and stem separation. `ort` rc.12 requests API 24. Kokoro speech still uses a separate WebAssembly runtime in the WebView.
+
+- **Windows x64:** `scripts/stage-onnx-runtime.py windows` verifies the SHA-512 of Microsoft's `onnxruntime-node` archive and extracts only `onnxruntime.dll` and its companions `DirectML.dll`, `dxcompiler.dll`, and `dxil.dll`. The Windows release-only Tauri configuration puts these beside the executable for both MSI and NSIS. There is no Node binding in the installer. If DirectML session setup fails, the separator tries a CPU session and reports CPU as the backend.
+- **Android arm64:** After `tauri android init`, the stager fetches Microsoft's exactly versioned AAR from Maven Central via HTTPS and copies only `jni/arm64-v8a/libonnxruntime.so` to the generated Gradle app's `jniLibs`. It rejects a non-arm64 shared library. The final workflow checks every APK it intends to upload for the matching `lib/arm64-v8a/libonnxruntime.so` entry. The AAR version is fixed, but an independent byte-level hash has not yet been recorded for it.
+- **Development:** No libraries are downloaded by normal checks. If running a native development build, set `ORT_DYLIB_PATH` to the absolute path to a compatible local library, or stage the Android library in the generated app. On Windows without an override the app uses the DLL beside the executable; Android uses the app's native-library search path. If the library cannot be opened, model operations return an error instead of panicking in `ort`'s implicit load path.
+
+## Verification before distribution
+
+- Run the offline staging tests with `python3 tests/onnx_runtime_test.py`; they check archive selection, architecture and layout, not real inference.
+- On the final Windows 10 and physical Android installs, confirm the native library loads with no developer override. Import a track with the cleared Spleeter model and verify both stems play. On Windows test CPU and DirectML (where available); on Android also check OS compatibility and native library alignment on a 16 KB page-size device where applicable.
+- Verify the Windows installer payload and gather the upstream licence and third-party notices for the native runtime and all companion DLLs before public distribution. Staging verifies the Windows archive's bytes, not redistribution obligations. Verify the actual Android AAR and the package on a release runner; the staging tests use synthetic fixtures and do not prove the Maven download or native dependencies.
