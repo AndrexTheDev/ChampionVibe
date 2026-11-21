@@ -1,0 +1,92 @@
+name: Android test APK (temporary key)
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  android-test:
+    name: Build and verify the sideload-only Android test APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_NDK_VERSION: '28.2.13676358'
+      CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: '-C link-arg=-Wl,-z,max-page-size=16384'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android-arm64-ndk-r28c-test-apk
+      - uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4.0.4
+      - name: Install Android SDK and NDK
+        shell: bash
+        run: |
+          sdkmanager --install 'platform-tools' 'build-tools;35.0.0' "ndk;$ANDROID_NDK_VERSION"
+          for variable in ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK NDK_HOME; do
+            echo "$variable=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+          done
+          cargo install cargo-ndk --version 4.1.2 --locked
+          npm ci
+      - name: Build the Android test APK with an isolated app ID
+        shell: bash
+        run: |
+          config="$RUNNER_TEMP/championvibe-test.json"
+          node -e 'const fs=require("node:fs"); const cfg=require("./src-tauri/tauri.conf.json"); cfg.identifier += ".testbuild"; cfg.productName += " Test"; fs.writeFileSync(process.argv[1], JSON.stringify(cfg));' "$config"
+          log="$RUNNER_TEMP/championvibe-test-apk-build.log"
+          if ! bash scripts/build-android-apk.sh "$config" 2>&1 | tee "$log"; then
+            python3 scripts/android-ci-annotate.py 'Android test APK build diagnostics' "$log"
+            exit 1
+          fi
+      - name: Sign with a disposable key and verify the test APK
+        shell: bash
+        run: |
+          key_dir=$(mktemp -d)
+          trap 'rm -rf "$key_dir"' EXIT
+          export ANDROID_RELEASE_STORE_PASSWORD=$(openssl rand -hex 24)
+          export ANDROID_RELEASE_KEY_PASSWORD="$ANDROID_RELEASE_STORE_PASSWORD"
+          export ANDROID_RELEASE_KEY_ALIAS=championvibe-test
+          key="$key_dir/test.p12"
+          args=(-keystore "$key" -storetype PKCS12 -alias "$ANDROID_RELEASE_KEY_ALIAS" -storepass:env ANDROID_RELEASE_STORE_PASSWORD)
+          keytool -genkeypair "${args[@]}" -keyalg RSA -keysize 2048 -dname 'CN=ChampionVibe CI Test Only' -validity 365
+          export ANDROID_RELEASE_CERT_SHA256=$(keytool -exportcert "${args[@]}" | sha256sum | cut -d ' ' -f 1)
+          export ANDROID_RELEASE_KEYSTORE_BASE64=$(base64 -w0 "$key")
+          python3 scripts/sign-android-release.py check-config
+          apk=artifacts/championvibe-test-arm64.apk
+          python3 scripts/sign-android-release.py sign --project src-tauri/gen/android \
+            --build-tools "$ANDROID_SDK_ROOT/build-tools/35.0.0" --output "$apk"
+          unset ANDROID_RELEASE_STORE_PASSWORD ANDROID_RELEASE_KEY_PASSWORD ANDROID_RELEASE_KEYSTORE_BASE64
+          python3 scripts/stage-onnx-runtime.py verify-apk "$apk" --ndk "$ANDROID_NDK_HOME"
+          apkanalyzer manifest print "$apk" > "$RUNNER_TEMP/championvibe-test-manifest.xml"
+          python3 scripts/verify-android-release-manifest.py "$RUNNER_TEMP/championvibe-test-manifest.xml" \
+            --config "$RUNNER_TEMP/championvibe-test.json" --target-sdk 36
+          (cd artifacts && sha256sum championvibe-test-arm64.apk > SHA256SUMS.txt)
+          {
+            echo '### Android test APK (not for release)'
+            echo 'Package `com.championvibe.app.testbuild`; Android 8.0+ and 64-bit ARM.'
+            echo 'Signed with a disposable key. Uninstall this test build before installing another test APK signed by a different key.'
+            echo '```text'
+            cat artifacts/SHA256SUMS.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Verified Android test APK::$(cat artifacts/SHA256SUMS.txt)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: championvibe-android-test-apk
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14

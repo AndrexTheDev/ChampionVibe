@@ -45,7 +45,7 @@ function workflowTriggers(workflow) {
 test('manual packaging waits for relevant checks and retains the selected installers', () => {
   assert.deepEqual(workflowTriggers(packageWorkflow), ['workflow_dispatch']);
   assert.match(packageWorkflow, /^        default: android$/mu);
-  assert.match(packageWorkflow, /^        options: \[android, windows, both\]$/mu);
+  assert.match(packageWorkflow, /^        options: \[android, windows, both, android-test\]$/mu);
   assert.match(packageWorkflow, /needs\.validate\.result == 'success'/u);
   assert.match(packageWorkflow, /inputs\.platform == 'windows' && needs\.android-native\.result == 'skipped'/u);
   assert.match(packageWorkflow, /\(inputs\.platform == 'android' \|\| inputs\.platform == 'both'\) && needs\.android-native\.result == 'success'/u);

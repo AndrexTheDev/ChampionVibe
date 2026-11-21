@@ -9,7 +9,7 @@ on:
         required: true
         type: choice
         default: android
-        options: [android, windows, both]
+        options: [android, windows, both, android-test]
 
 permissions:
   contents: read
@@ -27,6 +27,11 @@ jobs:
     if: inputs.platform == 'android' || inputs.platform == 'both'
     name: Verify the Android native build
     uses: ./.github/workflows/android-native.yml
+
+  android-test:
+    needs: validate
+    if: inputs.platform == 'android-test'
+    uses: ./.github/workflows/android-test-apk.yml
 
   package:
     needs: [validate, android-native]
@@ -123,37 +128,9 @@ jobs:
         if: matrix.platform == 'windows'
         run: npm run tauri -- build --ci --bundles msi,nsis --config src-tauri/tauri.runtime.windows.json
 
-      - name: Initialize Tauri Android project
-        if: matrix.platform == 'android'
-        run: npm run tauri -- android init --ci --skip-targets-install
-
-      - name: Prepare the generated project with the stable Android SDK
-        if: matrix.platform == 'android'
-        shell: bash
-        run: |
-          bash scripts/prepare-android-gradle.sh src-tauri/gen/android
-
-      - name: Stage the Android arm64 ONNX Runtime
-        if: matrix.platform == 'android'
-        run: python scripts/stage-onnx-runtime.py android
-
-      - name: Stage the Android NDK C++ runtime and notices
-        if: matrix.platform == 'android'
-        shell: bash
-        run: |
-          python scripts/stage-onnx-runtime.py stage-android-cxx \
-            --ndk "$ANDROID_NDK_HOME" --dest src-tauri/gen/android/app/src/main
-
-      - name: Stage Guava ListenableFuture licence and attribution
-        if: matrix.platform == 'android'
-        shell: bash
-        run: |
-          install -Dm644 -t src-tauri/gen/android/app/src/main/assets/championvibe-licenses/listenablefuture-1.0 \
-            legal/android/listenablefuture-1.0/{COPYING,ATTRIBUTION.txt}
-
       - name: Build Android arm64 APK
         if: matrix.platform == 'android'
-        run: npm run tauri -- android build --ci --apk --target aarch64
+        run: bash scripts/build-android-apk.sh
 
       - name: Collect Windows installers
         if: matrix.platform == 'windows'
