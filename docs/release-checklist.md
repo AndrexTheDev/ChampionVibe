@@ -6,7 +6,7 @@
 
 - [ ] On the current candidate, run `npm ci`, `npm test`, `npm run e2e:tauri`, `npm run e2e:android` (after building the app frontend), `python3 tests/onnx_runtime_test.py`, `python3 tests/android_release_signing_test.py`, `npm run build`, `npm run build:site`, and `npm audit`. The headless IPC test uses a stub; it checks the bridge contract but cannot play native audio.
 - [ ] Confirm the Linux Rust format, check and test jobs pass with the checked-in lockfile; confirm the offline model compliance gate passes.
-- [ ] Confirm the [Android native link check](BUILD_VERIFICATION.md#android-native-link-check-no-apk) produces an ARM64 library and exports the JNI audio bridge. No APK is needed for this step.
+- [ ] Confirm the [Android compile check](BUILD_VERIFICATION.md#android-compile-check-no-apk) builds the ARM64 library, exports the JNI audio bridge, and compiles the generated Tauri app and its Android plugins. No APK is needed for this step.
 - [ ] Run the [Native runtime preflight](native-onnx-runtime.md#check-the-real-provider-archives-without-making-an-apk) and verify the redistribution notices for the runtime libraries before freezing the release candidate. Packaging now stages ONNX Runtime 1.24.3; see [desktop and Android runtime packaging](native-onnx-runtime.md) for the remaining verification.
 - [ ] Decide whether Pro activation is in scope for this release. If so, check the issuer configuration and use a controlled end-to-end activation test before public distribution. Verify that Demo cannot start a recording.
 
