@@ -13,6 +13,8 @@ on:
       - 'scripts/stage-onnx-runtime.py'
       - 'scripts/prepare-android-gradle.sh'
       - 'scripts/android-ci-annotate.py'
+      - 'scripts/android-runtime-inventory.init.gradle'
+      - 'scripts/report-android-runtime-licenses.py'
       - 'package*.json'
       - 'index.html'
       - 'src/**'
@@ -130,3 +132,30 @@ jobs:
             echo 'Compile-only check unexpectedly generated an APK' >&2
             exit 1
           fi
+      - name: Inventory Android release runtime dependencies without packaging
+        working-directory: src-tauri/gen/android
+        shell: bash
+        run: |
+          inventory="$RUNNER_TEMP/android-runtime-inventory"
+          log="$RUNNER_TEMP/championvibe-gradle-runtime.log"
+          if ! bash ./gradlew --no-daemon --console=plain --no-configuration-cache \
+            --init-script "$GITHUB_WORKSPACE/scripts/android-runtime-inventory.init.gradle" \
+            "-PruntimeInventoryDir=$inventory" :app:collectArm64ReleaseRuntimeInventory 2>&1 | tee "$log"; then
+            python3 "$GITHUB_WORKSPACE/scripts/android-ci-annotate.py" 'Android Gradle runtime inventory diagnostics' "$log"
+            exit 1
+          fi
+          report="$RUNNER_TEMP/android-gradle-runtime-licenses.json"
+          python3 "$GITHUB_WORKSPACE/scripts/report-android-runtime-licenses.py" "$inventory" "$report" | tee "$inventory/summary.txt"
+          {
+            echo '### Android release runtime licence inventory (no APK)'
+            cat "$inventory/summary.txt"
+            echo 'Publisher declarations only; check upstream notices and redistribution terms before publishing.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Android release runtime licence inventory::$(head -n 1 "$inventory/summary.txt")"
+      - name: Upload the Android release runtime licence inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-gradle-runtime-licenses
+          path: ${{ runner.temp }}/android-gradle-runtime-licenses.json
+          if-no-files-found: error
+          retention-days: 30
