@@ -152,6 +152,19 @@ jobs:
             echo 'Publisher declarations only; check upstream notices and redistribution terms before publishing.'
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::notice title=Android release runtime licence inventory::$(head -n 1 "$inventory/summary.txt")"
+          # Surface the review queue even when artifact downloads aren't available.
+          python3 - "$report" <<'PYTHON'
+          import json
+          from pathlib import Path
+          import sys
+
+          modules = json.loads(Path(sys.argv[1]).read_text())["modules"]
+          pending = [entry for entry in modules if entry["licenseStatus"] != "declared"]
+          for entry in pending[:20]:
+              detail = f'{entry["coordinates"]}: {entry["licenseStatus"]}'
+              detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::notice title=Android dependency licence review::{detail}")
+          PYTHON
       - name: Upload the Android release runtime licence inventory
         uses: actions/upload-artifact@v4
         with:
