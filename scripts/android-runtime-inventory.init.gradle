@@ -6,7 +6,11 @@ import org.gradle.maven.MavenPomArtifact
 
 // Opt-in Gradle init script for the generated project. No app or plugin source edits.
 gradle.projectsEvaluated {
-    def app = gradle.rootProject.project(':app')
+    // Init scripts also run for the auxiliary buildSrc build, which has no :app.
+    def app = gradle.rootProject.findProject(':app')
+    if (app == null) {
+        return
+    }
     app.tasks.register('collectArm64ReleaseRuntimeInventory') {
         doLast {
             def configuration = app.configurations.getByName('arm64ReleaseRuntimeClasspath')
