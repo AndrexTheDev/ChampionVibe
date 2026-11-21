@@ -174,6 +174,13 @@ jobs:
             --build-tools "$ANDROID_SDK_ROOT/build-tools/35.0.0" \
             --output artifacts/championvibe-android-arm64.apk
           python scripts/stage-onnx-runtime.py verify-apk artifacts/championvibe-android-arm64.apk --ndk "$ANDROID_NDK_HOME"
+      - name: Verify the signed APK manifest and write its checksum
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          apk=artifacts/championvibe-android-arm64.apk
+          apkanalyzer manifest print "$apk" > "$RUNNER_TEMP/championvibe-release-manifest.xml"
+          python scripts/verify-android-release-manifest.py "$RUNNER_TEMP/championvibe-release-manifest.xml" --target-sdk 36
           (cd artifacts && sha256sum championvibe-android-arm64.apk > SHA256SUMS.txt)
 
       - name: Upload candidate installers

@@ -30,7 +30,7 @@ The check opens the JKS or PKCS#12 keystore, unlocks the selected private key an
 
 - Exactly one Gradle **release** APK exists. Debug builds and ambiguous output are not accepted.
 - `zipalign` aligns the APK before signing and checks the finished archive with the 16 KB page-alignment option. This does not prove that each ELF library or the app works on a 16 KB device.
-- Android SDK `apksigner` verifies the APK and its certificate fingerprint; the workflow also verifies the arm64 app, ONNX Runtime and NDK C++ libraries and bundled notices and writes `SHA256SUMS.txt` for the finished APK.
+- Android SDK `apksigner` verifies the APK and its certificate fingerprint; the workflow also verifies the arm64 app, ONNX Runtime and NDK C++ libraries and bundled notices then reads the manifest from the signed APK and verifies release identity, compatibility and permissions before writing `SHA256SUMS.txt`.
 - Ordinary CI runs `python3 tests/android_release_signing_test.py` with simulated APK tools and disposable real JKS/PKCS#12 keystores. It does not build an APK, read any release secrets, or substitute for the final signature check.
 
 Windows installers have a separate `windows-packaging` environment and per-file SHA-256 checksums. This workflow does not configure a Windows Authenticode signing identity; a checksum is not a code signature.

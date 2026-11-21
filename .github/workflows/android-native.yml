@@ -15,6 +15,7 @@ on:
       - 'scripts/android-ci-annotate.py'
       - 'scripts/android-runtime-inventory.init.gradle'
       - 'scripts/report-android-runtime-licenses.py'
+      - 'scripts/verify-android-release-manifest.py'
       - 'package*.json'
       - 'index.html'
       - 'src/**'
@@ -124,7 +125,8 @@ jobs:
           done
           log="$RUNNER_TEMP/championvibe-gradle.log"
           if ! bash ./gradlew --no-daemon --console=plain \
-            :app:compileArm64ReleaseKotlin :app:compileArm64ReleaseJavaWithJavac 2>&1 | tee "$log"; then
+            :app:compileArm64ReleaseKotlin :app:compileArm64ReleaseJavaWithJavac \
+            :app:processArm64ReleaseMainManifest 2>&1 | tee "$log"; then
             python3 "$GITHUB_WORKSPACE/scripts/android-ci-annotate.py" 'Android Gradle compile diagnostics' "$log"
             exit 1
           fi
@@ -132,6 +134,13 @@ jobs:
             echo 'Compile-only check unexpectedly generated an APK' >&2
             exit 1
           fi
+      - name: Verify Android release identity, compatibility and permissions
+        shell: bash
+        run: |
+          manifest=src-tauri/gen/android/app/build/intermediates/merged_manifest/arm64Release/processArm64ReleaseMainManifest/AndroidManifest.xml
+          output=$(python3 scripts/verify-android-release-manifest.py "$manifest" --target-sdk 36)
+          printf '%s\n' "$output" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Android release permissions::$(printf '%s\n' "$output" | tail -n 1)"
       - name: Inventory Android release runtime dependencies without packaging
         working-directory: src-tauri/gen/android
         shell: bash
