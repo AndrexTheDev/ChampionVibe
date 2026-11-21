@@ -24,6 +24,8 @@ The package jobs use Windows and Android build tools and can each take up to two
 
 Choose `android-test` (or `gh workflow run package.yml --ref <candidate-branch-or-tag> -f platform=android-test`). It uses the same release build and verification steps without access to the protected signing environment, and does not package Windows. The resulting APK requires an ARM64 device with Android 8.0 or newer. It is not for publication or for updating the official app. Each build uses a fresh key: uninstall the previous test build before installing a new one. Uninstalling deletes its local app data; back up anything needed first.
 
+The [first verified Android test run (44956770647)](https://github.com/AndrexTheDev/ChampionVibe/actions/runs/44956770647) successfully built app revision `ebcdc4a`, signed it with a disposable key, and verified the manifest, native libraries, license files and APK alignment. Download `championvibe-android-test-apk` from that run and extract the ZIP. The SHA-256 for `championvibe-test-arm64.apk` from this run is `3bbf3e20a487169d3233c1c95cca8d156a74c82985d69bdb407fa248b7ef230d`. The artifact is retained for 14 days; this record remains after expiry. No device test or public release was performed.
+
 ## Download the artifacts
 
 Install and authenticate GitHub CLI (`gh auth login`), then download the available package artifacts from a successful run (Android release/test, Windows, or both release platforms):
