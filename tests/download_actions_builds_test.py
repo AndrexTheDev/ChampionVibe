@@ -18,7 +18,7 @@ case "$1 $2" in
     printf '%s\\n' "$artifact" >> "$CALLS"
     printf 'fixture\\n' > "$dest/SHA256SUMS.txt"
     case "$artifact" in
-      championvibe-android-apk) touch "$dest/app.apk" ;;
+      championvibe-android-apk|championvibe-android-test-apk) touch "$dest/app.apk" ;;
       championvibe-windows-test-build) touch "$dest/app.msi" "$dest/setup.exe" ;;
       *) exit 2 ;;
     esac ;;
@@ -53,6 +53,13 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(self.calls.read_text().splitlines(), ["championvibe-android-apk"])
         self.assertTrue((self.dest / "android/app.apk").is_file())
         self.assertFalse((self.dest / "windows").exists())
+
+    def test_disposable_test_apk_stays_separate_from_release(self):
+        result = self.download(["championvibe-android-test-apk"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls.read_text().splitlines(), ["championvibe-android-test-apk"])
+        self.assertTrue((self.dest / "android-test/app.apk").is_file())
+        self.assertFalse((self.dest / "android").exists())
 
     def test_windows_only(self):
         result = self.download(["championvibe-windows-test-build"])

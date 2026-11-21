@@ -75,14 +75,12 @@ destination="${2:-artifacts/github-actions-${run_id}}"
 artifact_names="$(gh api --paginate "repos/$repo/actions/runs/$run_id/artifacts" \
   --jq '.artifacts[] | select(.expired == false) | .name')"
 downloaded=0
-for platform in windows android; do
-  if [[ "$platform" == "android" ]]; then
-    artifact=championvibe-android-apk
-    suffix=apk
-  else
-    artifact=championvibe-windows-test-build
-    suffix=msi
-  fi
+for platform in windows android android-test; do
+  case "$platform" in
+    windows) artifact=championvibe-windows-test-build; suffix=msi ;;
+    android) artifact=championvibe-android-apk; suffix=apk ;;
+    android-test) artifact=championvibe-android-test-apk; suffix=apk ;;
+  esac
   if ! grep -Fxq "$artifact" <<< "$artifact_names"; then
     continue
   fi
