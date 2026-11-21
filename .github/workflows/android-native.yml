@@ -12,6 +12,7 @@ on:
       - 'src-tauri/**'
       - 'scripts/stage-onnx-runtime.py'
       - 'scripts/install-android-compile-sdks.sh'
+      - 'scripts/android-ci-annotate.py'
       - 'package*.json'
       - 'index.html'
       - 'src/**'
@@ -68,9 +69,13 @@ jobs:
       - name: Generate the Tauri Android project and prepare code generation
         shell: bash
         run: |
-          npm run tauri -- android init --ci --skip-targets-install
           project="$GITHUB_WORKSPACE/src-tauri/gen/android"
-          bash scripts/install-android-compile-sdks.sh "$project"
+          log="$RUNNER_TEMP/championvibe-android-setup.log"
+          if ! (npm run tauri -- android init --ci --skip-targets-install &&
+            bash scripts/install-android-compile-sdks.sh "$project") 2>&1 | tee "$log"; then
+            python3 scripts/android-ci-annotate.py 'Android project setup diagnostics' "$log"
+            exit 1
+          fi
           package=$(node -p 'require("./src-tauri/tauri.conf.json").identifier')
           kotlin_dir="$project/app/src/main/java/${package//./\/}/generated"
           mkdir -p "$kotlin_dir"
@@ -86,15 +91,7 @@ jobs:
         run: |
           log="$RUNNER_TEMP/championvibe-android-build.log"
           if ! cargo ndk -t arm64-v8a --platform 26 build --release --locked --package championvibe --lib 2>&1 | tee "$log"; then
-            python3 - "$log" <<'PYTHON'
-          from pathlib import Path
-          import sys
-          # cargo-ndk panic reports may append runner environment variables.
-          lines = Path(sys.argv[1]).read_text(errors="replace").split("\nenv:\n", 1)[0].splitlines()
-          details = "\n".join(lines[-150:])[-12000:]
-          details = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Android arm64 build diagnostics::{details}")
-          PYTHON
+            python3 "scripts/android-ci-annotate.py" 'Android arm64 build diagnostics' "$log"
             exit 1
           fi
       - name: Verify arm64 ELF alignment and the audio bridge export
@@ -126,13 +123,7 @@ jobs:
           log="$RUNNER_TEMP/championvibe-gradle.log"
           if ! bash ./gradlew --no-daemon --console=plain \
             :app:compileArm64ReleaseKotlin :app:compileArm64ReleaseJavaWithJavac 2>&1 | tee "$log"; then
-            python3 - "$log" <<'PYTHON'
-          from pathlib import Path
-          import sys
-          details = "\n".join(Path(sys.argv[1]).read_text(errors="replace").splitlines()[-100:])[-12000:]
-          details = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Android Gradle compile diagnostics::{details}")
-          PYTHON
+            python3 "$GITHUB_WORKSPACE/scripts/android-ci-annotate.py" 'Android Gradle compile diagnostics' "$log"
             exit 1
           fi
           if find app/build/outputs -name '*.apk' -print -quit 2>/dev/null | grep -q .; then
