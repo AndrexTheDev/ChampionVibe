@@ -20,3 +20,16 @@ fi
 # Tauri CLI 2.12.1 emits SDK 37, which the runner's stable SDK repository does not offer.
 sdkmanager --install "platforms;android-$platform"
 sed -Ei "s/^([[:space:]]*(compileSdk|targetSdk)[[:space:]]*=[[:space:]]*)[0-9]+[[:space:]]*$/\1$platform/" "$app_gradle"
+
+# The Tauri buildSrc Kotlin DSL plugin uses the Plugin Portal, but its Kotlin
+# dependencies are published on Maven Central. Avoid relying on Portal redirects.
+if [[ ! -f "$project/buildSrc/settings.gradle" && ! -f "$project/buildSrc/settings.gradle.kts" ]]; then
+  cat > "$project/buildSrc/settings.gradle.kts" <<'GRADLE'
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+GRADLE
+fi
