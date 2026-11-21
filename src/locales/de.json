@@ -678,6 +678,7 @@
   "Lokalen Kokoro-WASM-Shoutout abspielen": "Lokalen Kokoro-WASM-Shoutout abspielen",
   "Wähle zuerst einen Track aus.": "Wähle zuerst einen Track aus.",
   "US-Englische KI-Stimme mit Patois-Aussprache-Annäherung": "US-Englische KI-Stimme mit Patois-Aussprache-Annäherung",
+  "Choose a self-contained HT-Demucs ONNX file. For MDX-Net, use the dedicated import below.": "Wähle eine eigenständige HT-Demucs-ONNX-Datei. Für MDX-Net nutze den separaten Import unten.",
   "BYOM: lokale .onnx-Datei oder .cvmodel.json auswählen": "BYOM: lokale .onnx-Datei oder .cvmodel.json auswählen",
   "Lokale Modelldatei (.onnx) ablegen": "Lokale Modelldatei (.onnx) ablegen",
   "Lokale Modelldatei (.onnx)": "Lokale Modelldatei (.onnx)",

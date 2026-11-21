@@ -63,6 +63,17 @@ cargo check --workspace --all-targets --locked --message-format=short
 cargo test --workspace --locked
 ```
 
+## Android UI regression check (no APK)
+
+```sh
+npm ci
+npm run build
+npx --no-install playwright-core install --only-shell chromium
+npm run e2e:android
+```
+
+The check serves the actual built app in Chromium at Android phone sizes with an Android user agent and stubbed Tauri IPC. It exercises immediate access to Demo, the recording gate, the audio file/folder picker contract (including cancellation), the native single-file ONNX picker and the import request. It checks portrait overflow at 320, 360 and 412 CSS pixels in all four languages. A compatible preinstalled browser can be selected with `CHROMIUM_EXECUTABLE`. This is not the Android system WebView or a real device; it does not validate Android permissions, model inference, or audio output.
+
 ## Not verified by CI (release tasks)
 
 - Real-model inference on device: Spleeter separation quality, Whisper keyword timing and Kokoro WAV

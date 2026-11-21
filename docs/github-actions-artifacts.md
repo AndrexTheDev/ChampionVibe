@@ -3,13 +3,13 @@
 Normal pushes and pull requests run `ci.yml` without building any installers. The separate **Final packaging** workflow (`package.yml`) runs only when started manually. It first runs CI for that revision and uploads two Actions artifacts if packaging succeeds:
 
 - `championvibe-windows-test-build` — Windows `.msi` and NSIS `.exe` installers.
-- `championvibe-android-apk` — Android `.apk` for `arm64-v8a` (64-bit ARM). The CI excludes 32-bit ABIs because the current `whisper-rs-sys` bundled bindings do not compile for them; the APK therefore requires a 64-bit ARM Android device.
+- `championvibe-android-apk` — a signed Android `.apk` for `arm64-v8a` (64-bit ARM). The CI excludes 32-bit ABIs because the current `whisper-rs-sys` bundled bindings do not compile for them; the APK therefore requires a 64-bit ARM Android device.
 
-Actions artifacts are retained for 14 days. **The current workflow does not publish GitHub Release assets**; it publishes run artifacts only. The download script supports both, so it can also fetch assets after a Release is created and populated separately.
+Each artifact includes a `SHA256SUMS.txt` file for checking the downloaded installers (`sha256sum -c SHA256SUMS.txt` from the extracted platform directory, or `shasum -a 256 -c SHA256SUMS.txt` on macOS). Actions artifacts are retained for 14 days. **The current workflow does not publish GitHub Release assets**; it publishes run artifacts only. The download script supports both, so it can also fetch assets after a Release is created and populated separately.
 
 ## Start final packaging
 
-Wait until the candidate is ready according to the [release checklist](release-checklist.md). For manual dispatch, GitHub requires the workflow file to be present on the default branch. Select the candidate ref in **Actions → Final packaging → Run workflow**, or use:
+Wait until the candidate is ready according to the [release checklist](release-checklist.md). Configure the protected [Android release signing environment](android-release-signing.md) first; without a valid configuration the Android job stops without building an APK. For manual dispatch, GitHub requires the workflow file to be present on the default branch. Select the candidate ref in **Actions → Final packaging → Run workflow**, or use:
 
 ```sh
 gh workflow run package.yml --ref <candidate-branch-or-tag>

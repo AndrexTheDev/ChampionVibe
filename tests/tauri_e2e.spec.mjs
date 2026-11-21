@@ -388,6 +388,7 @@ export function createTauriIpcStub() {
   };
 
   const internals = {
+    metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
     async invoke(command, args = {}) {
       calls.push({ command, args: JSON.parse(JSON.stringify(args ?? {})) });
       const handler = handlers[command];

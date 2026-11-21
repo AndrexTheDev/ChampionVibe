@@ -797,3 +797,29 @@ button, .track-select { -webkit-tap-highlight-color: transparent; }
   .camelot-wheel { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .grid-editor-value { min-width: 84px; font-size: 15px; }
 }
+
+/* Prevent a narrow Android WebView from zooming out to fit desktop-width controls. */
+@media (max-width: 620px) {
+  html[data-platform="android"] .app-shell { grid-template-columns: minmax(0, 1fr); }
+  html[data-platform="android"] .main-content { min-width: 0; padding-inline: 12px; }
+  html[data-platform="android"] .sidebar { flex-wrap: wrap; gap: 6px 12px; padding: 10px 12px; }
+  html[data-platform="android"] .navigation { flex: 1 1 100%; flex-wrap: wrap; margin-left: 0; }
+  html[data-platform="android"] .nav-link { min-height: 44px; }
+  html[data-platform="android"] .topbar { height: auto; min-height: 58px; padding-block: 6px; }
+  html[data-platform="android"] .topbar-actions { flex-wrap: wrap; }
+  html[data-platform="android"] .topbar-actions :is(button, select) { min-height: 44px; }
+  html[data-platform="android"] .avatar { display: none; }
+  html[data-platform="android"] .app-shell[data-view-mode="player"] .player-panel { min-width: 0; padding: 14px; }
+  html[data-platform="android"] :is(.stem-switch, .import-picker-button, #record-button) { min-height: 44px; }
+  html[data-platform="android"] .transport-controls :is(#audio-play, #audio-pause, #audio-stop, #audio-next) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  html[data-platform="android"] .track-row.virtual-track-row :is(.track-play, .track-grid-edit) {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+  html[data-platform="android"] .track-row.virtual-track-row .track-bpm { min-width: 38px; }
+  html[data-platform="android"] .track-row.virtual-track-row .track-format-badge { display: none; }
+}

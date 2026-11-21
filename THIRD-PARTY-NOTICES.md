@@ -9,9 +9,18 @@ their licence and the obligations that follow from it.
 | Component | Version / source | Licence | Notes |
 | --- | --- | --- | --- |
 | Patois/reggae drop sampleboard (`src-tauri/assets/samples/*.wav`) | Original synthesis by this project | CC0-1.0 (public domain dedication) | No attribution required; see `src-tauri/assets/samples/README.md` for per-file hashes |
-| Rust crate dependencies (incl. `ort` bindings, `whisper-rs`, `symphonia`, `cpal`, `rusqlite`, `rustfft`, `flacenc`, `hound`, `bzip2`, `tar`) | `src-tauri/Cargo.lock` | MIT / Apache-2.0 / MPL-2.0 / BSD-3-Clause, per crate | `Cargo.lock` is the authoritative inventory; regenerate with the `Model pins and lockfile` workflow |
+| Rust crate dependencies (incl. `ort` bindings, `whisper-rs`, `symphonia`, `cpal`, `rusqlite`, `rustfft`, `flacenc`, `hound`, `bzip2`, `tar`) | `Cargo.lock` | MIT / Apache-2.0 / MPL-2.0 / BSD-3-Clause, per crate | `Cargo.lock` is the authoritative inventory; regenerate with the `Model pins and lockfile` workflow |
 | `onnxruntime-web` (WebAssembly TTS) | npm `onnxruntime-web` | MIT | Only the downloaded runtime is loaded into the WebView |
 | `phonemize` (English G2P) | npm `phonemize` | MIT | Used for the English phonemisation behind the Kokoro path |
+
+## Native runtime bundled by the release workflow
+
+| Component | Source | Notices and release considerations |
+| --- | --- | --- |
+| ONNX Runtime with DirectML (Windows x64) | Microsoft's [ONNX Runtime DirectML 1.24.3](https://pypi.org/project/onnxruntime-directml/1.24.3/#files), pinned by SHA-256 | The installer copies `LICENSE` and `ThirdPartyNotices.txt` from the same wheel as the DLLs into `licenses/`. Review any separate terms for the companion binary components before redistribution. |
+| ONNX Runtime (Android arm64) | Microsoft's `com.microsoft.onnxruntime:onnxruntime-android:1.24.3` AAR on Maven Central | Release staging requires a reviewed archive digest. The preflight reports notice entries; verify and include the required Android notices before public distribution. |
+
+See [native runtime packaging](docs/native-onnx-runtime.md) for verification details. Native runtime libraries are not model weights.
 
 ## Downloaded only on explicit user request (SHA-256 pinned)
 

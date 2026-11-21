@@ -10,7 +10,10 @@
     "e2e:tauri": "node tests/tauri_e2e.spec.mjs",
     "tauri": "tauri",
     "clean:git": "bash scripts/clean-untracked.sh",
-    "compliance:check": "bash scripts/verify-cleared-model-policy.sh"
+    "compliance:check": "bash scripts/verify-cleared-model-policy.sh",
+    "dev:site": "vite --config vite.landing.config.js",
+    "build:site": "vite build --config vite.landing.config.js",
+    "e2e:android": "node scripts/android-webview-smoke.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
@@ -20,6 +23,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
+    "playwright-core": "1.65.1",
     "vite": "^6.4.6"
   }
 }

@@ -36,7 +36,7 @@
         <header class="topbar">
           <div class="breadcrumb"><span>Workspace</span><i>/</i><strong>Übersicht</strong></div>
           <div class="topbar-actions">
-            <button class="mode-button info-trigger" id="open-info-modal" type="button" aria-haspopup="dialog"><span class="info-trigger-full">Hilfe &amp; Info</span><span class="info-trigger-short" aria-hidden="true">?</span></button>
+            <button class="mode-button info-trigger" id="open-info-modal" type="button" aria-label="Hilfe &amp; Info" aria-haspopup="dialog"><span class="info-trigger-full">Hilfe &amp; Info</span><span class="info-trigger-short" aria-hidden="true">?</span></button>
             <label class="language-control"><span class="sr-only">Sprache</span><select id="language-select" aria-label="Sprache wählen" title="Sprache wählen"><option value="de">DE</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select></label>
             <button class="mode-button" id="toggle-tools" type="button" aria-expanded="false" aria-label="Library-Tools" title="Library-Tools">Library-Tools</button>
             <button class="mode-button mode-button-primary" id="toggle-performance" type="button" aria-pressed="false">Performance Mode</button>
@@ -277,7 +277,7 @@
                         <span id="separator-default-status" class="model-library-empty">Separator-Status wird geladen …</span>
                       </div>
                     </div>
-                    <div class="byom-import" id="byom-import">
+                    <div class="byom-import" id="byom-import-panel">
                       <strong>BYOM · eigene Modelldatei ablegen (.onnx)</strong>
                       <p>Datei hier ablegen oder auswählen. Sie bleibt auf diesem Gerät, wird niemals hochgeladen und nicht weitergegeben; geprüft werden nur Tensorform, Datentyp und Datei-Hash. Für HT-Demucs- und MDX-Net-Gewichte liegt die Lizenzverantwortung bei dir.</p>
                       <div class="byom-dropzone" id="byom-dropzone" tabindex="0" role="button" aria-label="Lokale Modelldatei (.onnx) ablegen">

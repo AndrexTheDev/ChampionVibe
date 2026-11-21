@@ -3,8 +3,9 @@
     "resources": {
       "runtime/windows-x64/onnxruntime.dll": "onnxruntime.dll",
       "runtime/windows-x64/DirectML.dll": "DirectML.dll",
-      "runtime/windows-x64/dxcompiler.dll": "dxcompiler.dll",
-      "runtime/windows-x64/dxil.dll": "dxil.dll"
+      "runtime/windows-x64/onnxruntime_providers_shared.dll": "onnxruntime_providers_shared.dll",
+      "runtime/windows-x64/onnxruntime-LICENSE.txt": "licenses/onnxruntime-LICENSE.txt",
+      "runtime/windows-x64/onnxruntime-ThirdPartyNotices.txt": "licenses/onnxruntime-ThirdPartyNotices.txt"
     }
   }
 }

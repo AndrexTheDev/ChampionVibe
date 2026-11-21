@@ -4,6 +4,10 @@ Cross-platform Tauri v2 foundation for Windows 10 and Android, with a Vanilla JS
 
 > **Security and cost reality:** no client application can be made “uncrackable.” A device owner can patch its binary, alter its clock, or emulate identifiers. This repository does not claim otherwise. It keeps the Ed25519 **private signing key off the client**, verifies signed entitlements in Rust, and makes the issuer perform authoritative chain checks. Public RPC/oracle services currently require no API key, but are rate-limited and have no availability guarantee. Self-hosting the issuer on your own hardware can avoid hosting fees; it cannot guarantee that all operation is always free.
 
+## Product website
+
+The English **Run the Riddim** landing page is in `landing/`, separate from the app. Start it with `npm run dev:site`, or use `npm run build:site` to build `dist-site/` for [Cloudflare Pages](docs/cloudflare-pages.md). The app itself still supports English, German, Spanish and French.
+
 ## Project layout
 
 ```text
@@ -11,7 +15,8 @@ ChampionVibe/
 ├── Cargo.toml                         # Rust workspace
 ├── package.json                       # Vanilla frontend + Tauri CLI
 ├── vite.config.js
-├── index.html
+├── index.html                         # Tauri app UI entry point
+├── landing/                           # Standalone English product website
 ├── src/
 │   ├── main.js                        # Tauri IPC, quote/activation UI, wallet detection
 │   ├── i18n.js + locales/{de,en,es,fr}.json # zero-dependency, no-reload UI translations
@@ -261,7 +266,7 @@ No paid API or WalletConnect project ID is required by this scaffold. It reads C
 
 ## CI builds and downloads
 
-Normal pushes and pull requests run frontend tests/build, the headless IPC driver, the offline compliance gate and warning-free Rust checks/tests with `--locked`. They do **not** build an APK or a Windows installer. When the release candidate is ready, deliberately run **Final packaging** (`package.yml`); it repeats the checks on the selected revision before building Windows `.msi`/`.exe` and Android `.apk` Actions artifacts (14-day retention). It does not publish GitHub Release assets. See [the release checklist](docs/release-checklist.md), [native ONNX Runtime packaging](docs/native-onnx-runtime.md), and [the artifact download guide](docs/github-actions-artifacts.md).
+Normal pushes and pull requests run frontend tests/build, the headless IPC driver, the offline compliance gate and warning-free Rust checks/tests with `--locked`. They do **not** build an APK or a Windows installer. When the release candidate is ready, deliberately run **Final packaging** (`package.yml`); it repeats the checks on the selected revision before building Windows `.msi`/`.exe` and Android `.apk` Actions artifacts (14-day retention). It does not publish GitHub Release assets. See [the release checklist](docs/release-checklist.md), [native ONNX Runtime packaging](docs/native-onnx-runtime.md), [Android release signing](docs/android-release-signing.md), and [the artifact download guide](docs/github-actions-artifacts.md).
 
 ## Validation
 

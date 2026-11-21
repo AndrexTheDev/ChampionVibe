@@ -40,10 +40,21 @@ jobs:
         run: npm run e2e:tauri
 
       - name: Test native runtime staging without installers
-        run: python3 tests/onnx_runtime_test.py
+        run: |
+          python3 tests/onnx_runtime_test.py
+          python3 tests/android_release_signing_test.py
 
       - name: Build frontend
         run: npm run build
+
+      - name: Install Chromium for the simulated Android WebView
+        run: npx --no-install playwright-core install --with-deps --only-shell chromium
+
+      - name: Test Android app interaction without an APK
+        run: npm run e2e:android
+
+      - name: Build the Cloudflare Pages site
+        run: npm run build:site
 
   compliance:
     name: Cleared-model compliance checks
