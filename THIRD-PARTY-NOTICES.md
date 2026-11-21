@@ -23,6 +23,10 @@ their licence and the obligations that follow from it.
 
 See [native runtime packaging](docs/native-onnx-runtime.md) for verification details. Native runtime libraries are not model weights.
 
+## Android Gradle dependencies
+
+The [Android Gradle runtime inventory](docs/BUILD_VERIFICATION.md#android-compile-check-no-apk) reports the Maven components and direct publisher declarations. Guava ListenableFuture `1.0` inherits its Maven metadata from `guava-parent:26.0-android`; the module’s source header declares Apache-2.0. The APK includes the [upstream license and attribution](legal/android/listenablefuture-1.0/) in `assets/championvibe-licenses/listenablefuture-1.0/`. This is evidence for that module, not a complete redistribution review.
+
 ## Downloaded only on explicit user request (SHA-256 pinned)
 
 | Artifact | Source | Licence and obligations |

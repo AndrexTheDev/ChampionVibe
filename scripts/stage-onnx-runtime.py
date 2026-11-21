@@ -38,6 +38,8 @@ CXX_NAME = "libc++_shared.so"
 APK_CXX_MEMBER = f"{APK_LIB_DIR}/{CXX_NAME}"
 APK_NDK_NOTICES = "assets/championvibe-licenses/android-ndk"
 NDK_NOTICES = ("NOTICE", "NOTICE.toolchain")
+GUAVA_NOTICES = ROOT / "legal/android/listenablefuture-1.0"
+APK_GUAVA_NOTICES = "assets/championvibe-licenses/listenablefuture-1.0"
 NDK_SYSROOT_LIB = Path("toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android")
 ANDROID_PIN = ROOT / f"reports/android-onnx-runtime-{VERSION}.json"
 NOTICE_DIR = ROOT / f"legal/onnxruntime/{VERSION}"
@@ -248,6 +250,10 @@ def verify_apk(path, ndk):
             if names.count(asset) != 1:
                 raise ValueError(f"expected exactly one runtime notice in the APK: {asset}")
             validate_notice(name, apk.read(asset))
+        for name in ("COPYING", "ATTRIBUTION.txt"):
+            asset = f"{APK_GUAVA_NOTICES}/{name}"
+            if names.count(asset) != 1 or apk.read(asset) != (GUAVA_NOTICES / name).read_bytes():
+                raise ValueError(f"Guava ListenableFuture notice missing or altered in the APK: {asset}")
         for name, payload in ndk_notices.items():
             asset = f"{APK_NDK_NOTICES}/{name}"
             if names.count(asset) != 1 or apk.read(asset) != payload:

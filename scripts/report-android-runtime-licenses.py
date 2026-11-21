@@ -9,10 +9,18 @@ import re
 from xml.etree import ElementTree
 
 
-def declared_licenses(metadata):
-    pom = ElementTree.fromstring(metadata)
+LISTENABLEFUTURE = "com.google.guava:listenablefuture:1.0"
+LISTENABLEFUTURE_PARENT = "com.google.guava:guava-parent:26.0-android"
+LISTENABLEFUTURE_SOURCE = "https://github.com/google/guava/blob/b62d52926b904a8def90fd427acad53d79fa0e9f"
+
+
+def text(element, key):
+    return (element.findtext(f"{{*}}{key}") or "").strip()
+
+
+def declared_licenses(pom):
     return [
-        {key: (entry.findtext(f"{{*}}{key}") or "").strip() for key in ("name", "url")}
+        {key: text(entry, key) for key in ("name", "url")}
         for entry in pom.findall("{*}licenses/{*}license")
     ]
 
@@ -32,13 +40,24 @@ def collect(root):
                 raise ValueError("Unexpected Gradle POM file name")
             metadata = (root / "poms" / pom_name).read_bytes()
             entry["pomSha256"] = hashlib.sha256(metadata).hexdigest()
-            entry["licenses"] = declared_licenses(metadata)
+            pom = ElementTree.fromstring(metadata)
+            entry["licenses"] = declared_licenses(pom)
             # An inherited or interpolated license still needs review; don't infer a license.
             usable = any(
                 license["name"] and "${" not in license["name"] and "${" not in license["url"]
                 for license in entry["licenses"]
             )
             entry["licenseStatus"] = "declared" if usable else "no-usable-direct-declaration"
+            parent = pom.find("{*}parent")
+            if not usable and coordinates == LISTENABLEFUTURE and parent is not None:
+                parent_coordinates = ":".join(text(parent, key) for key in ("groupId", "artifactId", "version"))
+                if parent_coordinates == LISTENABLEFUTURE_PARENT:
+                    entry["upstreamEvidence"] = {
+                        "license": "Apache-2.0",
+                        "parent": parent_coordinates,
+                        "source": f"{LISTENABLEFUTURE_SOURCE}/guava/src/com/google/common/util/concurrent/ListenableFuture.java",
+                    }
+                    entry["licenseStatus"] = "upstream-source-documented"
         modules.append(entry)
     if not modules:
         raise ValueError("Android release runtime inventory is empty")
@@ -52,8 +71,8 @@ def main():
     args = parser.parse_args()
     result = collect(args.inventory)
     args.report.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    pending = [entry["coordinates"] for entry in result["modules"] if entry["licenseStatus"] != "declared"]
-    print(f"Android release runtime: {len(result['modules'])} Maven modules; {len(pending)} without a usable direct POM license declaration.")
+    pending = [entry["coordinates"] for entry in result["modules"] if entry["licenseStatus"] not in {"declared", "upstream-source-documented"}]
+    print(f"Android release runtime: {len(result['modules'])} Maven modules; {len(pending)} without direct or documented upstream license evidence.")
     for module in pending:
         print(f"Review: {module}")
 

@@ -36,6 +36,17 @@ class AndroidRuntimeLicensesTests(unittest.TestCase):
         self.assertEqual(entries[0]["pomSha256"], hashlib.sha256(exact).hexdigest())
         self.assertIsNone(entries[3]["pomSha256"])
 
+    def test_documented_upstream_evidence_requires_exact_module_and_parent(self):
+        self.index.write_text("com.google.guava\tlistenablefuture\t1.0\t0.pom\n")
+        pom = self.root / "poms/0.pom"
+        exact = "<project><parent><groupId>com.google.guava</groupId><artifactId>guava-parent</artifactId><version>26.0-android</version></parent></project>"
+        pom.write_text(exact)
+        item = report.collect(self.root)["modules"][0]
+        self.assertEqual(item["licenseStatus"], "upstream-source-documented")
+        self.assertEqual(item["upstreamEvidence"]["license"], "Apache-2.0")
+        pom.write_text(exact.replace("26.0-android", "27.0-android"))
+        self.assertEqual(report.collect(self.root)["modules"][0]["licenseStatus"], "no-usable-direct-declaration")
+
     def test_rejects_empty_duplicate_and_out_of_directory_inventory(self):
         for text in ("", "x\tx\t1\t\nx\tx\t1\t\n", "x\tx\t1\t../other.pom\n"):
             with self.subTest(text=text), self.assertRaises(ValueError):

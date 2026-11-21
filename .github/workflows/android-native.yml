@@ -16,6 +16,7 @@ on:
       - 'scripts/android-runtime-inventory.init.gradle'
       - 'scripts/report-android-runtime-licenses.py'
       - 'scripts/verify-android-release-manifest.py'
+      - 'legal/android/**'
       - 'package*.json'
       - 'index.html'
       - 'src/**'
@@ -168,7 +169,7 @@ jobs:
           import sys
 
           modules = json.loads(Path(sys.argv[1]).read_text())["modules"]
-          pending = [entry for entry in modules if entry["licenseStatus"] != "declared"]
+          pending = [entry for entry in modules if entry["licenseStatus"] not in {"declared", "upstream-source-documented"}]
           for entry in pending[:20]:
               detail = f'{entry["coordinates"]}: {entry["licenseStatus"]}'
               detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")

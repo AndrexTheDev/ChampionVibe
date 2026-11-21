@@ -140,6 +140,13 @@ jobs:
           python scripts/stage-onnx-runtime.py stage-android-cxx \
             --ndk "$ANDROID_NDK_HOME" --dest src-tauri/gen/android/app/src/main
 
+      - name: Stage Guava ListenableFuture licence and attribution
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          install -Dm644 -t src-tauri/gen/android/app/src/main/assets/championvibe-licenses/listenablefuture-1.0 \
+            legal/android/listenablefuture-1.0/{COPYING,ATTRIBUTION.txt}
+
       - name: Build Android arm64 APK
         if: matrix.platform == 'android'
         run: npm run tauri -- android build --ci --apk --target aarch64

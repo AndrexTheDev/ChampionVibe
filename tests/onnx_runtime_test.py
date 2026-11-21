@@ -158,6 +158,7 @@ class RuntimePackagingTests(unittest.TestCase):
         ndk = self.make_ndk()
         notices = {f"{runtime.APK_NOTICE_DIR}/{name}": (runtime.NOTICE_DIR / name).read_bytes() for name in runtime.NOTICE_DIGESTS}
         notices |= {f"{runtime.APK_NDK_NOTICES}/{name}": (ndk / name).read_bytes() for name in runtime.NDK_NOTICES}
+        notices |= {f"{runtime.APK_GUAVA_NOTICES}/{name}": (runtime.GUAVA_NOTICES / name).read_bytes() for name in ("COPYING", "ATTRIBUTION.txt")}
         libs = {runtime.APK_APP_MEMBER: elf(), runtime.APK_MEMBER: elf(), runtime.APK_CXX_MEMBER: elf(build_id=b"NDK fixture")}
         apk = libs | notices
         runtime.verify_apk(self.write_zip(apk), ndk)
@@ -169,6 +170,7 @@ class RuntimePackagingTests(unittest.TestCase):
             apk | {"lib/x86_64/libextra.so": elf(62)},
             apk | {runtime.APK_CXX_MEMBER: elf(build_id=b"wrong NDK")},
             apk | {f"{runtime.APK_NDK_NOTICES}/NOTICE": b"tampered"},
+            apk | {f"{runtime.APK_GUAVA_NOTICES}/COPYING": b"tampered"},
             {name: value for name, value in apk.items() if name != runtime.APK_CXX_MEMBER},
         ):
             with self.subTest(entries=list(entries)), self.assertRaises(ValueError):
