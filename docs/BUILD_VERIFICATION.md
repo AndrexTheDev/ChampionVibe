@@ -9,6 +9,7 @@ What CI proves about a ChampionVibe commit, and what it cannot prove yet.
 | `ci.yml` · `frontend` | `npm ci`, `npm test`, `npm run e2e:tauri`, `python3 tests/onnx_runtime_test.py`, `npm run build` | The WebView build compiles and all frontend suites pass, including the model-library, i18n and BYOM contract tests; the IPC driver checks the command and event contract against a stub, not a native runtime |
 | `ci.yml` · `compliance` | `scripts/verify-cleared-model-policy.sh` | Offline policy gate: registry tiers, SHA-256 pins and forbidden sources, no bundled weights, BYOM acknowledgement rules, byte-exact CC0 sampleboard, locale transparency wording, and the locked/warning-free build wiring |
 | `ci.yml` · `rust` | `cargo fmt --all -- --check`, `cargo check --workspace --all-targets --locked`, `cargo test --workspace --locked` | Formatting, warning-free compilation of library, binaries and tests on Linux with Tauri/audio system dependencies, all Rust unit tests (`model_loader`, `samples`, Spleeter frame/STFT bookkeeping), and that the checked-in `Cargo.lock` is the graph the build actually uses |
+| `android-native.yml` · `arm64` | Locked `cargo ndk` release library build with NDK r28c, API 26, followed by ELF and JNI checks | Android-specific Rust and native dependencies compile and link, the app library has 16 KiB-compatible load segments, and the Kotlin audio bridge entry point is exported. No Gradle or APK. |
 | `package.yml` (manual only) · `package` | Tauri bundling on `windows-latest` and Android `aarch64-linux-android` | Windows MSI/NSIS and Android APK artifacts (`championvibe-windows-test-build`, `championvibe-android-apk`, 14-day retention) build after CI passes for the selected commit |
 | `model-pins.yml` · `lockfile` | `cargo generate-lockfile`, `::notice` annotation, commit-back | `Cargo.lock` tracks the full workspace dependency graph and is committed to the branch; the job reports the lock SHA-256 and package count |
 | `model-pins.yml` · `model-pins` | `scripts/verify-model-pins.sh` + forbidden-source check | Every downloadable artifact matches its registry byte size and SHA-256, no forbidden separator source is reachable, and `reports/model-pin-verification.json` is refreshed |
@@ -73,6 +74,21 @@ npm run e2e:android
 ```
 
 The check serves the actual built app in Chromium at Android phone sizes with an Android user agent and stubbed Tauri IPC. It exercises immediate access to Demo, the recording gate, the audio file/folder picker contract (including cancellation), the native single-file ONNX picker and the import request. It checks portrait overflow at 320, 360 and 412 CSS pixels in all four languages. A compatible preinstalled browser can be selected with `CHROMIUM_EXECUTABLE`. This is not the Android system WebView or a real device; it does not validate Android permissions, model inference, or audio output.
+
+## Android native link check (no APK)
+
+The **Android native check** runs for relevant pull requests, on manual dispatch, and before final packaging. It builds the Android ARM64 shared library and checks the library's ELF load segments and JNI audio bridge symbol. It does not compile Kotlin, exercise Android permissions, or build or install an APK.
+
+To reproduce on a host with the Android SDK and NDK r28c (`28.2.13676358`), set `ANDROID_NDK_HOME` to that NDK directory. Then run:
+
+```sh
+rustup target add aarch64-linux-android
+cargo install cargo-ndk --version 4.1.2 --locked
+npm ci && npm run build
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS='-C link-arg=-Wl,-z,max-page-size=16384'
+cargo ndk -t arm64-v8a -p 26 build --release --locked --package championvibe --lib
+python3 scripts/stage-onnx-runtime.py verify-android-library target/aarch64-linux-android/release/libchampionvibe_lib.so
+```
 
 ## Not verified by CI (release tasks)
 

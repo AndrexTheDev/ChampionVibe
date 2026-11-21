@@ -49,7 +49,20 @@ jobs:
           npm ci
           npm run build
       - name: Compile and link the app shared library for Android API 26
-        run: cargo ndk -t arm64-v8a -p 26 build --release --locked --package championvibe --lib
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/championvibe-android-build.log"
+          if ! cargo ndk -t arm64-v8a -p 26 build --release --locked --package championvibe --lib 2>&1 | tee "$log"; then
+            python3 - "$log" <<'PYTHON'
+          from pathlib import Path
+          import sys
+          lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          details = "\n".join(lines[-150:])[-12000:]
+          details = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Android arm64 build diagnostics::{details}")
+          PYTHON
+            exit 1
+          fi
       - name: Verify arm64 ELF alignment and the audio bridge export
         shell: bash
         run: |
@@ -57,6 +70,8 @@ jobs:
           python3 scripts/stage-onnx-runtime.py verify-android-library "$library"
           readelf --dyn-syms --wide "$library" > /tmp/championvibe-android-symbols.txt
           grep -E 'GLOBAL +DEFAULT +[0-9]+ +Java_com_championvibe_deviceidentity_DeviceIdentityPlugin_nativeInitializeAudioContext$' /tmp/championvibe-android-symbols.txt
+          dependencies=$(readelf --dynamic "$library" | awk -F '[][]' '/\(NEEDED\)/ { print $2 }' | paste -sd ' ' -)
+          echo "::notice title=Android arm64 dynamic dependencies::$dependencies"
           {
             echo '### Android arm64 shared library (no APK)'
             echo '```text'
