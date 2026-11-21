@@ -13,9 +13,9 @@
 
 ## 2. Build the final candidate once
 
-- [ ] Set up the protected [Android signing environment](android-release-signing.md) and decide on a Windows Authenticode signing identity before public distribution.
-- [ ] Freeze the candidate revision. Run [Final packaging](github-actions-artifacts.md#start-final-packaging) manually; ordinary pushes and pull requests only run checks.
-- [ ] Download both artifacts from that exact revision. Check the published SHA-256 checksums and verify which artifacts are signed and suitable for distribution. An Actions artifact is not a public release.
+- [ ] Set up the protected [Android signing environment](android-release-signing.md) and run the manual **Android signing preflight (no APK)**; decide on a Windows Authenticode signing identity before Windows distribution.
+- [ ] Freeze the candidate revision. Run [Final packaging](github-actions-artifacts.md#start-final-packaging) manually with `android`, `windows`, or `both`; ordinary pushes and pull requests only run checks.
+- [ ] Download the selected platform’s artifacts from that exact revision. Check the published SHA-256 checksums and verify which artifacts are signed and suitable for distribution. An Actions artifact is not a public release.
 
 ## 3. Validate the actual installers before publishing (deferred during development)
 

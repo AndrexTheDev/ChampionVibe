@@ -3,6 +3,13 @@ name: Final packaging
 # Deliberately not triggered by push, pull_request, or tags.
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Select the installer(s) to build
+        required: true
+        type: choice
+        default: android
+        options: [android, windows, both]
 
 permissions:
   contents: read
@@ -17,26 +24,23 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   android-native:
+    if: inputs.platform == 'android' || inputs.platform == 'both'
     name: Verify the Android native build
     uses: ./.github/workflows/android-native.yml
 
   package:
     needs: [validate, android-native]
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' &&
+      ((inputs.platform == 'windows' && needs.android-native.result == 'skipped') ||
+      ((inputs.platform == 'android' || inputs.platform == 'both') && needs.android-native.result == 'success')) }}
     name: Package ${{ matrix.platform }} test artifact
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: windows
-            os: windows-latest
-            artifact-name: championvibe-windows-test-build
-            environment: windows-packaging
-          - platform: android
-            os: ubuntu-latest
-            artifact-name: championvibe-android-apk
-            environment: android-release
-    runs-on: ${{ matrix.os }}
-    environment: ${{ matrix.environment }}
+        platform: ${{ fromJSON(inputs.platform == 'both' && '["android","windows"]' || inputs.platform == 'android' && '["android"]' || '["windows"]') }}
+    runs-on: ${{ matrix.platform == 'android' && 'ubuntu-latest' || 'windows-latest' }}
+    environment: ${{ matrix.platform == 'android' && 'android-release' || 'windows-packaging' }}
     timeout-minutes: 120
     env:
       ANDROID_NDK_VERSION: '28.2.13676358'
@@ -121,7 +125,7 @@ jobs:
 
       - name: Initialize Tauri Android project
         if: matrix.platform == 'android'
-        run: npm run tauri -- android init --ci
+        run: npm run tauri -- android init --ci --skip-targets-install
 
       - name: Prepare the generated project with the stable Android SDK
         if: matrix.platform == 'android'
@@ -193,7 +197,7 @@ jobs:
       - name: Upload candidate installers
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact-name }}
+          name: ${{ matrix.platform == 'android' && 'championvibe-android-apk' || 'championvibe-windows-test-build' }}
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14

@@ -18,7 +18,9 @@ Obtain the public fingerprint from a copy of the trusted keystore with `keytool 
 
 ## Verify the key without packaging
 
-With JDK 17 installed and the five settings supplied privately in the environment, run:
+After configuring `android-release`, run **Actions → Android signing preflight (no APK) → Run workflow** from a trusted ref permitted by that environment. GitHub requires the preflight workflow to exist on the default branch before it can be manually dispatched. This uses the real environment configuration but does not install the Android SDK, generate an APK, or upload artifacts. Do not dispatch it against unreviewed code or before restricting the environment.
+
+Alternatively, with JDK 17 installed and the five settings supplied privately in the local environment, run:
 
 ```sh
 python3 scripts/sign-android-release.py check-config

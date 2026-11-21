@@ -8,7 +8,7 @@ Usage:
   scripts/download-actions-builds.sh <run-id> [destination]
   scripts/download-actions-builds.sh release [tag] [destination]
 
-Downloads the Windows and Android packaging artifacts from a successful Actions run, or all assets
+Downloads the available Windows and/or Android artifacts from a successful Actions run, or all assets
 from a GitHub Release. Requires GitHub CLI (`gh`) authentication and the Actions read permission.
 Set GH_REPO=OWNER/REPOSITORY to override repository detection.
 EOF
@@ -66,23 +66,41 @@ else
   run_id="$mode"
 fi
 
-destination="${2:-artifacts/github-actions-${run_id}}"
-mkdir -p "$destination/windows" "$destination/android"
-
-gh run download "$run_id" \
-  --repo "$repo" \
-  --name championvibe-windows-test-build \
-  --dir "$destination/windows"
-gh run download "$run_id" \
-  --repo "$repo" \
-  --name championvibe-android-apk \
-  --dir "$destination/android"
-
-downloaded_installer="$(find "$destination" -type f \( -iname '*.msi' -o -iname '*.exe' -o -iname '*.apk' \) -print -quit)"
-if [[ -z "$downloaded_installer" ]]; then
-  echo "Error: downloaded artifacts contain no MSI, EXE, or APK files." >&2
+if [[ "$(gh run view "$run_id" --repo "$repo" --json conclusion --jq .conclusion)" != "success" ]]; then
+  echo "Error: Actions run $run_id did not finish successfully." >&2
   exit 1
 fi
 
-echo "Build artifacts from Actions run $run_id downloaded to: $destination"
-find "$destination" -type f \( -iname '*.msi' -o -iname '*.exe' -o -iname '*.apk' \) -print
+destination="${2:-artifacts/github-actions-${run_id}}"
+artifact_names="$(gh api --paginate "repos/$repo/actions/runs/$run_id/artifacts" \
+  --jq '.artifacts[] | select(.expired == false) | .name')"
+downloaded=0
+for platform in windows android; do
+  if [[ "$platform" == "android" ]]; then
+    artifact=championvibe-android-apk
+    suffix=apk
+  else
+    artifact=championvibe-windows-test-build
+    suffix=msi
+  fi
+  if ! grep -Fxq "$artifact" <<< "$artifact_names"; then
+    continue
+  fi
+  dir="$destination/$platform"
+  mkdir -p "$dir"
+  gh run download "$run_id" --repo "$repo" --name "$artifact" --dir "$dir"
+  if [[ ! -s "$dir/SHA256SUMS.txt" || -z "$(find "$dir" -maxdepth 1 -type f -iname "*.$suffix" -print -quit)" ]]; then
+    echo "Error: $artifact contains no .$suffix installer or checksum file." >&2
+    exit 1
+  fi
+  if [[ "$platform" == windows && -z "$(find "$dir" -maxdepth 1 -type f -iname '*.exe' -print -quit)" ]]; then
+    echo "Error: $artifact contains no NSIS installer." >&2
+    exit 1
+  fi
+  downloaded=$((downloaded + 1))
+  echo "Downloaded $artifact to $dir"
+done
+if [[ "$downloaded" -eq 0 ]]; then
+  echo "Error: no unexpired ChampionVibe package artifacts were found for Actions run $run_id." >&2
+  exit 1
+fi

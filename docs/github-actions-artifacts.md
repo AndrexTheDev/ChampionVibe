@@ -1,6 +1,6 @@
 # Downloading Windows and Android builds
 
-Normal pushes and pull requests run `ci.yml` without building any installers. The separate **Final packaging** workflow (`package.yml`) runs only when started manually. It first runs CI for that revision and uploads two Actions artifacts if packaging succeeds:
+Normal pushes and pull requests run `ci.yml` without building any installers. The separate **Final packaging** workflow (`package.yml`) runs only when started manually. It first runs CI for that revision, then builds and uploads artifacts for the platform selected at dispatch:
 
 - `championvibe-windows-test-build` — Windows `.msi` and NSIS `.exe` installers.
 - `championvibe-android-apk` — a signed Android `.apk` for `arm64-v8a` (64-bit ARM). The CI excludes 32-bit ABIs because the current `whisper-rs-sys` bundled bindings do not compile for them; the APK therefore requires a 64-bit ARM Android device.
@@ -9,10 +9,10 @@ Each artifact includes a `SHA256SUMS.txt` file for checking the downloaded insta
 
 ## Start final packaging
 
-Wait until the candidate is ready according to the [release checklist](release-checklist.md). Configure the protected [Android release signing environment](android-release-signing.md) first; without a valid configuration the Android job stops without building an APK. For manual dispatch, GitHub requires the workflow file to be present on the default branch. Select the candidate ref in **Actions → Final packaging → Run workflow**, or use:
+Wait until the candidate is ready according to the [release checklist](release-checklist.md). Configure the protected [Android release signing environment](android-release-signing.md) first; without a valid configuration the Android job stops without building an APK. For manual dispatch, GitHub requires the workflow file to be present on the default branch. Select the candidate ref in **Actions → Final packaging → Run workflow**, then choose `android` (the default), `windows`, or `both`. An Android-only run does not build Windows installers. A Windows-only run skips the Android compile gate and does not require Android credentials. To run the Android job only:
 
 ```sh
-gh workflow run package.yml --ref <candidate-branch-or-tag>
+gh workflow run package.yml --ref <candidate-branch-or-tag> -f platform=android
 gh run list --workflow package.yml --branch <candidate-branch> --limit 5
 gh run watch <run-id> --exit-status
 ```
@@ -21,7 +21,7 @@ The package jobs use Windows and Android build tools and can each take up to two
 
 ## Download the artifacts
 
-Install and authenticate GitHub CLI (`gh auth login`), then download both package artifacts from a successful run:
+Install and authenticate GitHub CLI (`gh auth login`), then download the available package artifacts from a successful run (Android, Windows, or both):
 
 ```sh
 scripts/download-actions-builds.sh <run-id> [destination]
