@@ -12,6 +12,7 @@ const mdx = readFileSync(new URL('../src-tauri/src/import/mdx.rs', import.meta.u
 const wasmTts = readFileSync(new URL('./services/tts_wasm.js', import.meta.url), 'utf8');
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const packageWorkflow = readFileSync(new URL('../.github/workflows/package.yml', import.meta.url), 'utf8');
+const signingWorkflow = readFileSync(new URL('../.github/workflows/android-signing-preflight.yml', import.meta.url), 'utf8');
 const artifactDownloadScript = readFileSync(new URL('../scripts/download-actions-builds.sh', import.meta.url), 'utf8');
 const registry = JSON.parse(readFileSync(new URL('../src-tauri/assets/model-registry.json', import.meta.url), 'utf8'));
 const pinScript = readFileSync(new URL('../scripts/verify-model-pins.sh', import.meta.url), 'utf8');
@@ -35,8 +36,19 @@ test('routine GitHub Actions checks run on push and PR without packaging', () =>
   assert.doesNotMatch(ciWorkflow, /^  package:|tauri -- (?:android )?build|actions\/upload-artifact/mu);
 });
 
-test('manual final packaging waits for checks and retains both downloadable installers', () => {
-  assert.match(packageWorkflow, /^on:\n  workflow_dispatch:\n\n/mu);
+function workflowTriggers(workflow) {
+  const triggerBlock = workflow.match(/^on:\n((?: +[^\n]+\n)+)/mu)?.[1];
+  assert.ok(triggerBlock, 'workflow declares its trigger block');
+  return [...triggerBlock.matchAll(/^ {2}([a-z_]+):/gmu)].map(([, event]) => event);
+}
+
+test('manual packaging waits for relevant checks and retains the selected installers', () => {
+  assert.deepEqual(workflowTriggers(packageWorkflow), ['workflow_dispatch']);
+  assert.match(packageWorkflow, /^        default: android$/mu);
+  assert.match(packageWorkflow, /^        options: \[android, windows, both\]$/mu);
+  assert.match(packageWorkflow, /needs\.validate\.result == 'success'/u);
+  assert.match(packageWorkflow, /inputs\.platform == 'windows' && needs\.android-native\.result == 'skipped'/u);
+  assert.match(packageWorkflow, /\(inputs\.platform == 'android' \|\| inputs\.platform == 'both'\) && needs\.android-native\.result == 'success'/u);
   assert.match(packageWorkflow, /^    uses: \.\/\.github\/workflows\/ci\.yml$/mu);
   assert.match(packageWorkflow, /^  package:\n    needs: \[validate, android-native\]$/mu);
   assert.match(packageWorkflow, /championvibe-windows-test-build/u);
@@ -45,6 +57,14 @@ test('manual final packaging waits for checks and retains both downloadable inst
   assert.match(artifactDownloadScript, /--workflow package\.yml/u);
   assert.match(artifactDownloadScript, /gh run download/u);
   assert.match(artifactDownloadScript, /gh release download/u);
+});
+
+test('the protected signing preflight stays manual and never packages', () => {
+  assert.deepEqual(workflowTriggers(signingWorkflow), ['workflow_dispatch']);
+  assert.match(signingWorkflow, /^    environment: android-release$/mu);
+  const commands = [...signingWorkflow.matchAll(/^      +run: (.+)$/gmu)].map(([, command]) => command);
+  assert.deepEqual(commands, ['python3 scripts/sign-android-release.py check-config']);
+  assert.doesNotMatch(signingWorkflow, /actions\/upload-artifact|tauri -- android|contents: write/u);
 });
 
 test('the local model library sits after Whisper selection and before runtime options', () => {
