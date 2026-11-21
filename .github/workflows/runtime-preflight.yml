@@ -25,6 +25,23 @@ jobs:
         run: python scripts/stage-onnx-runtime.py windows
       - name: Inspect the Android AAR and record SHA-256 digests
         run: python scripts/stage-onnx-runtime.py inspect-android --report android-onnx-runtime.json
+      - name: Record the inspected runtime in the check summary
+        shell: bash
+        run: |
+          {
+            echo '### Android ONNX Runtime (observed, not a release pin)'
+            echo '```json'
+            cat android-onnx-runtime.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PYTHON'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("android-onnx-runtime.json").read_text())
+          # Expose compact machine-readable evidence via the GitHub Checks API as well.
+          message = json.dumps(report, separators=(",", ":")).replace("%", "%25")
+          print(f"::notice title=Android runtime inspection::{message}")
+          PYTHON
       - name: Upload the Android runtime inspection report
         uses: actions/upload-artifact@v4
         with:
