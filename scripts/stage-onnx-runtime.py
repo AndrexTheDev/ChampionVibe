@@ -32,6 +32,13 @@ ANDROID_URL = (
 )
 ANDROID_MEMBER = "jni/arm64-v8a/libonnxruntime.so"
 APK_MEMBER = "lib/arm64-v8a/libonnxruntime.so"
+ANDROID_PIN = ROOT / f"reports/android-onnx-runtime-{VERSION}.json"
+NOTICE_DIR = ROOT / f"legal/onnxruntime/{VERSION}"
+APK_NOTICE_DIR = "assets/championvibe-licenses/onnxruntime"
+NOTICE_DIGESTS = {
+    "LICENSE": "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674",
+    "ThirdPartyNotices.txt": "fb0af774b4d7cffc5b9d046f2aaeade2f37df2f80abf8033c95dfffcc77a8866",
+}
 
 
 def verify_x64_dll(data):
@@ -56,10 +63,24 @@ def file_sha256(path):
         return hashlib.file_digest(file, "sha256").hexdigest()
 
 
-def expected_sha256(value):
-    if not re.fullmatch(r"[0-9a-fA-F]{64}", value):
-        raise ValueError("expected the reviewed 64-digit hexadecimal SHA-256 pin")
-    return value.lower()
+def verify_elf_load_alignment(data):
+    verify_arm64_so(data)
+    phoff = struct.unpack_from("<Q", data, 32)[0]
+    phentsize, phnum = struct.unpack_from("<HH", data, 54)
+    if phoff < 64 or phentsize != 56 or not phnum or phoff + phentsize * phnum > len(data):
+        raise ValueError("invalid Android ELF program header table")
+    alignments = []
+    for offset in range(phoff, phoff + phentsize * phnum, phentsize):
+        if struct.unpack_from("<I", data, offset)[0] != 1:  # PT_LOAD
+            continue
+        file_offset, virtual_address = struct.unpack_from("<QQ", data, offset + 8)
+        alignment = struct.unpack_from("<Q", data, offset + 48)[0]
+        if alignment < 16384 or (virtual_address - file_offset) % 16384:
+            raise ValueError("Android ONNX Runtime has a load segment incompatible with 16 KiB pages")
+        alignments.append(alignment)
+    if not alignments:
+        raise ValueError("Android ONNX Runtime has no ELF load segments")
+    return min(alignments)
 
 
 def stage_windows(archive, dest):
@@ -105,16 +126,50 @@ def inspect_android(archive):
         "libraryPath": ANDROID_MEMBER,
         "libraryBytes": len(data),
         "librarySha256": hashlib.sha256(data).hexdigest(),
+        "minimumElfLoadAlignment": verify_elf_load_alignment(data),
         "notices": notices,
     }
 
 
-def stage_android(archive, dest, sha256):
-    if file_sha256(archive) != expected_sha256(sha256):
+def load_android_pin():
+    pin = json.loads(ANDROID_PIN.read_text(encoding="utf-8"))
+    if (pin.get("version"), pin.get("source"), pin.get("libraryPath")) != (VERSION, ANDROID_URL, ANDROID_MEMBER):
+        raise ValueError("the Android archive pin does not match the release version and source")
+    for key in ("archiveSha256", "librarySha256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", pin.get(key, "")):
+            raise ValueError(f"missing or invalid Android SHA-256 pin: {key}")
+    return pin
+
+
+def check_android_pin(report):
+    pin = load_android_pin()
+    for key in ("archiveSha256", "librarySha256"):
+        if report[key] != pin[key]:
+            raise ValueError(f"Android runtime does not match the checked-in SHA-256 pin: {key}")
+
+
+def validate_notice(name, data):
+    if hashlib.sha256(data).hexdigest() != NOTICE_DIGESTS[name]:
+        raise ValueError(f"Android ONNX Runtime notice is missing or altered: {name}")
+
+
+def stage_android(archive, dest, notice_dest):
+    pin = load_android_pin()
+    archive_digest = file_sha256(archive)
+    if archive_digest != pin["archiveSha256"]:
         raise ValueError("the Android runtime archive failed its SHA-256 check")
     data = read_android_library(archive)
+    if hashlib.sha256(data).hexdigest() != pin["librarySha256"]:
+        raise ValueError("the extracted Android runtime library failed its SHA-256 check")
+    verify_elf_load_alignment(data)
+    notices = {name: (NOTICE_DIR / name).read_bytes() for name in NOTICE_DIGESTS}
+    for name, payload in notices.items():
+        validate_notice(name, payload)
     dest.mkdir(parents=True, exist_ok=True)
+    notice_dest.mkdir(parents=True, exist_ok=True)
     (dest / "libonnxruntime.so").write_bytes(data)
+    for name, payload in notices.items():
+        (notice_dest / name).write_bytes(payload)
 
 
 def verify_apk(path):
@@ -125,8 +180,12 @@ def verify_apk(path):
         ]
         if runtime_files != [APK_MEMBER]:
             raise ValueError(f"expected exactly {APK_MEMBER} in {path}, got {runtime_files}")
-        with apk.open(APK_MEMBER) as entry:
-            verify_arm64_so(entry.read(64))
+        verify_elf_load_alignment(apk.read(APK_MEMBER))
+        for name in NOTICE_DIGESTS:
+            asset = f"{APK_NOTICE_DIR}/{name}"
+            if apk.namelist().count(asset) != 1:
+                raise ValueError(f"expected exactly one runtime notice in the APK: {asset}")
+            validate_notice(name, apk.read(asset))
 
 
 def download(url, archive):
@@ -139,8 +198,11 @@ def main():
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("verify-apk").add_argument("path", type=Path)
     commands.add_parser("windows")
-    commands.add_parser("android").add_argument("--sha256", required=True)
-    commands.add_parser("inspect-android").add_argument("--report", required=True, type=Path)
+    commands.add_parser("android")
+    inspect = commands.add_parser("inspect-android")
+    inspect.add_argument("--report", required=True, type=Path)
+    inspect.add_argument("--check-pin", action="store_true")
+    inspect.add_argument("--stage-dir", type=Path, help="stage the pinned runtime and notices for a no-build check")
     args = parser.parse_args()
     try:
         if args.action == "verify-apk":
@@ -152,6 +214,10 @@ def main():
                 archive = Path(temp) / "runtime.aar"
                 download(ANDROID_URL, archive)
                 report = inspect_android(archive)
+                if args.check_pin or args.stage_dir:
+                    check_android_pin(report)
+                if args.stage_dir:
+                    stage_android(archive, args.stage_dir / "jniLibs/arm64-v8a", args.stage_dir / APK_NOTICE_DIR)
             args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
             print(f"Inspected the Android AAR without building an APK: {args.report}")
             return
@@ -159,7 +225,6 @@ def main():
             url = WINDOWS_URL
             dest = ROOT / "src-tauri/runtime/windows-x64"
         else:
-            pin = expected_sha256(args.sha256)
             url = ANDROID_URL
             app = ROOT / "src-tauri/gen/android/app"
             if not (app / "build.gradle.kts").is_file():
@@ -171,7 +236,7 @@ def main():
             if args.action == "windows":
                 stage_windows(archive, dest)
             else:
-                stage_android(archive, dest, pin)
+                stage_android(archive, dest, app / "src/main" / APK_NOTICE_DIR)
         print(f"Staged ONNX Runtime {VERSION} under {dest.relative_to(ROOT)}")
     except (OSError, KeyError, ValueError, zipfile.BadZipFile) as error:
         parser.exit(1, f"ONNX Runtime: {error}\n")

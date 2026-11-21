@@ -13,7 +13,6 @@ Create an Actions environment named `android-release`. Restrict deployments to t
 | Secret | `ANDROID_RELEASE_KEY_PASSWORD` | Password for the signing key entry. |
 | Variable | `ANDROID_RELEASE_KEY_ALIAS` | Alias of the release key in the keystore. |
 | Variable | `ANDROID_RELEASE_CERT_SHA256` | SHA-256 fingerprint of the intended signing certificate. Colons and letter case are accepted. |
-| Variable | `ANDROID_ONNX_RUNTIME_SHA256` | Reviewed SHA-256 of the versioned Android AAR. Obtain it using the [runtime preflight](native-onnx-runtime.md). This is an archive pin, not the certificate fingerprint. |
 
 Obtain the public fingerprint from a copy of the trusted keystore with `keytool -list -v -keystore <file> -alias <alias>`. Enter the password at the prompt. Do not commit the keystore, its base64 representation, or passwords. Do not paste them into an issue, comment, or chat. If using Google Play App Signing later, a Play upload key can be different from the Play app-signing key; plan the signing identity before distributing sideloaded APKs that users will need to update.
 
@@ -21,7 +20,7 @@ Obtain the public fingerprint from a copy of the trusted keystore with `keytool 
 
 - Exactly one Gradle **release** APK exists. Debug builds and ambiguous output are not accepted.
 - `zipalign` aligns the APK before signing and checks the finished archive with the 16 KB page-alignment option. This does not prove that each ELF library or the app works on a 16 KB device.
-- Android SDK `apksigner` verifies the APK and its certificate fingerprint; the workflow also verifies the arm64 ONNX Runtime entry and writes `SHA256SUMS.txt` for the finished APK.
+- Android SDK `apksigner` verifies the APK and its certificate fingerprint; the workflow also verifies the arm64 ONNX Runtime entry and bundled ONNX notices and writes `SHA256SUMS.txt` for the finished APK.
 - Ordinary CI runs `python3 tests/android_release_signing_test.py` with simulated tools. It does not build an APK, read any release secrets, or substitute for the final signature check.
 
 Windows installers have a separate `windows-packaging` environment and per-file SHA-256 checksums. This workflow does not configure a Windows Authenticode signing identity; a checksum is not a code signature.

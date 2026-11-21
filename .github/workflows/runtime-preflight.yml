@@ -7,6 +7,8 @@ on:
     paths:
       - '.github/workflows/runtime-preflight.yml'
       - 'scripts/stage-onnx-runtime.py'
+      - 'reports/android-onnx-runtime-*.json'
+      - 'legal/onnxruntime/**'
       - 'src-tauri/tauri.runtime.windows.json'
 
 permissions:
@@ -24,12 +26,14 @@ jobs:
       - name: Verify the Windows runtime archive and DLLs
         run: python scripts/stage-onnx-runtime.py windows
       - name: Inspect the Android AAR and record SHA-256 digests
-        run: python scripts/stage-onnx-runtime.py inspect-android --report android-onnx-runtime.json
+        run: >-
+          python scripts/stage-onnx-runtime.py inspect-android --check-pin
+          --stage-dir "$RUNNER_TEMP/android-runtime" --report android-onnx-runtime.json
       - name: Record the inspected runtime in the check summary
         shell: bash
         run: |
           {
-            echo '### Android ONNX Runtime (observed, not a release pin)'
+            echo '### Android ONNX Runtime (verified against the release pin)'
             echo '```json'
             cat android-onnx-runtime.json
             echo '```'

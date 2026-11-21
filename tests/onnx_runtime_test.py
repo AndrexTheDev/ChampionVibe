@@ -23,10 +23,15 @@ def pe(machine=0x8664):
     return bytes(result)
 
 
-def elf(machine=183):
-    result = bytearray(64)
+def elf(machine=183, alignment=16384, virtual_address=0):
+    result = bytearray(64 + 56)
     result[:7] = b"\x7fELF\x02\x01\x01"
     struct.pack_into("<HH", result, 16, 3, machine)
+    struct.pack_into("<Q", result, 32, 64)  # e_phoff
+    struct.pack_into("<HH", result, 54, 56, 1)  # e_phentsize and e_phnum
+    struct.pack_into("<I", result, 64, 1)  # PT_LOAD
+    struct.pack_into("<Q", result, 64 + 16, virtual_address)
+    struct.pack_into("<Q", result, 64 + 48, alignment)
     return bytes(result)
 
 
@@ -36,6 +41,7 @@ class RuntimePackagingTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
         self.dest = self.root / "stage"
+        self.notice_dest = self.root / "notices"
 
     def write_zip(self, entries):
         path = self.root / "archive.zip"
@@ -81,41 +87,57 @@ class RuntimePackagingTests(unittest.TestCase):
             runtime.ANDROID_MEMBER: elf(),
             "jni/x86_64/libonnxruntime.so": elf(62),
         })
-        runtime.stage_android(archive, self.dest, runtime.file_sha256(archive))
+        pin = runtime.inspect_android(archive)
+        with patch.object(runtime, "load_android_pin", return_value=pin):
+            runtime.stage_android(archive, self.dest, self.notice_dest)
         self.assertEqual({"libonnxruntime.so"}, {file.name for file in self.dest.iterdir()})
         self.assertEqual(elf(), (self.dest / "libonnxruntime.so").read_bytes())
+        for name, digest in runtime.NOTICE_DIGESTS.items():
+            self.assertEqual(runtime.file_sha256(self.notice_dest / name), digest)
 
     def test_android_inspection_reports_observed_archive_and_library_pins(self):
         archive = self.write_zip({runtime.ANDROID_MEMBER: elf(), "META-INF/LICENSE": b"notice"})
         report = runtime.inspect_android(archive)
         self.assertEqual(runtime.ANDROID_URL, report["source"])
+        self.assertEqual(report["minimumElfLoadAlignment"], 16384)
         self.assertEqual(hashlib.sha256(archive.read_bytes()).hexdigest(), report["archiveSha256"])
         self.assertEqual(hashlib.sha256(elf()).hexdigest(), report["librarySha256"])
         self.assertEqual(report["notices"], [{"path": "META-INF/LICENSE", "sha256": hashlib.sha256(b"notice").hexdigest()}])
         self.assertFalse(self.dest.exists())
 
-    def test_android_rejects_missing_or_incorrect_pin_before_staging(self):
+    def test_android_rejects_archive_or_library_mismatch_without_staging(self):
         archive = self.write_zip({runtime.ANDROID_MEMBER: elf()})
-        for pin in ("", "not-a-digest", "0" * 64):
-            with self.subTest(pin=pin), self.assertRaisesRegex(ValueError, "SHA-256"):
-                runtime.stage_android(archive, self.dest, pin)
-            self.assertFalse(self.dest.exists())
+        pin = runtime.inspect_android(archive)
+        for key in ("archiveSha256", "librarySha256"):
+            with self.subTest(key=key), patch.object(runtime, "load_android_pin", return_value=pin | {key: "0" * 64}):
+                with self.assertRaisesRegex(ValueError, "SHA-256"):
+                    runtime.stage_android(archive, self.dest, self.notice_dest)
+                self.assertFalse(self.dest.exists())
+                self.assertFalse(self.notice_dest.exists())
 
-    def test_android_rejects_wrong_library_before_staging(self):
-        archive = self.write_zip({runtime.ANDROID_MEMBER: elf(62)})
-        with self.assertRaisesRegex(ValueError, "arm64 ELF"):
-            runtime.stage_android(archive, self.dest, runtime.file_sha256(archive))
-        self.assertFalse(self.dest.exists())
+    def test_android_rejects_wrong_architecture_and_incompatible_elf_alignment(self):
+        for data, error in [(elf(62), "arm64 ELF"), (elf(alignment=4096), "16 KiB"), (elf(virtual_address=4096), "16 KiB"), (elf()[:64], "header table")]:
+            with self.subTest(error=error), self.assertRaisesRegex(ValueError, error):
+                runtime.verify_elf_load_alignment(data)
 
-    def test_apk_requires_one_correctly_named_arm64_library(self):
-        runtime.verify_apk(self.write_zip({runtime.APK_MEMBER: elf()}))
+    def test_apk_requires_one_correctly_named_arm64_library_and_matching_notices(self):
+        notices = {f"{runtime.APK_NOTICE_DIR}/{name}": (runtime.NOTICE_DIR / name).read_bytes() for name in runtime.NOTICE_DIGESTS}
+        runtime.verify_apk(self.write_zip({runtime.APK_MEMBER: elf()} | notices))
         for entries in (
             {},
-            {runtime.APK_MEMBER: elf(62)},
-            {runtime.APK_MEMBER: elf(), "lib/x86_64/libonnxruntime.so": elf(62)},
+            {runtime.APK_MEMBER: elf(62)} | notices,
+            {runtime.APK_MEMBER: elf(), "lib/x86_64/libonnxruntime.so": elf(62)} | notices,
+            {runtime.APK_MEMBER: elf()},
+            {runtime.APK_MEMBER: elf()} | notices | {next(iter(notices)): b"tampered"},
         ):
             with self.subTest(entries=list(entries)), self.assertRaises(ValueError):
                 runtime.verify_apk(self.write_zip(entries))
+
+    def test_checked_in_pin_matches_current_maven_coordinates(self):
+        pin = runtime.load_android_pin()
+        self.assertEqual(pin["version"], runtime.VERSION)
+        self.assertEqual(pin["source"], runtime.ANDROID_URL)
+        runtime.check_android_pin(pin)
 
 
 if __name__ == "__main__":

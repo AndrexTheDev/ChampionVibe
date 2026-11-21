@@ -127,10 +127,7 @@ jobs:
 
       - name: Stage the Android arm64 ONNX Runtime
         if: matrix.platform == 'android'
-        env:
-          ANDROID_ONNX_RUNTIME_SHA256: ${{ vars.ANDROID_ONNX_RUNTIME_SHA256 }}
-        shell: bash
-        run: python scripts/stage-onnx-runtime.py android --sha256 "$ANDROID_ONNX_RUNTIME_SHA256"
+        run: python scripts/stage-onnx-runtime.py android
 
       - name: Build Android arm64 APK
         if: matrix.platform == 'android'
