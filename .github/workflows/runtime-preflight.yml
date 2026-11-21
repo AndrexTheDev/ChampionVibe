@@ -29,6 +29,47 @@ jobs:
         run: >-
           python scripts/stage-onnx-runtime.py inspect-android --check-pin
           --stage-dir "$RUNNER_TEMP/android-runtime" --report android-onnx-runtime.json
+      - name: Record Android-specific Maven licensing and ELF dependencies
+        shell: bash
+        run: |
+          python - <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          from urllib.request import urlopen
+          from xml.etree import ElementTree
+
+          path = Path("android-onnx-runtime.json")
+          report = json.loads(path.read_text())
+          url = report["source"].removesuffix(".aar") + ".pom"
+          with urlopen(url, timeout=60) as response:
+              data = response.read(1048577)
+          if len(data) > 1048576:
+              raise ValueError("Unexpectedly large Android ONNX Runtime Maven POM")
+          pom = ElementTree.fromstring(data)
+          def text(element, name):
+              return (element.findtext(f"{{*}}{name}") or "").strip()
+
+          coordinates = [text(pom, name) for name in ("groupId", "artifactId", "version")]
+          if coordinates != ["com.microsoft.onnxruntime", "onnxruntime-android", report["version"]]:
+              raise ValueError(f"Unexpected Android ONNX Runtime Maven coordinates: {coordinates}")
+          library = Path(os.environ["RUNNER_TEMP"]) / report["libraryPath"].replace("jni/", "android-runtime/jniLibs/", 1)
+          elf = subprocess.check_output(["readelf", "--dynamic", str(library)], text=True)
+          staged = Path(os.environ["RUNNER_TEMP"]) / "android-runtime/assets/championvibe-licenses/onnxruntime"
+          report["mavenPom"] = {
+              "source": url,
+              "sha256": hashlib.sha256(data).hexdigest(),
+              "licenses": [{name: text(license, name) for name in ("name", "url")}
+                           for license in pom.findall("{*}licenses/{*}license")],
+          }
+          report["elfNeeded"] = re.findall(r"\(NEEDED\).*\[([^]]+)\]", elf)
+          report["stagedNotices"] = {notice.name: hashlib.sha256(notice.read_bytes()).hexdigest()
+                                    for notice in sorted(staged.iterdir())}
+          path.write_text(json.dumps(report, indent=2) + "\n")
+          PYTHON
       - name: Record the inspected runtime in the check summary
         shell: bash
         run: |

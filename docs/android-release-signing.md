@@ -16,11 +16,21 @@ Create an Actions environment named `android-release`. Restrict deployments to t
 
 Obtain the public fingerprint from a copy of the trusted keystore with `keytool -list -v -keystore <file> -alias <alias>`. Enter the password at the prompt. Do not commit the keystore, its base64 representation, or passwords. Do not paste them into an issue, comment, or chat. If using Google Play App Signing later, a Play upload key can be different from the Play app-signing key; plan the signing identity before distributing sideloaded APKs that users will need to update.
 
+## Verify the key without packaging
+
+With JDK 17 installed and the five settings supplied privately in the environment, run:
+
+```sh
+python3 scripts/sign-android-release.py check-config
+```
+
+The check opens the JKS or PKCS#12 keystore, unlocks the selected private key and verifies that it can sign a fixed test message with the pinned, currently valid certificate. It neither creates an APK nor prints credentials. The workflow runs this check before installing the Android SDK or invoking the package build. Use the same certificate for future sideloaded updates. This check does not create the GitHub environment or prove the final APK signature.
+
 ## What the workflow verifies
 
 - Exactly one Gradle **release** APK exists. Debug builds and ambiguous output are not accepted.
 - `zipalign` aligns the APK before signing and checks the finished archive with the 16 KB page-alignment option. This does not prove that each ELF library or the app works on a 16 KB device.
 - Android SDK `apksigner` verifies the APK and its certificate fingerprint; the workflow also verifies the arm64 app, ONNX Runtime and NDK C++ libraries and bundled notices and writes `SHA256SUMS.txt` for the finished APK.
-- Ordinary CI runs `python3 tests/android_release_signing_test.py` with simulated tools. It does not build an APK, read any release secrets, or substitute for the final signature check.
+- Ordinary CI runs `python3 tests/android_release_signing_test.py` with simulated APK tools and disposable real JKS/PKCS#12 keystores. It does not build an APK, read any release secrets, or substitute for the final signature check.
 
 Windows installers have a separate `windows-packaging` environment and per-file SHA-256 checksums. This workflow does not configure a Windows Authenticode signing identity; a checksum is not a code signature.

@@ -1,8 +1,11 @@
 """Test the APK release policy with tool stubs; don't build or sign a real APK."""
 
 import base64
+import hashlib
 import importlib.util
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -104,6 +107,41 @@ class SigningTests(unittest.TestCase):
         self.source.with_name('another-release.apk').touch()
         with self.assertRaisesRegex(ValueError, 'found 2'):
             signer.find_release_apk(self.root)
+
+
+@unittest.skipUnless(shutil.which("java") and shutil.which("keytool"), "Java 17 JDK required")
+class RealKeystoreTests(unittest.TestCase):
+    def test_ephemeral_jks_and_pkcs12_without_an_apk(self):
+        for kind, key_password in (("JKS", "fixture-key-password"), ("PKCS12", "fixture-store-password")):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "fixture.keystore"
+                environment = os.environ | {
+                    "ANDROID_RELEASE_STORE_PASSWORD": "fixture-store-password",
+                    "ANDROID_RELEASE_KEY_PASSWORD": key_password,
+                    "ANDROID_RELEASE_KEY_ALIAS": "fixture-release",
+                }
+                common = ["-keystore", str(path), "-storetype", kind, "-alias", "fixture-release",
+                          "-storepass:env", "ANDROID_RELEASE_STORE_PASSWORD"]
+                subprocess.run(["keytool", "-genkeypair", *common, "-keypass:env", "ANDROID_RELEASE_KEY_PASSWORD",
+                                "-keyalg", "RSA", "-keysize", "2048", "-dname", "CN=CI Fixture", "-validity", "7"],
+                               env=environment, check=True, capture_output=True)
+                cert = subprocess.check_output(["keytool", "-exportcert", *common], env=environment)
+                environment |= {
+                    "ANDROID_RELEASE_KEYSTORE_BASE64": base64.b64encode(path.read_bytes()).decode(),
+                    "ANDROID_RELEASE_CERT_SHA256": hashlib.sha256(cert).hexdigest(),
+                }
+                signer.check_config(environment)
+                if kind == "JKS":
+                    cases = {
+                        "ANDROID_RELEASE_STORE_PASSWORD": "incorrect-store-password",
+                        "ANDROID_RELEASE_KEY_PASSWORD": "incorrect-key-password",
+                        "ANDROID_RELEASE_KEY_ALIAS": "missing-entry",
+                        "ANDROID_RELEASE_CERT_SHA256": DIGEST,
+                        "ANDROID_RELEASE_KEYSTORE_BASE64": base64.b64encode(b"not a keystore").decode(),
+                    }
+                    for name, value in cases.items():
+                        with self.subTest(name=name), self.assertRaises(subprocess.CalledProcessError):
+                            signer.check_config(environment | {name: value})
 
 
 if __name__ == '__main__':

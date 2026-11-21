@@ -40,6 +40,29 @@ def load_credentials(environment):
     return store, normalize_digest(environment[SIGNING_ENV[4]])
 
 
+def write_keystore(path, store):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as file:
+        file.write(store)
+
+
+def signing_environment(environment):
+    return {name: value for name, value in environment.items() if name not in SIGNING_ENV} | {
+        name: environment[name] for name in (SIGNING_ENV[1], SIGNING_ENV[3])
+    }
+
+
+def check_config(environment):
+    store, digest = load_credentials(environment)
+    checker = Path(__file__).resolve().with_name("AndroidReleaseKeyCheck.java")
+    with tempfile.TemporaryDirectory(prefix="android-key-check-") as directory:
+        keystore = Path(directory) / "release.keystore"
+        write_keystore(keystore, store)
+        subprocess.run([
+            "java", str(checker), str(keystore), environment[SIGNING_ENV[2]], digest,
+        ], check=True, env=signing_environment(environment))
+
+
 def find_release_apk(project):
     candidates = sorted((project / "app/build/outputs/apk").glob("**/release/*.apk"))
     if len(candidates) != 1:
@@ -57,14 +80,12 @@ def sign_apk(source, output, build_tools, environment):
         if not os.access(tool, os.X_OK):
             raise ValueError(f"missing executable Android build tool: {tool}")
     child_env = {name: value for name, value in environment.items() if name not in SIGNING_ENV}
-    signing_env = child_env | {name: environment[name] for name in (SIGNING_ENV[1], SIGNING_ENV[3])}
+    signing_env = signing_environment(environment)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="android-sign-", dir=output.parent) as directory:
         root = Path(directory)
         aligned, signed, keystore = (root / name for name in ("aligned.apk", "signed.apk", "release.keystore"))
-        fd = os.open(keystore, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "wb") as file:
-            file.write(store)
+        write_keystore(keystore, store)
         subprocess.run([zipalign, "-P", "16", "-f", "4", str(source), str(aligned)], check=True, env=child_env)
         subprocess.run([
             apksigner, "sign", "--ks", str(keystore), "--ks-key-alias", environment[SIGNING_ENV[2]],
@@ -90,8 +111,8 @@ def main():
     args = parser.parse_args()
     try:
         if args.command == "check-config":
-            load_credentials(os.environ)
-            print("Android release signing configuration is present.")
+            check_config(os.environ)
+            print("Android release key and pinned certificate verified without an APK.")
         else:
             sign_apk(find_release_apk(args.project), args.output, args.build_tools, os.environ)
             print(f"Verified APK signature and ZIP alignment: {args.output}")

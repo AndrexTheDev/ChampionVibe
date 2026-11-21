@@ -39,7 +39,13 @@ jobs:
       - name: Run the headless Tauri IPC driver
         run: npm run e2e:tauri
 
-      - name: Test native runtime staging without installers
+      - name: Set up Java for Android signing checks
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Test native runtime staging and signing without installers
         run: |
           python3 tests/onnx_runtime_test.py
           python3 tests/android_release_signing_test.py
