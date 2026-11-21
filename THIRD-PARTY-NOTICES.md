@@ -19,6 +19,7 @@ their licence and the obligations that follow from it.
 | --- | --- | --- |
 | ONNX Runtime with DirectML (Windows x64) | Microsoft's [ONNX Runtime DirectML 1.24.3](https://pypi.org/project/onnxruntime-directml/1.24.3/#files), pinned by SHA-256 | The installer copies `LICENSE` and `ThirdPartyNotices.txt` from the same wheel as the DLLs into `licenses/`. Review any separate terms for the companion binary components before redistribution. |
 | ONNX Runtime (Android arm64) | Microsoft's `com.microsoft.onnxruntime:onnxruntime-android:1.24.3` AAR on Maven Central | The archive and library are pinned. The APK includes the upstream 1.24.3 `LICENSE` and `ThirdPartyNotices.txt` under `assets/championvibe-licenses/onnxruntime/`; verify any additional Android-specific obligations before public distribution. |
+| Android NDK C++ runtime (`libc++_shared.so`) | Google Android NDK r28c (`28.2.13676358`), ARM64 sysroot | The APK preserves the distribution’s `NOTICE` and `NOTICE.toolchain` under `assets/championvibe-licenses/android-ndk/`. |
 
 See [native runtime packaging](docs/native-onnx-runtime.md) for verification details. Native runtime libraries are not model weights.
 
