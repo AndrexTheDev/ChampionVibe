@@ -123,11 +123,11 @@ jobs:
         if: matrix.platform == 'android'
         run: npm run tauri -- android init --ci
 
-      - name: Install the SDK platform required by the generated Android project
+      - name: Prepare the generated project with the stable Android SDK
         if: matrix.platform == 'android'
         shell: bash
         run: |
-          bash scripts/install-android-compile-sdks.sh src-tauri/gen/android
+          bash scripts/prepare-android-gradle.sh src-tauri/gen/android
 
       - name: Stage the Android arm64 ONNX Runtime
         if: matrix.platform == 'android'
