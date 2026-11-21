@@ -76,10 +76,10 @@ def verify_elf_load_alignment(data):
         file_offset, virtual_address = struct.unpack_from("<QQ", data, offset + 8)
         alignment = struct.unpack_from("<Q", data, offset + 48)[0]
         if alignment < 16384 or (virtual_address - file_offset) % 16384:
-            raise ValueError("Android ONNX Runtime has a load segment incompatible with 16 KiB pages")
+            raise ValueError("Android shared library has a load segment incompatible with 16 KiB pages")
         alignments.append(alignment)
     if not alignments:
-        raise ValueError("Android ONNX Runtime has no ELF load segments")
+        raise ValueError("Android shared library has no ELF load segments")
     return min(alignments)
 
 
@@ -197,6 +197,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("verify-apk").add_argument("path", type=Path)
+    commands.add_parser("verify-android-library").add_argument("path", type=Path)
     commands.add_parser("windows")
     commands.add_parser("android")
     inspect = commands.add_parser("inspect-android")
@@ -205,6 +206,10 @@ def main():
     inspect.add_argument("--stage-dir", type=Path, help="stage the pinned runtime and notices for a no-build check")
     args = parser.parse_args()
     try:
+        if args.action == "verify-android-library":
+            alignment = verify_elf_load_alignment(args.path.read_bytes())
+            print(f"Verified Android arm64 library (minimum ELF load alignment: {alignment} bytes): {args.path}")
+            return
         if args.action == "verify-apk":
             verify_apk(args.path)
             print(f"Verified Android runtime in {args.path}")

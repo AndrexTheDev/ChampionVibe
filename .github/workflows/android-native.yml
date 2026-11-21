@@ -1,0 +1,66 @@
+name: Android native check
+
+# Build and link only the arm64 shared library. No Gradle, signing, or APK.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/android-native.yml'
+      - '.github/workflows/package.yml'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'crates/**'
+      - 'src-tauri/**'
+      - 'scripts/stage-onnx-runtime.py'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  arm64:
+    name: Link Android arm64 (no APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_NDK_VERSION: '28.2.13676358'
+      CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: '-C link-arg=-Wl,-z,max-page-size=16384'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android-arm64-ndk-r28c
+      - uses: android-actions/setup-android@v4.0.4
+      - name: Install Android NDK and native build tools
+        shell: bash
+        run: |
+          sdkmanager --install "ndk;$ANDROID_NDK_VERSION"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+          cargo install cargo-ndk --version 4.1.2 --locked
+      - name: Build the embedded web frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Compile and link the app shared library for Android API 26
+        run: cargo ndk -t arm64-v8a -p 26 build --release --locked --package championvibe --lib
+      - name: Verify arm64 ELF alignment and the audio bridge export
+        shell: bash
+        run: |
+          library=target/aarch64-linux-android/release/libchampionvibe_lib.so
+          python3 scripts/stage-onnx-runtime.py verify-android-library "$library"
+          readelf --dyn-syms --wide "$library" > /tmp/championvibe-android-symbols.txt
+          grep -E 'GLOBAL +DEFAULT +[0-9]+ +Java_com_championvibe_deviceidentity_DeviceIdentityPlugin_nativeInitializeAudioContext$' /tmp/championvibe-android-symbols.txt
+          {
+            echo '### Android arm64 shared library (no APK)'
+            echo '```text'
+            sha256sum "$library"
+            readelf --dynamic "$library" | grep -F '(NEEDED)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

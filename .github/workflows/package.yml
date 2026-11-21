@@ -16,8 +16,12 @@ jobs:
     name: Validate the selected revision
     uses: ./.github/workflows/ci.yml
 
+  android-native:
+    name: Verify the Android native build
+    uses: ./.github/workflows/android-native.yml
+
   package:
-    needs: validate
+    needs: [validate, android-native]
     name: Package ${{ matrix.platform }} test artifact
     strategy:
       fail-fast: false
@@ -34,6 +38,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     environment: ${{ matrix.environment }}
     timeout-minutes: 120
+    env:
+      ANDROID_NDK_VERSION: '28.2.13676358'
+      CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: '-C link-arg=-Wl,-z,max-page-size=16384'
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -92,13 +99,13 @@ jobs:
             'platform-tools' \
             'platforms;android-35' \
             'build-tools;35.0.0' \
-            'ndk;27.2.12479018'
-          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/27.2.12479018" >> "$GITHUB_ENV"
-          echo "NDK_HOME=${ANDROID_SDK_ROOT}/ndk/27.2.12479018" >> "$GITHUB_ENV"
+            "ndk;$ANDROID_NDK_VERSION"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+          echo "NDK_HOME=${ANDROID_SDK_ROOT}/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
 
       - name: Install Android Rust bridge tooling
         if: matrix.platform == 'android'
-        run: cargo install cargo-ndk --locked
+        run: cargo install cargo-ndk --version 4.1.2 --locked
 
       - name: Install frontend and Tauri CLI dependencies
         run: npm ci

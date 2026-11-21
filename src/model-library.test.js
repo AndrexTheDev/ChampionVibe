@@ -38,7 +38,7 @@ test('routine GitHub Actions checks run on push and PR without packaging', () =>
 test('manual final packaging waits for checks and retains both downloadable installers', () => {
   assert.match(packageWorkflow, /^on:\n  workflow_dispatch:\n\n/mu);
   assert.match(packageWorkflow, /^    uses: \.\/\.github\/workflows\/ci\.yml$/mu);
-  assert.match(packageWorkflow, /^  package:\n    needs: validate$/mu);
+  assert.match(packageWorkflow, /^  package:\n    needs: \[validate, android-native\]$/mu);
   assert.match(packageWorkflow, /championvibe-windows-test-build/u);
   assert.match(packageWorkflow, /championvibe-android-apk/u);
   assert.match(packageWorkflow, /retention-days: 14/u);
