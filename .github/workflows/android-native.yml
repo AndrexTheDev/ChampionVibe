@@ -1,6 +1,6 @@
-name: Android native check
+name: Android compile check
 
-# Build and link only the arm64 shared library. No Gradle, signing, or APK.
+# Compile the ARM64 library and Kotlin/Java sources. No signing or APK.
 on:
   pull_request:
     paths:
@@ -11,6 +11,12 @@ on:
       - 'crates/**'
       - 'src-tauri/**'
       - 'scripts/stage-onnx-runtime.py'
+      - 'scripts/install-android-compile-sdks.sh'
+      - 'package*.json'
+      - 'index.html'
+      - 'src/**'
+      - 'public/**'
+      - 'vite.config.*'
   workflow_dispatch:
   workflow_call:
 
@@ -19,9 +25,9 @@ permissions:
 
 jobs:
   arm64:
-    name: Link Android arm64 (no APK)
+    name: Compile Android arm64 (no APK)
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       ANDROID_NDK_VERSION: '28.2.13676358'
       CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: '-C link-arg=-Wl,-z,max-page-size=16384'
@@ -36,7 +42,11 @@ jobs:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
-          key: android-arm64-ndk-r28c
+          key: android-arm64-ndk-r28c-codegen
+      - uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
       - uses: android-actions/setup-android@v4.0.4
       - name: Install Android NDK and native build tools
         shell: bash
@@ -55,6 +65,22 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: Generate the Tauri Android project and prepare code generation
+        shell: bash
+        run: |
+          npm run tauri -- android init --ci --skip-targets-install
+          project="$GITHUB_WORKSPACE/src-tauri/gen/android"
+          bash scripts/install-android-compile-sdks.sh "$project"
+          package=$(node -p 'require("./src-tauri/tauri.conf.json").identifier')
+          kotlin_dir="$project/app/src/main/java/${package//./\/}/generated"
+          mkdir -p "$kotlin_dir"
+          {
+            echo "TAURI_ANDROID_PROJECT_PATH=$project"
+            echo "TAURI_ANDROID_PACKAGE_UNESCAPED=$package"
+            echo "WRY_ANDROID_PACKAGE=$package"
+            echo 'WRY_ANDROID_LIBRARY=championvibe_lib'
+            echo "WRY_ANDROID_KOTLIN_FILES_OUT_DIR=$kotlin_dir"
+          } >> "$GITHUB_ENV"
       - name: Compile and link the app shared library for Android API 26
         shell: bash
         run: |
@@ -87,3 +113,29 @@ jobs:
             readelf --dynamic "$library" | grep -F '(NEEDED)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Compile the generated Android app and its plugins without packaging
+        working-directory: src-tauri/gen/android
+        shell: bash
+        run: |
+          for module in tauri-android tauri-plugin-device-identity; do
+            if ! grep -Fq "include ':$module'" tauri.settings.gradle; then
+              echo "::error title=Missing Android Gradle module::$module"
+              exit 1
+            fi
+          done
+          log="$RUNNER_TEMP/championvibe-gradle.log"
+          if ! bash ./gradlew --no-daemon --console=plain \
+            :app:compileArm64ReleaseKotlin :app:compileArm64ReleaseJavaWithJavac 2>&1 | tee "$log"; then
+            python3 - "$log" <<'PYTHON'
+          from pathlib import Path
+          import sys
+          details = "\n".join(Path(sys.argv[1]).read_text(errors="replace").splitlines()[-100:])[-12000:]
+          details = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Android Gradle compile diagnostics::{details}")
+          PYTHON
+            exit 1
+          fi
+          if find app/build/outputs -name '*.apk' -print -quit 2>/dev/null | grep -q .; then
+            echo 'Compile-only check unexpectedly generated an APK' >&2
+            exit 1
+          fi

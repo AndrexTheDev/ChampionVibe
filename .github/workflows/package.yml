@@ -127,11 +127,7 @@ jobs:
         if: matrix.platform == 'android'
         shell: bash
         run: |
-          platform=$(sed -nE 's/^[[:space:]]*compileSdk[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' src-tauri/gen/android/app/build.gradle.kts)
-          [[ "$platform" =~ ^[0-9]+$ ]]
-          bridge_platform=$(sed -nE 's/^[[:space:]]*compileSdk[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' crates/device-identity/android/build.gradle.kts)
-          [[ "$bridge_platform" =~ ^[0-9]+$ ]]
-          sdkmanager --install "platforms;android-$platform" "platforms;android-$bridge_platform"
+          bash scripts/install-android-compile-sdks.sh src-tauri/gen/android
 
       - name: Stage the Android arm64 ONNX Runtime
         if: matrix.platform == 'android'
