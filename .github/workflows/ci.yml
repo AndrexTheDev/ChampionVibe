@@ -49,6 +49,7 @@ jobs:
         run: |
           python3 tests/onnx_runtime_test.py
           python3 tests/android_release_signing_test.py
+          python3 tests/android_runtime_licenses_test.py
 
       - name: Build frontend
         run: npm run build

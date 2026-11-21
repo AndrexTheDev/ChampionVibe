@@ -8,6 +8,7 @@
 - [ ] Confirm the Linux Rust format, check and test jobs pass with the checked-in lockfile; confirm the offline model compliance gate passes.
 - [ ] Confirm the [Android compile check](BUILD_VERIFICATION.md#android-compile-check-no-apk) builds the ARM64 library, exports the JNI audio bridge, and compiles the generated Tauri app and its Android plugins. No APK is needed for this step.
 - [ ] Run the [Native runtime preflight](native-onnx-runtime.md#check-the-real-provider-archives-without-making-an-apk) and verify the redistribution notices for the runtime libraries before freezing the release candidate. Packaging now stages ONNX Runtime 1.24.3; see [desktop and Android runtime packaging](native-onnx-runtime.md) for the remaining verification.
+- [ ] Review the Android compile run’s `android-gradle-runtime-licenses` artifact. Resolve entries without direct declarations against upstream and check required notices for the selected Maven versions. The report is evidence, not a release approval.
 - [ ] Decide whether Pro activation is in scope for this release. If so, check the issuer configuration and use a controlled end-to-end activation test before public distribution. Verify that Demo cannot start a recording.
 
 ## 2. Build the final candidate once
