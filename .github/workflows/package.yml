@@ -100,8 +100,9 @@ jobs:
             'platforms;android-35' \
             'build-tools;35.0.0' \
             "ndk;$ANDROID_NDK_VERSION"
-          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
-          echo "NDK_HOME=${ANDROID_SDK_ROOT}/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+          for variable in ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK NDK_HOME; do
+            echo "$variable=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+          done
 
       - name: Install Android Rust bridge tooling
         if: matrix.platform == 'android'

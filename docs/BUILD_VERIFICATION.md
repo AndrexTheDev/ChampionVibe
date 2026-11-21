@@ -86,7 +86,7 @@ rustup target add aarch64-linux-android
 cargo install cargo-ndk --version 4.1.2 --locked
 npm ci && npm run build
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS='-C link-arg=-Wl,-z,max-page-size=16384'
-cargo ndk -t arm64-v8a -p 26 build --release --locked --package championvibe --lib
+cargo ndk -t arm64-v8a --platform 26 build --release --locked --package championvibe --lib
 python3 scripts/stage-onnx-runtime.py verify-android-library target/aarch64-linux-android/release/libchampionvibe_lib.so
 ```
 

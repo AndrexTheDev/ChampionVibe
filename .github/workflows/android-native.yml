@@ -42,7 +42,9 @@ jobs:
         shell: bash
         run: |
           sdkmanager --install "ndk;$ANDROID_NDK_VERSION"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+          for variable in ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK NDK_HOME; do
+            echo "$variable=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+          done
           cargo install cargo-ndk --version 4.1.2 --locked
       - name: Build the embedded web frontend
         run: |
@@ -52,11 +54,12 @@ jobs:
         shell: bash
         run: |
           log="$RUNNER_TEMP/championvibe-android-build.log"
-          if ! cargo ndk -t arm64-v8a -p 26 build --release --locked --package championvibe --lib 2>&1 | tee "$log"; then
+          if ! cargo ndk -t arm64-v8a --platform 26 build --release --locked --package championvibe --lib 2>&1 | tee "$log"; then
             python3 - "$log" <<'PYTHON'
           from pathlib import Path
           import sys
-          lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          # cargo-ndk panic reports may append runner environment variables.
+          lines = Path(sys.argv[1]).read_text(errors="replace").split("\nenv:\n", 1)[0].splitlines()
           details = "\n".join(lines[-150:])[-12000:]
           details = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
           print(f"::error title=Android arm64 build diagnostics::{details}")
