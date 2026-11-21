@@ -18,6 +18,8 @@ The **Native runtime preflight** workflow (`runtime-preflight.yml`), run manuall
 
 The pinned AAR did not include separate notice files. `legal/onnxruntime/1.24.3/` carries Microsoft's exact-release `LICENSE` and `ThirdPartyNotices.txt`, extracted byte for byte from its [ONNX Runtime 1.24.3 CPU distribution](https://pypi.org/project/onnxruntime/1.24.3/#files) (`onnxruntime-1.24.3-cp312-cp312-win_amd64.whl`, SHA-256 `44ea708c34965439170d811267c51281d3897ecfc4aa0087fa25d4a4c3eb2e4a`). Only the two texts, not the Windows binaries, go in the Android app under `assets/championvibe-licenses/onnxruntime/`. They establish the upstream notices baseline, not that an Android-specific dependency audit is complete.
 
+The [Android-specific evidence run](https://github.com/AndrexTheDev/ChampionVibe/actions/runs/44948793680) confirmed that the 1.24.3 Maven descriptor declares MIT, the pinned ARM64 library has only Android platform dependencies (`libdl.so`, `liblog.so`, `libandroid.so`, `libm.so`, `libc.so`), and the two staged notices match the checked-in hashes. The AAR still has no standalone notice entries. The app itself, separately from ONNX Runtime, needs the NDK C++ library described above. This evidence does not resolve the notices for all Android Gradle dependencies or establish redistribution clearance.
+
 ## Verification before distribution
 
 - Run the offline staging tests with `python3 tests/onnx_runtime_test.py`; they check archive selection, architecture and layout, not real inference.
