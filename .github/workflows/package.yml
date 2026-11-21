@@ -137,6 +137,13 @@ jobs:
         if: matrix.platform == 'android'
         run: python scripts/stage-onnx-runtime.py android
 
+      - name: Stage the Android NDK C++ runtime and notices
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          python scripts/stage-onnx-runtime.py stage-android-cxx \
+            --ndk "$ANDROID_NDK_HOME" --dest src-tauri/gen/android/app/src/main
+
       - name: Build Android arm64 APK
         if: matrix.platform == 'android'
         run: npm run tauri -- android build --ci --apk --target aarch64
@@ -170,7 +177,7 @@ jobs:
             --project src-tauri/gen/android \
             --build-tools "$ANDROID_SDK_ROOT/build-tools/35.0.0" \
             --output artifacts/championvibe-android-arm64.apk
-          python scripts/stage-onnx-runtime.py verify-apk artifacts/championvibe-android-arm64.apk
+          python scripts/stage-onnx-runtime.py verify-apk artifacts/championvibe-android-arm64.apk --ndk "$ANDROID_NDK_HOME"
           (cd artifacts && sha256sum championvibe-android-arm64.apk > SHA256SUMS.txt)
 
       - name: Upload candidate installers

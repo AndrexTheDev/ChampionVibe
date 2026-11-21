@@ -46,6 +46,11 @@ jobs:
             echo "$variable=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
           done
           cargo install cargo-ndk --version 4.1.2 --locked
+      - name: Stage and verify the real NDK C++ runtime without an APK
+        shell: bash
+        run: |
+          python3 scripts/stage-onnx-runtime.py stage-android-cxx \
+            --ndk "$ANDROID_NDK_HOME" --dest "$RUNNER_TEMP/android-cxx"
       - name: Build the embedded web frontend
         run: |
           npm ci

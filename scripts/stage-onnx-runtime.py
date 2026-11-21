@@ -31,7 +31,14 @@ ANDROID_URL = (
     f"{VERSION}/onnxruntime-android-{VERSION}.aar"
 )
 ANDROID_MEMBER = "jni/arm64-v8a/libonnxruntime.so"
-APK_MEMBER = "lib/arm64-v8a/libonnxruntime.so"
+APK_LIB_DIR = "lib/arm64-v8a"
+APK_MEMBER = f"{APK_LIB_DIR}/libonnxruntime.so"
+APK_APP_MEMBER = f"{APK_LIB_DIR}/libchampionvibe_lib.so"
+CXX_NAME = "libc++_shared.so"
+APK_CXX_MEMBER = f"{APK_LIB_DIR}/{CXX_NAME}"
+APK_NDK_NOTICES = "assets/championvibe-licenses/android-ndk"
+NDK_NOTICES = ("NOTICE", "NOTICE.toolchain")
+NDK_SYSROOT_LIB = Path("toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android")
 ANDROID_PIN = ROOT / f"reports/android-onnx-runtime-{VERSION}.json"
 NOTICE_DIR = ROOT / f"legal/onnxruntime/{VERSION}"
 APK_NOTICE_DIR = "assets/championvibe-licenses/onnxruntime"
@@ -63,14 +70,18 @@ def file_sha256(path):
         return hashlib.file_digest(file, "sha256").hexdigest()
 
 
-def verify_elf_load_alignment(data):
+def elf_program_headers(data):
     verify_arm64_so(data)
     phoff = struct.unpack_from("<Q", data, 32)[0]
     phentsize, phnum = struct.unpack_from("<HH", data, 54)
     if phoff < 64 or phentsize != 56 or not phnum or phoff + phentsize * phnum > len(data):
         raise ValueError("invalid Android ELF program header table")
+    return range(phoff, phoff + phentsize * phnum, phentsize)
+
+
+def verify_elf_load_alignment(data):
     alignments = []
-    for offset in range(phoff, phoff + phentsize * phnum, phentsize):
+    for offset in elf_program_headers(data):
         if struct.unpack_from("<I", data, offset)[0] != 1:  # PT_LOAD
             continue
         file_offset, virtual_address = struct.unpack_from("<QQ", data, offset + 8)
@@ -172,20 +183,75 @@ def stage_android(archive, dest, notice_dest):
         (notice_dest / name).write_bytes(payload)
 
 
-def verify_apk(path):
+def elf_build_id(data):
+    # A GNU build ID survives symbol stripping by Gradle; a whole-file hash may not.
+    for header in elf_program_headers(data):
+        if struct.unpack_from("<I", data, header)[0] != 4:  # PT_NOTE
+            continue
+        start = struct.unpack_from("<Q", data, header + 8)[0]
+        end = start + struct.unpack_from("<Q", data, header + 32)[0]
+        if end > len(data):
+            raise ValueError("truncated Android ELF note segment")
+        while start + 12 <= end:
+            name_size, descriptor_size, note_type = struct.unpack_from("<III", data, start)
+            name_start = start + 12
+            descriptor_start = name_start + ((name_size + 3) & ~3)
+            start = descriptor_start + ((descriptor_size + 3) & ~3)
+            if start > end:
+                raise ValueError("truncated Android ELF note")
+            if note_type == 3 and data[name_start:name_start + name_size] == b"GNU\0" and descriptor_size:
+                return data[descriptor_start:descriptor_start + descriptor_size].hex()
+    raise ValueError("Android C++ runtime has no GNU build ID")
+
+
+def read_ndk_cxx(ndk):
+    library = (ndk / NDK_SYSROOT_LIB / CXX_NAME).read_bytes()
+    verify_elf_load_alignment(library)
+    build_id = elf_build_id(library)
+    notices = {name: (ndk / name).read_bytes() for name in NDK_NOTICES}
+    if any(not payload.strip() for payload in notices.values()):
+        raise ValueError("an Android NDK notice is empty")
+    return library, build_id, notices
+
+
+def stage_android_cxx(ndk, dest):
+    library, build_id, notices = read_ndk_cxx(ndk)
+    libs = dest / "jniLibs/arm64-v8a"
+    libs.mkdir(parents=True, exist_ok=True)
+    (libs / CXX_NAME).write_bytes(library)
+    notice_dest = dest / APK_NDK_NOTICES
+    notice_dest.mkdir(parents=True, exist_ok=True)
+    for name, payload in notices.items():
+        (notice_dest / name).write_bytes(payload)
+    return build_id
+
+
+def verify_apk(path, ndk):
+    _, build_id, ndk_notices = read_ndk_cxx(ndk)
     with zipfile.ZipFile(path) as apk:
-        runtime_files = [
-            name for name in apk.namelist()
-            if name.startswith("lib/") and name.endswith("/libonnxruntime.so")
-        ]
-        if runtime_files != [APK_MEMBER]:
-            raise ValueError(f"expected exactly {APK_MEMBER} in {path}, got {runtime_files}")
-        verify_elf_load_alignment(apk.read(APK_MEMBER))
+        names = apk.namelist()
+        libraries = [name for name in names if name.startswith("lib/") and name.endswith(".so")]
+        if any(name.rsplit("/", 1)[0] != APK_LIB_DIR for name in libraries):
+            raise ValueError("the release APK contains a non-arm64 native library")
+        for member in (APK_APP_MEMBER, APK_MEMBER, APK_CXX_MEMBER):
+            if libraries.count(member) != 1:
+                raise ValueError(f"expected exactly one {member} in {path}")
+        if len(libraries) != len(set(libraries)):
+            raise ValueError("the release APK contains duplicate native libraries")
+        for member in libraries:
+            data = apk.read(member)
+            verify_elf_load_alignment(data)
+            if member == APK_CXX_MEMBER and elf_build_id(data) != build_id:
+                raise ValueError("the APK C++ runtime does not match the selected NDK build ID")
         for name in NOTICE_DIGESTS:
             asset = f"{APK_NOTICE_DIR}/{name}"
-            if apk.namelist().count(asset) != 1:
+            if names.count(asset) != 1:
                 raise ValueError(f"expected exactly one runtime notice in the APK: {asset}")
             validate_notice(name, apk.read(asset))
+        for name, payload in ndk_notices.items():
+            asset = f"{APK_NDK_NOTICES}/{name}"
+            if names.count(asset) != 1 or apk.read(asset) != payload:
+                raise ValueError(f"Android NDK notice missing or altered in the APK: {asset}")
 
 
 def download(url, archive):
@@ -196,7 +262,12 @@ def download(url, archive):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True)
-    commands.add_parser("verify-apk").add_argument("path", type=Path)
+    verify = commands.add_parser("verify-apk")
+    verify.add_argument("path", type=Path)
+    verify.add_argument("--ndk", required=True, type=Path)
+    cxx = commands.add_parser("stage-android-cxx")
+    cxx.add_argument("--ndk", required=True, type=Path)
+    cxx.add_argument("--dest", required=True, type=Path)
     commands.add_parser("verify-android-library").add_argument("path", type=Path)
     commands.add_parser("windows")
     commands.add_parser("android")
@@ -210,9 +281,13 @@ def main():
             alignment = verify_elf_load_alignment(args.path.read_bytes())
             print(f"Verified Android arm64 library (minimum ELF load alignment: {alignment} bytes): {args.path}")
             return
+        if args.action == "stage-android-cxx":
+            build_id = stage_android_cxx(args.ndk, args.dest)
+            print(f"Staged Android NDK C++ runtime and notices (GNU build ID {build_id})")
+            return
         if args.action == "verify-apk":
-            verify_apk(args.path)
-            print(f"Verified Android runtime in {args.path}")
+            verify_apk(args.path, args.ndk)
+            print(f"Verified Android APK native libraries and notices: {args.path}")
             return
         if args.action == "inspect-android":
             with tempfile.TemporaryDirectory() as temp:
@@ -244,7 +319,7 @@ def main():
                 stage_android(archive, dest, app / "src/main" / APK_NOTICE_DIR)
         print(f"Staged ONNX Runtime {VERSION} under {dest.relative_to(ROOT)}")
     except (OSError, KeyError, ValueError, zipfile.BadZipFile) as error:
-        parser.exit(1, f"ONNX Runtime: {error}\n")
+        parser.exit(1, f"Native runtime packaging: {error}\n")
 
 
 if __name__ == "__main__":
