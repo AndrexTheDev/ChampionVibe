@@ -1,6 +1,7 @@
 # Frontend / Tauri
 node_modules/
 dist/
+/dist-site/
 src-tauri/target/
 src-tauri/gen/
 /src-tauri/runtime/
@@ -9,6 +10,12 @@ crates/device-identity/android/build/
 
 # Rust
 /target/
+
+# Local signing material (never commit a keystore or its encoded copy)
+*.jks
+*.keystore
+*.p12
+*.pfx
 
 # Local issuer data and secrets
 .env

@@ -1,0 +1,11 @@
+{
+  "version": "1.24.3",
+  "source": "https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.24.3/onnxruntime-android-1.24.3.aar",
+  "archiveBytes": 40948335,
+  "archiveSha256": "67397e4a970e75617f765d2015ceaf911917e1d822276cfb5792744e8085cbce",
+  "libraryPath": "jni/arm64-v8a/libonnxruntime.so",
+  "libraryBytes": 25831632,
+  "librarySha256": "4d2318b3849abb8862133d3068fc7e807ed8b2671cc6d83657fff2fcb9e1caad",
+  "notices": [],
+  "verificationRun": "https://github.com/AndrexTheDev/ChampionVibe/actions/runs/44945845723"
+}

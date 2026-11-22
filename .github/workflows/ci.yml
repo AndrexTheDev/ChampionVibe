@@ -39,11 +39,31 @@ jobs:
       - name: Run the headless Tauri IPC driver
         run: npm run e2e:tauri
 
-      - name: Test native runtime staging without installers
-        run: python3 tests/onnx_runtime_test.py
+      - name: Set up Java for Android signing checks
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Test native runtime staging and signing without installers
+        run: |
+          python3 tests/onnx_runtime_test.py
+          python3 tests/android_release_signing_test.py
+          python3 tests/android_runtime_licenses_test.py
+          python3 tests/android_release_manifest_test.py
+          python3 tests/download_actions_builds_test.py
 
       - name: Build frontend
         run: npm run build
+
+      - name: Install Chromium for the simulated Android WebView
+        run: npx --no-install playwright-core install --with-deps --only-shell chromium
+
+      - name: Test Android app interaction without an APK
+        run: npm run e2e:android
+
+      - name: Build the Cloudflare Pages site
+        run: npm run build:site
 
   compliance:
     name: Cleared-model compliance checks

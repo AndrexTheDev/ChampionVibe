@@ -21,6 +21,7 @@ const $ = (selector) => document.querySelector(selector);
 const isTauri = Boolean(window.__TAURI_INTERNALS__);
 const platformText = `${navigator.userAgent || ''} ${navigator.userAgentData?.platform || ''}`;
 const isAndroid = /android/i.test(platformText);
+if (isAndroid) document.documentElement.dataset.platform = 'android';
 const PAGE_SIZE = 200;
 const TRACK_ROW_HEIGHT = 66;
 const TRACK_OVERSCAN = 4;
@@ -62,12 +63,12 @@ const state = {
   audioTrack: null,
   selectedTrack: null,
   audioStatus: null,
-  stemGains: [1, 1, 1, 1],
+  stemGains: isAndroid ? [1, 1, 0, 0] : [1, 1, 1, 1],
   autoGainTargetLufs: initialAutoGainTarget,
   autoGainEnabled: initialAutoGainEnabled,
   pitchLockEnabled: initialPitchLockEnabled,
   stemBusy: false,
-  visibleStemLimit: null,
+  visibleStemLimit: isAndroid ? 2 : null,
   audioBusy: false,
   mixStatus: null,
   mixBusy: false,
@@ -92,6 +93,7 @@ const state = {
   selectedRiddimTagError: '',
   toastTimer: null,
   importPaths: [],
+  audioPickerBusy: false,
   importJobs: [],
   importBusy: false,
   tracks: new Map(),
@@ -2229,6 +2231,10 @@ function mergeImportPaths(paths) {
 
 async function pickAudioFiles(directory = false) {
   if (!isTauri) return toast('Dateiimport ist nur in der installierten Tauri-App verfügbar.', true);
+  if (state.audioPickerBusy) return;
+  state.audioPickerBusy = true;
+  const buttons = [$('#pick-audio-files'), $('#pick-audio-folders')];
+  for (const button of buttons) button.disabled = true;
   try {
     if (isAndroid) {
       const paths = await invoke('pick_android_import_paths', { directory });
@@ -2246,6 +2252,9 @@ async function pickAudioFiles(directory = false) {
     if (paths.length) mergeImportPaths(paths);
   } catch (error) {
     toast(t('Dateiauswahl fehlgeschlagen: {error}', { error: String(error) }), true);
+  } finally {
+    state.audioPickerBusy = false;
+    for (const button of buttons) button.disabled = false;
   }
 }
 
@@ -2431,6 +2440,7 @@ function syncByomFormState() {
   if (!acknowledgement || !button) return;
   const required = kind !== 'spleeter-2stems';
   button.disabled = required && !acknowledgement.checked;
+  $('#byom-dropzone')?.setAttribute('aria-disabled', String(button.disabled));
   button.title = button.disabled
     ? t('Bitte zuerst bestätigen, dass du die Rechte an diesen Gewichten geprüft hast.')
     : '';
@@ -2536,6 +2546,9 @@ async function importByomPath(path) {
   if (!path || !isTauri) return;
   const kind = $('#byom-model-kind')?.value || 'htdemucs';
   const acknowledged = Boolean($('#byom-rights-ack')?.checked);
+  if (kind !== 'spleeter-2stems' && !acknowledged) {
+    return toast('Bitte zuerst bestätigen, dass du die Rechte an diesen Gewichten geprüft hast.', true);
+  }
   try {
     const report = await invoke('validate_byom_model', { path, kind });
     const record = await invoke('import_byom_model', { path, kind, acknowledged, displayName: null });
@@ -2553,12 +2566,17 @@ async function importByomPath(path) {
 
 async function pickByomModel() {
   if (!isTauri) return toast('BYOM ist nur in der installierten Tauri-App verfügbar.', true);
+  if ($('#byom-import').disabled) {
+    return toast('Bitte zuerst bestätigen, dass du die Rechte an diesen Gewichten geprüft hast.', true);
+  }
   try {
-    const selection = await open({
-      multiple: false,
-      title: t('Lokale Modelldatei (.onnx) auswählen'),
-      filters: [{ name: t('Lokale Modell-Datei'), extensions: ['onnx', 'json'] }],
-    });
+    const selection = isAndroid
+      ? await invoke('pick_android_model', { kind: 'separator' })
+      : await open({
+          multiple: false,
+          title: t('Lokale Modelldatei (.onnx) auswählen'),
+          filters: [{ name: t('Lokale Modell-Datei'), extensions: ['onnx', 'json'] }],
+        });
     const path = Array.isArray(selection) ? selection[0] : selection;
     await importByomPath(path);
   } catch (error) {
@@ -2566,9 +2584,29 @@ async function pickByomModel() {
   }
 }
 
+function syncAndroidByomCopy() {
+  if (!isAndroid) return;
+  const title = t('Lokale Modelldatei (.onnx) auswählen');
+  const zone = $('#byom-dropzone');
+  zone?.setAttribute('aria-label', title);
+  if (zone) zone.querySelector('span').textContent = title;
+  const hint = $('#byom-dropzone-hint');
+  if (hint) hint.textContent = 'BYOM · HT-Demucs · .onnx';
+  const description = $('#byom-import-panel > p');
+  if (description) description.textContent = t('Choose a self-contained HT-Demucs ONNX file. For MDX-Net, use the dedicated import below.');
+}
+
 function attachByomDropzone() {
   const zone = $('#byom-dropzone');
   if (!zone) return;
+  zone.addEventListener('click', pickByomModel);
+  zone.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      pickByomModel();
+    }
+  });
+  if (isAndroid) return;
   zone.addEventListener('dragover', (event) => {
     event.preventDefault();
     zone.classList.add('byom-dropzone-active');
@@ -2580,13 +2618,6 @@ function attachByomDropzone() {
     const file = event.dataTransfer?.files?.[0];
     const dropped = file?.path || event.dataTransfer?.getData('text/plain') || '';
     await importByomPath(dropped);
-  });
-  zone.addEventListener('click', pickByomModel);
-  zone.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      pickByomModel();
-    }
   });
   if (!isTauri) return;
   getCurrentWebview()
@@ -2751,7 +2782,7 @@ async function startImport() {
         paths: state.importPaths,
         separationModelPath: state.separationModelPath,
         whisperModelPath: state.whisperModelPath,
-        useDirectml: $('#use-directml').checked,
+        useDirectml: !isAndroid && $('#use-directml').checked,
         cpuThreads: Number($('#cpu-threads').value),
       },
     });
@@ -2781,6 +2812,7 @@ function updateImportJob(job) {
 function refreshLocaleDependentUI() {
   const locale = getLocale();
   $('#language-select').value = locale;
+  syncAndroidByomCopy();
   for (const button of document.querySelectorAll('[data-busy-label-key]')) {
     button.innerHTML = `<span class="spinner"></span><span>${t(button.dataset.busyLabelKey)}</span>`;
   }
@@ -3037,7 +3069,17 @@ $('#piper-model-path').value = state.piperModelPath;
 $('#piper-config-path').value = state.piperConfigPath;
 syncDubplateAvailability();
 $('#auto-rewind').checked = localStorage.getItem('championvibe.autoRewind') === 'true';
-if (isAndroid) $('#waveform-mode').querySelector('option[value="canvas"]').disabled = true;
+if (isAndroid) {
+  $('#waveform-mode').querySelector('option[value="canvas"]').disabled = true;
+  // The Storage Access Framework stages a single file. Manifest-based profiles
+  // need sibling files: use the dedicated MDX picker or the managed Spleeter profile.
+  const kinds = $('#byom-model-kind');
+  for (const option of kinds.options) option.disabled = option.value !== 'htdemucs';
+  kinds.value = 'htdemucs';
+  $('#custom-mdx-mode').value = 'two-stem';
+  $('#custom-mdx-mode').querySelector('option[value="four-stem"]').disabled = true;
+  syncAndroidByomCopy();
+}
 applyWaveformMode(state.waveformMode);
 renderStemSwitches();
 if (typeof ResizeObserver !== 'undefined') {
@@ -3086,7 +3128,7 @@ if (!isTauri) {
 }
 refreshStatus().then((status) => {
   if (status?.active) restoreProSession();
-  else openLicenseModal();
+  else if (!isAndroid) openLicenseModal();
 });
 loadTracks();
 refreshAudioStatus();

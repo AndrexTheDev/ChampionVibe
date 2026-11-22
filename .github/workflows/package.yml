@@ -3,6 +3,13 @@ name: Final packaging
 # Deliberately not triggered by push, pull_request, or tags.
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Select the installer(s) to build
+        required: true
+        type: choice
+        default: android
+        options: [android, windows, both, android-test]
 
 permissions:
   contents: read
@@ -16,24 +23,41 @@ jobs:
     name: Validate the selected revision
     uses: ./.github/workflows/ci.yml
 
-  package:
+  android-native:
+    if: inputs.platform == 'android' || inputs.platform == 'both'
+    name: Verify the Android native build
+    uses: ./.github/workflows/android-native.yml
+
+  android-test:
     needs: validate
+    if: inputs.platform == 'android-test'
+    uses: ./.github/workflows/android-test-apk.yml
+
+  package:
+    needs: [validate, android-native]
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' &&
+      ((inputs.platform == 'windows' && needs.android-native.result == 'skipped') ||
+      ((inputs.platform == 'android' || inputs.platform == 'both') && needs.android-native.result == 'success')) }}
     name: Package ${{ matrix.platform }} test artifact
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: windows
-            os: windows-latest
-            artifact-name: championvibe-windows-test-build
-          - platform: android
-            os: ubuntu-latest
-            artifact-name: championvibe-android-apk
-    runs-on: ${{ matrix.os }}
+        platform: ${{ fromJSON(inputs.platform == 'both' && '["android","windows"]' || inputs.platform == 'android' && '["android"]' || '["windows"]') }}
+    runs-on: ${{ matrix.platform == 'android' && 'ubuntu-latest' || 'windows-latest' }}
+    environment: ${{ matrix.platform == 'android' && 'android-release' || 'windows-packaging' }}
     timeout-minutes: 120
+    env:
+      ANDROID_NDK_VERSION: '28.2.13676358'
+      CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: '-C link-arg=-Wl,-z,max-page-size=16384'
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -62,6 +86,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Check Android release signing configuration
+        if: matrix.platform == 'android'
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ vars.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+          ANDROID_RELEASE_CERT_SHA256: ${{ vars.ANDROID_RELEASE_CERT_SHA256 }}
+        run: python scripts/sign-android-release.py check-config
+
       - name: Set up Android SDK
         if: matrix.platform == 'android'
         uses: android-actions/setup-android@v4.0.4
@@ -74,21 +108,17 @@ jobs:
             'platform-tools' \
             'platforms;android-35' \
             'build-tools;35.0.0' \
-            'ndk;27.2.12479018'
-          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/27.2.12479018" >> "$GITHUB_ENV"
-          echo "NDK_HOME=${ANDROID_SDK_ROOT}/ndk/27.2.12479018" >> "$GITHUB_ENV"
+            "ndk;$ANDROID_NDK_VERSION"
+          for variable in ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK NDK_HOME; do
+            echo "$variable=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+          done
 
       - name: Install Android Rust bridge tooling
         if: matrix.platform == 'android'
-        run: cargo install cargo-ndk --locked
+        run: cargo install cargo-ndk --version 4.1.2 --locked
 
       - name: Install frontend and Tauri CLI dependencies
         run: npm ci
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
 
       - name: Stage the Windows x64 ONNX Runtime
         if: matrix.platform == 'windows'
@@ -98,17 +128,9 @@ jobs:
         if: matrix.platform == 'windows'
         run: npm run tauri -- build --ci --bundles msi,nsis --config src-tauri/tauri.runtime.windows.json
 
-      - name: Initialize Tauri Android project
-        if: matrix.platform == 'android'
-        run: npm run tauri -- android init --ci
-
-      - name: Stage the Android arm64 ONNX Runtime
-        if: matrix.platform == 'android'
-        run: python scripts/stage-onnx-runtime.py android
-
       - name: Build Android arm64 APK
         if: matrix.platform == 'android'
-        run: npm run tauri -- android build --ci --apk --target aarch64
+        run: bash scripts/build-android-apk.sh
 
       - name: Collect Windows installers
         if: matrix.platform == 'windows'
@@ -117,25 +139,42 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Get-ChildItem -Path target/release/bundle, src-tauri/target/release/bundle -Recurse -File -Include *.msi,*.exe -ErrorAction SilentlyContinue |
             Copy-Item -Destination artifacts
-          if (-not (Get-ChildItem artifacts -File)) { throw 'No Windows MSI/EXE installers were produced.' }
+          $msi = @(Get-ChildItem artifacts -File -Filter *.msi)
+          $nsis = @(Get-ChildItem artifacts -File -Filter *.exe)
+          if ($msi.Count -ne 1 -or $nsis.Count -ne 1) { throw 'Expected exactly one Windows MSI and one NSIS installer.' }
+          ($msi + $nsis) | ForEach-Object {
+            $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName
+            '{0}  {1}' -f $hash.Hash.ToLowerInvariant(), $_.Name
+          } | Set-Content -LiteralPath artifacts/SHA256SUMS.txt -Encoding utf8NoBOM
 
-      - name: Collect Android APK
+      - name: Sign and verify the Android release APK
+        if: matrix.platform == 'android'
+        shell: bash
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ vars.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+          ANDROID_RELEASE_CERT_SHA256: ${{ vars.ANDROID_RELEASE_CERT_SHA256 }}
+        run: |
+          python scripts/sign-android-release.py sign \
+            --project src-tauri/gen/android \
+            --build-tools "$ANDROID_SDK_ROOT/build-tools/35.0.0" \
+            --output artifacts/championvibe-android-arm64.apk
+          python scripts/stage-onnx-runtime.py verify-apk artifacts/championvibe-android-arm64.apk --ndk "$ANDROID_NDK_HOME"
+      - name: Verify the signed APK manifest and write its checksum
         if: matrix.platform == 'android'
         shell: bash
         run: |
-          mkdir -p artifacts
-          find src-tauri/gen/android -type f -path '*/build/outputs/apk/*' -name '*.apk' -exec cp '{}' artifacts/ \;
-          shopt -s nullglob
-          apks=(artifacts/*.apk)
-          test "${#apks[@]}" -gt 0
-          for apk in "${apks[@]}"; do
-            python scripts/stage-onnx-runtime.py verify-apk "$apk"
-          done
+          apk=artifacts/championvibe-android-arm64.apk
+          apkanalyzer manifest print "$apk" > "$RUNNER_TEMP/championvibe-release-manifest.xml"
+          python scripts/verify-android-release-manifest.py "$RUNNER_TEMP/championvibe-release-manifest.xml" --target-sdk 36
+          (cd artifacts && sha256sum championvibe-android-arm64.apk > SHA256SUMS.txt)
 
-      - name: Upload test installers
+      - name: Upload candidate installers
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact-name }}
+          name: ${{ matrix.platform == 'android' && 'championvibe-android-apk' || 'championvibe-windows-test-build' }}
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14

@@ -1,0 +1,4 @@
+# Preserve upstream license and notice files byte for byte.
+legal/onnxruntime/** -text -whitespace
+
+legal/android/** -text -whitespace
