@@ -24,7 +24,7 @@ Connect this repository to a **Pages** project via Git integration, then use the
 | Build output directory | `dist-site` |
 | Build environment variable | `NODE_VERSION=22` |
 
-Allow the relevant branch under preview controls to review it before merging. Pages serves the files over HTTPS and picks up `dist-site/_headers` for security headers and caching of versioned assets. For a Pages project set up with Direct Upload instead, build locally and upload **the contents of `dist-site/`**, not `dist/` or the repository itself.
+Allow the relevant branch under preview controls to review it before merging. Pages serves the files over HTTPS and picks up `dist-site/_headers` for security headers and caching of versioned assets. The landing page intentionally has no `noindex` directive, and `landing/public/robots.txt` allows Googlebot and other crawlers to access the site. For a Pages project set up with Direct Upload instead, build locally and upload **the contents of `dist-site/`**, not `dist/` or the repository itself.
 
 ## Release link and assets
 
