@@ -5,6 +5,8 @@ import test from 'node:test';
 const landing = new URL('../landing/', import.meta.url);
 const html = readFileSync(new URL('index.html', landing), 'utf8');
 const css = readFileSync(new URL('style.css', landing), 'utf8');
+const headers = readFileSync(new URL('public/_headers', landing), 'utf8');
+const robots = readFileSync(new URL('public/robots.txt', landing), 'utf8');
 
 test('the English landing page has a destination for every internal link', () => {
   assert.match(html, /<html lang="en">/u);
@@ -20,4 +22,13 @@ test('the landing page serves its own fonts and images and links to official rel
   for (const asset of assets) assert.ok(existsSync(new URL(`public${asset}`, landing)), `Missing asset ${asset}`);
   assert.match(html, /https:\/\/github\.com\/AndrexTheDev\/ChampionVibe\/releases/u);
   assert.doesNotMatch(html, /<script[^>]+src="https?:/u);
+});
+
+test('the landing page is crawlable and does not block Googlebot', () => {
+  assert.doesNotMatch(html, /noindex/iu);
+  assert.doesNotMatch(headers, /x-robots-tag:.*noindex/iu);
+  assert.match(robots, /^User-agent:\s*Googlebot$/mu);
+  assert.match(robots, /^User-agent:\s*\*$/mu);
+  assert.match(robots, /^Allow:\s*\/$/mu);
+  assert.doesNotMatch(robots, /^Disallow:/mu);
 });
